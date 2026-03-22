@@ -1,0 +1,16 @@
+# Notes RAG — Indexer Configuration
+#
+# All paths can be overridden via environment variables:
+#   RAG_WORKSPACE    → workspace
+#   RAG_CHROMA_PATH  → chroma_path
+
+workspace: /mnt/Claude
+exclude:
+  - trash
+  - tmp
+  - temp
+
+chunk_size: 300
+chunk_overlap: 60
+embedding_model: all-MiniLM-L6-v2
+chroma_path: /opt/rag/chroma
