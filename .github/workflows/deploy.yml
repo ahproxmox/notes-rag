@@ -1,0 +1,14 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy to CT 111
+        run: |
+          ssh -o StrictHostKeyChecking=no root@192.168.88.71 \
+            "cd /opt/rag && git pull && systemctl restart rag"

@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  syntax-check:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python syntax check
+        run: python3 -m py_compile api.py search.py watcher.py indexer.py main.py research.py
+
+      - name: Bench suite syntax check
+        run: python3 -m py_compile bench/run_bench.py bench/score.py
