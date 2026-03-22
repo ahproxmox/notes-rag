@@ -1,0 +1,13 @@
+# Environment
+.env
+venv/
+__pycache__/
+
+# Data
+chroma/
+*.bak
+*.bak2
+*.bak3
+
+# OS
+.DS_Store
