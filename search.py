@@ -62,7 +62,7 @@ def _load_db():
     db = Chroma(persist_directory=cfg['chroma_path'], embedding_function=embeddings)
     return db, cfg
 
-def get_chain():
+def get_chain(bm25_weight=0.4, vector_weight=0.6):
     db, cfg = _load_db()
 
     # Load all indexed docs for BM25 (keyword search complement)
@@ -80,7 +80,7 @@ def get_chain():
     # Ensemble: BM25 handles exact keyword/IP matches, semantic handles meaning
     retriever = EnsembleRetriever(
         retrievers=[bm25_retriever, semantic_retriever],
-        weights=[0.4, 0.6],
+        weights=[bm25_weight, vector_weight],
     )
 
     llm = ChatOpenAI(
@@ -97,6 +97,18 @@ def get_chain():
         chain_type_kwargs={'prompt': PROMPT},
     )
     return chain
+
+
+def search_with_weights(query, bm25_weight, vector_weight):
+    """Run a search with custom ensemble weights. Builds a temporary chain."""
+    lookup = _try_todo_lookup(query)
+    if lookup:
+        return lookup
+    chain = get_chain(bm25_weight=bm25_weight, vector_weight=vector_weight)
+    result = chain.invoke({'query': query})
+    answer = result['result']
+    sources = list(dict.fromkeys(doc.metadata.get('filename', 'unknown') for doc in result['source_documents']))
+    return answer, sources
 
 def similar(query, k=5):
     """Return top-k similar documents by vector similarity. No LLM call."""
@@ -121,7 +133,7 @@ def search(query, chain=None):
         chain = get_chain()
     result = chain.invoke({'query': query})
     answer = result['result']
-    sources = list({doc.metadata.get('filename', 'unknown') for doc in result['source_documents']})
+    sources = list(dict.fromkeys(doc.metadata.get('filename', 'unknown') for doc in result['source_documents']))
     return answer, sources
 
 def search_filtered(query, exclude_sources, chain_obj):
@@ -143,7 +155,7 @@ def search_filtered(query, exclude_sources, chain_obj):
     prompt_text = PROMPT.format(context=context, question=query)
     llm = chain_obj.combine_documents_chain.llm_chain.llm
     result = llm.invoke([HumanMessage(content=prompt_text)])
-    sources = list({d.metadata.get('filename', 'unknown') for d in docs})
+    sources = list(dict.fromkeys(d.metadata.get('filename', 'unknown') for d in docs))
     return result.content, sources
 
 if __name__ == '__main__':

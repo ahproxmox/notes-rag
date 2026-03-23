@@ -9,5 +9,9 @@ chroma/
 *.bak2
 *.bak3
 
+# Bench results (workspace-specific data)
+bench/results/
+bench/sweep-results/
+
 # OS
 .DS_Store

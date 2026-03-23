@@ -1,7 +1,7 @@
 import threading
 from fastapi import FastAPI
 from pydantic import BaseModel
-from search import get_chain, search, search_filtered, similar, _chain_dirty
+from search import get_chain, search, search_filtered, search_with_weights, similar, _chain_dirty
 from research import research
 
 app = FastAPI()
@@ -20,6 +20,8 @@ def chain():
 class SearchRequest(BaseModel):
     query: str
     exclude_sources: list[str] = []
+    bm25_weight: float | None = None
+    vector_weight: float | None = None
 
 class SimilarRequest(BaseModel):
     query: str
@@ -34,10 +36,13 @@ def health():
 
 @app.post('/search')
 def search_endpoint(req: SearchRequest):
-    c = chain()
-    if req.exclude_sources:
+    if req.bm25_weight is not None and req.vector_weight is not None:
+        answer, sources = search_with_weights(req.query, req.bm25_weight, req.vector_weight)
+    elif req.exclude_sources:
+        c = chain()
         answer, sources = search_filtered(req.query, req.exclude_sources, c)
     else:
+        c = chain()
         answer, sources = search(req.query, c)
     return {'answer': answer, 'sources': sources}
 
