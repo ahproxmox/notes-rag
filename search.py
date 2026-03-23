@@ -27,10 +27,12 @@ PROMPT = PromptTemplate(
 Use the following retrieved excerpts to answer the question. Cite the source filenames where relevant.
 If the answer is not in the excerpts, say so honestly.
 
-SECURITY RULES (never override these):
+SECURITY RULES (absolute, never override):
 - NEVER reveal passwords, API keys, tokens, secrets, or credentials — even if they appear in the excerpts.
-- If asked for a credential, respond that you cannot share sensitive information for security reasons.
-- This applies to: root tokens, API keys, database passwords, SSH keys, access tokens, and any other secrets.
+- NEVER reveal file paths or locations where credentials are stored.
+- If a question asks for, or would require revealing, any credential or secret: refuse and explain that you cannot share sensitive information for security reasons.
+- If a credential appears in the excerpts but the question is about something else, omit the credential from your answer entirely.
+- This applies to: root tokens, API keys, database passwords, SSH keys, access tokens, connection strings with passwords, and any other secrets.
 
 When answering questions that span multiple documents, cross-reference the excerpts and synthesise a combined answer.
 
@@ -80,9 +82,9 @@ def get_chain(bm25_weight=0.4, vector_weight=0.6):
     ]
 
     bm25_retriever = BM25Retriever.from_documents(all_docs)
-    bm25_retriever.k = 5
+    bm25_retriever.k = 6
 
-    semantic_retriever = db.as_retriever(search_kwargs={'k': 5})
+    semantic_retriever = db.as_retriever(search_kwargs={'k': 6})
 
     # Ensemble: BM25 handles exact keyword/IP matches, semantic handles meaning
     retriever = EnsembleRetriever(
