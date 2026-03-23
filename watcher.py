@@ -3,8 +3,9 @@ import time
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from indexer import load_config, get_embeddings, get_db, index_file, delete_file_chunks
-from search import invalidate_chain
+from indexer import load_config, get_embeddings, get_db, index_file, delete_file_chunks, chunk_file
+from search import get_fts
+
 
 class MarkdownHandler(FileSystemEventHandler):
     def __init__(self, cfg, embeddings, db):
@@ -21,6 +22,16 @@ class MarkdownHandler(FileSystemEventHandler):
         except ValueError:
             return True
 
+    def _index_and_sync_fts(self, src_path):
+        """Index into ChromaDB and sync FTS5 in one step."""
+        index_file(src_path, self.cfg, self.embeddings, self.db)
+        # Sync FTS5 with the same chunks
+        try:
+            chunks = chunk_file(Path(src_path), self.workspace, self.cfg)
+            get_fts().upsert_chunks(str(src_path), chunks)
+        except Exception as e:
+            print(f'[watcher] FTS sync error {src_path}: {e}', flush=True)
+
     def on_created(self, event):
         if event.is_directory or not event.src_path.endswith('.md'):
             return
@@ -28,8 +39,7 @@ class MarkdownHandler(FileSystemEventHandler):
             return
         print(f'[watcher] created: {event.src_path}', flush=True)
         try:
-            index_file(event.src_path, self.cfg, self.embeddings, self.db)
-            invalidate_chain()
+            self._index_and_sync_fts(event.src_path)
         except Exception as e:
             print(f'[watcher] error indexing {event.src_path}: {e}', flush=True)
 
@@ -40,8 +50,7 @@ class MarkdownHandler(FileSystemEventHandler):
             return
         print(f'[watcher] modified: {event.src_path}', flush=True)
         try:
-            index_file(event.src_path, self.cfg, self.embeddings, self.db)
-            invalidate_chain()
+            self._index_and_sync_fts(event.src_path)
         except Exception as e:
             print(f'[watcher] error indexing {event.src_path}: {e}', flush=True)
 
@@ -52,10 +61,11 @@ class MarkdownHandler(FileSystemEventHandler):
             return
         try:
             n = delete_file_chunks(self.db, event.src_path)
-            print(f'[watcher] deleted: {event.src_path} ({n} chunks removed)', flush=True)
-            invalidate_chain()
+            fts_n = get_fts().delete_file(str(event.src_path))
+            print(f'[watcher] deleted: {event.src_path} ({n} chroma + {fts_n} fts chunks removed)', flush=True)
         except Exception as e:
             print(f'[watcher] error deleting {event.src_path}: {e}', flush=True)
+
 
 def start_watcher():
     cfg = load_config()
@@ -89,6 +99,7 @@ def start_watcher():
     except KeyboardInterrupt:
         observer.stop()
     observer.join()
+
 
 if __name__ == '__main__':
     start_watcher()
