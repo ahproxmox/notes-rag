@@ -85,7 +85,7 @@ def start_watcher():
     extra_dirs = cfg.get('watch_extra', [])
     for extra in extra_dirs:
         if Path(extra).exists():
-            extra_cfg = {**cfg, 'workspace': extra, 'exclude': []}
+            extra_cfg = {**cfg, 'workspace': extra, 'exclude': ['.trash', 'trash']}
             extra_handler = MarkdownHandler(extra_cfg, embeddings, db)
             observer.schedule(extra_handler, extra, recursive=True)
             print(f'[watcher] watching {extra}', flush=True)
