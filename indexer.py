@@ -4,8 +4,8 @@ from pathlib import Path
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
-from langchain_chroma import Chroma
 from embeddings import ONNXEmbeddings
+from store import Store
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(__file__), 'indexer.yaml'))
 
@@ -16,8 +16,9 @@ def load_config():
 def get_embeddings(cfg):
     return ONNXEmbeddings(model_name=f"sentence-transformers/{cfg['embedding_model']}")
 
-def get_db(cfg, embeddings):
-    return Chroma(persist_directory=cfg['chroma_path'], embedding_function=embeddings)
+def get_store(cfg, embeddings) -> Store:
+    db_path = os.path.join(os.path.dirname(cfg['chroma_path']), 'rag.db')
+    return Store(db_path, embed_fn=embeddings)
 
 def get_md_files(workspace, exclude):
     files = []
@@ -112,27 +113,19 @@ def chunk_file(path, workspace, cfg):
 
     return chunks
 
-def delete_file_chunks(db, path):
-    results = db._collection.get(where={'source': str(path)})
-    ids = results.get('ids', [])
-    if ids:
-        db._collection.delete(ids=ids)
-    return len(ids)
-
-def index_file(path, cfg=None, embeddings=None, db=None):
+def index_file(path, cfg=None, embeddings=None, store=None):
     if cfg is None:
         cfg = load_config()
     if embeddings is None:
         embeddings = get_embeddings(cfg)
-    if db is None:
-        db = get_db(cfg, embeddings)
+    if store is None:
+        store = get_store(cfg, embeddings)
     workspace = cfg['workspace']
-    deleted = delete_file_chunks(db, path)
     try:
         chunks = chunk_file(Path(path), Path(workspace), cfg)
         if chunks:
-            db.add_documents(chunks)
-        print(f'[indexer] {path} -> {len(chunks)} chunks (replaced {deleted})', flush=True)
+            store.upsert_file(str(path), chunks)
+        print(f'[indexer] {path} -> {len(chunks)} chunks', flush=True)
     except Exception as e:
         print(f'[indexer] error {path}: {e}', flush=True)
 
@@ -143,17 +136,24 @@ def build_index():
     print(f'[indexer] scanning {workspace}...', flush=True)
     md_files = get_md_files(workspace, exclude)
     print(f'[indexer] found {len(md_files)} .md files', flush=True)
-    docs = []
-    for path in md_files:
+
+    embeddings = get_embeddings(cfg)
+    store = get_store(cfg, embeddings)
+
+    for i, path in enumerate(md_files):
         try:
-            docs.extend(chunk_file(path, Path(workspace), cfg))
+            chunks = chunk_file(path, Path(workspace), cfg)
+            if chunks:
+                store.upsert_file(str(path), chunks)
+            if (i + 1) % 50 == 0:
+                print(f'[indexer] {i + 1}/{len(md_files)} files indexed...', flush=True)
         except Exception as e:
             print(f'[indexer] skipping {path}: {e}', flush=True)
-    print(f'[indexer] {len(docs)} chunks, embedding...', flush=True)
-    embeddings = get_embeddings(cfg)
-    db = Chroma.from_documents(docs, embeddings, persist_directory=cfg['chroma_path'])
-    print(f'[indexer] done. {db._collection.count()} chunks in Chroma.', flush=True)
-    return db
+
+    store.rebuild_fts()
+    total = store.count()
+    print(f'[indexer] done. {total} chunks in store.', flush=True)
+    return store
 
 if __name__ == '__main__':
     build_index()

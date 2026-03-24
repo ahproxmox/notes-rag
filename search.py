@@ -2,33 +2,32 @@ import os
 import re
 import glob as globmod
 import yaml
-from langchain_chroma import Chroma
-from embeddings import ONNXEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
-from fts import FTSIndex
+from store import Store
 from reranker import Reranker
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(__file__), 'indexer.yaml'))
 
-# Shared FTS index — initialised by init_fts(), called from main.py
-_fts: FTSIndex | None = None
+# Shared store — initialised by init_store(), called from main.py
+_store: Store | None = None
 # Shared reranker — lazy-loaded on first use
 _reranker: Reranker | None = None
 
-def init_fts(fts: FTSIndex):
-    global _fts
-    _fts = fts
+def init_store(store: Store):
+    global _store
+    _store = store
 
-def get_fts() -> FTSIndex:
-    global _fts
-    if _fts is None:
-        cfg = yaml.safe_load(open(CONFIG_PATH))
-        fts_path = os.path.join(os.path.dirname(cfg['chroma_path']), 'fts.db')
-        _fts = FTSIndex(fts_path)
-    return _fts
+def get_store() -> Store:
+    global _store
+    if _store is None:
+        from indexer import load_config, get_embeddings, get_store as _get_store
+        cfg = load_config()
+        embeddings = get_embeddings(cfg)
+        _store = _get_store(cfg, embeddings)
+    return _store
 
 
 def _get_reranker() -> Reranker | None:
@@ -85,13 +84,6 @@ def _try_todo_lookup(query):
     return f'[{filename}]\n{content}', [filename]
 
 
-def _load_db():
-    cfg = yaml.safe_load(open(CONFIG_PATH))
-    embeddings = ONNXEmbeddings(model_name=f"sentence-transformers/{cfg['embedding_model']}")
-    db = Chroma(persist_directory=cfg['chroma_path'], embedding_function=embeddings)
-    return db, cfg
-
-
 def _get_llm():
     return ChatOpenAI(
         base_url=os.environ.get('LLM_BASE_URL', 'https://openrouter.ai/api/v1'),
@@ -100,23 +92,22 @@ def _get_llm():
     )
 
 
-def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: float = 0.6) -> list[Document]:
-    """Hybrid retrieval: FTS5 keyword + ChromaDB vector, merged and deduplicated.
+def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: float = 0.6,
+              folder: str | None = None) -> list[Document]:
+    """Hybrid retrieval: FTS5 keyword + sqlite-vec vector, merged via RRF.
 
     Retrieves k candidates from each source, then merges with weighted
     reciprocal rank fusion (RRF) scoring. Returns top-k unique documents.
     """
-    db, cfg = _load_db()
-    fts = get_fts()
+    store = get_store()
 
-    # Get candidates from both retrievers
-    bm25_docs = fts.search(query, k=k)
-    vector_docs = db.similarity_search(query, k=k)
+    bm25_docs = store.search_bm25(query, k=k, folder=folder)
+    vector_docs = store.search_vector(query, k=k, folder=folder)
 
     # Reciprocal rank fusion — merge by content identity
-    scores: dict[str, float] = {}  # content hash -> score
-    doc_map: dict[str, Document] = {}  # content hash -> Document
-    rrf_k = 60  # standard RRF constant
+    scores: dict[str, float] = {}
+    doc_map: dict[str, Document] = {}
+    rrf_k = 60
 
     for rank, doc in enumerate(bm25_docs):
         key = f"{doc.metadata.get('source', '')}:{doc.page_content[:100]}"
@@ -128,7 +119,6 @@ def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: 
         scores[key] = scores.get(key, 0) + vector_weight / (rrf_k + rank + 1)
         doc_map[key] = doc
 
-    # Sort by fused score descending, return top k
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     return [doc_map[key] for key, _ in ranked[:k]]
 
@@ -144,14 +134,14 @@ def _synthesise(query: str, docs: list[Document]) -> str:
     return result.content
 
 
-def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6, final_k: int = 6) -> tuple[str, list[str]]:
+def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
+           final_k: int = 6, folder: str | None = None) -> tuple[str, list[str]]:
     """Full RAG search: retrieve top-20, rerank to top-6, synthesise."""
     lookup = _try_todo_lookup(query)
     if lookup:
         return lookup
 
-    # Retrieve broad candidate set, then rerank for precision
-    docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight)
+    docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight, folder=folder)
     if not docs:
         return "No relevant context found in the workspace.", []
 
@@ -171,13 +161,13 @@ def search_with_weights(query: str, bm25_weight: float, vector_weight: float) ->
     return search(query, bm25_weight=bm25_weight, vector_weight=vector_weight)
 
 
-def search_filtered(query: str, exclude_sources: list[str]) -> tuple[str, list[str]]:
+def search_filtered(query: str, exclude_sources: list[str], folder: str | None = None) -> tuple[str, list[str]]:
     """Retrieve docs, filter out excluded source files, rerank, then synthesise."""
     lookup = _try_todo_lookup(query)
     if lookup:
         return lookup
 
-    docs = _retrieve(query, k=20)
+    docs = _retrieve(query, k=20, folder=folder)
     docs = [d for d in docs if d.metadata.get('filename', '') not in exclude_sources]
     if not docs:
         return "No relevant context found in the workspace.", []
@@ -195,15 +185,15 @@ def search_filtered(query: str, exclude_sources: list[str]) -> tuple[str, list[s
 
 def similar(query: str, k: int = 5) -> list[dict]:
     """Return top-k similar documents by vector similarity. No LLM call."""
-    db, _ = _load_db()
-    results = db.similarity_search_with_score(query, k=k)
+    store = get_store()
+    docs = store.search_vector(query, k=k)
     return [
         {
             'content': doc.page_content,
             'source': doc.metadata.get('filename', 'unknown'),
-            'score': float(score),
+            'score': 0.0,
         }
-        for doc, score in results
+        for doc in docs
     ]
 
 

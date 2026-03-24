@@ -11,6 +11,7 @@ class SearchRequest(BaseModel):
     exclude_sources: list[str] = []
     bm25_weight: float | None = None
     vector_weight: float | None = None
+    folder: str | None = None
 
 
 class SimilarRequest(BaseModel):
@@ -32,9 +33,9 @@ def search_endpoint(req: SearchRequest):
     if req.bm25_weight is not None and req.vector_weight is not None:
         answer, sources = search_with_weights(req.query, req.bm25_weight, req.vector_weight)
     elif req.exclude_sources:
-        answer, sources = search_filtered(req.query, req.exclude_sources)
+        answer, sources = search_filtered(req.query, req.exclude_sources, folder=req.folder)
     else:
-        answer, sources = search(req.query)
+        answer, sources = search(req.query, folder=req.folder)
     return {'answer': answer, 'sources': sources}
 
 
