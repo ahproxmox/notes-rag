@@ -36,25 +36,27 @@ def run_vault_fetch():
     print(result.stdout.strip(), flush=True)
 
 
-def init_fts_index():
-    """Initialise FTS5 index — populate from ChromaDB if empty."""
-    from indexer import load_config, get_embeddings, get_db
-    from fts import FTSIndex
-    from search import init_fts
+def init_store():
+    """Initialise unified store — rebuild index if empty."""
+    from indexer import load_config, get_embeddings, get_store
+    from store import Store
+    from search import init_store as search_init_store
 
     cfg = load_config()
-    fts_path = os.path.join(os.path.dirname(cfg['chroma_path']), 'fts.db')
-    fts = FTSIndex(fts_path)
-    init_fts(fts)
+    embeddings = get_embeddings(cfg)
+    store = get_store(cfg, embeddings)
+    search_init_store(store)
 
-    if fts.count() == 0:
-        print('[main] FTS5 index empty — populating from ChromaDB...', flush=True)
-        embeddings = get_embeddings(cfg)
-        db = get_db(cfg, embeddings)
-        fts.rebuild_from_chroma(db)
-        print(f'[main] FTS5 ready: {fts.count()} chunks', flush=True)
+    if store.count() == 0:
+        print('[main] store empty — running full index build...', flush=True)
+        from indexer import build_index
+        build_index()
+        # Re-init store after build
+        store = get_store(cfg, embeddings)
+        search_init_store(store)
+        print(f'[main] store ready: {store.count()} chunks', flush=True)
     else:
-        print(f'[main] FTS5 ready: {fts.count()} chunks', flush=True)
+        print(f'[main] store ready: {store.count()} chunks', flush=True)
 
 
 def run_watcher():
@@ -72,8 +74,8 @@ if __name__ == '__main__':
     run_vault_fetch()
     load_env()
 
-    print('[main] initialising FTS5 index...', flush=True)
-    init_fts_index()
+    print('[main] initialising store...', flush=True)
+    init_store()
 
     print('[main] starting watcher...', flush=True)
     t = threading.Thread(target=run_watcher, daemon=True)
