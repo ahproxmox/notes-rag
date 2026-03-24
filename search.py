@@ -1,24 +1,45 @@
 import os
 import re
-import threading
 import glob as globmod
 import yaml
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
+from embeddings import ONNXEmbeddings
 from langchain_openai import ChatOpenAI
-from langchain_classic.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 from langchain_core.documents import Document
-from langchain_community.retrievers import BM25Retriever
-from langchain_classic.retrievers import EnsembleRetriever
+from langchain_core.messages import HumanMessage
+from fts import FTSIndex
+from reranker import Reranker
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(__file__), 'indexer.yaml'))
 
-# Set when the watcher indexes or deletes a file — signals api.py to rebuild chain
-_chain_dirty = threading.Event()
+# Shared FTS index — initialised by init_fts(), called from main.py
+_fts: FTSIndex | None = None
+# Shared reranker — lazy-loaded on first use
+_reranker: Reranker | None = None
 
-def invalidate_chain():
-    _chain_dirty.set()
+def init_fts(fts: FTSIndex):
+    global _fts
+    _fts = fts
+
+def get_fts() -> FTSIndex:
+    global _fts
+    if _fts is None:
+        cfg = yaml.safe_load(open(CONFIG_PATH))
+        fts_path = os.path.join(os.path.dirname(cfg['chroma_path']), 'fts.db')
+        _fts = FTSIndex(fts_path)
+    return _fts
+
+
+def _get_reranker() -> Reranker | None:
+    """Lazy-load reranker if enabled in config."""
+    global _reranker
+    if _reranker is None:
+        cfg = yaml.safe_load(open(CONFIG_PATH))
+        if cfg.get('rerank', True):
+            _reranker = Reranker()
+            print('[search] reranker loaded', flush=True)
+    return _reranker
 
 PROMPT = PromptTemplate(
     input_variables=['context', 'question'],
@@ -44,11 +65,9 @@ Question: {question}
 Answer:'''
 )
 
+
 def _try_todo_lookup(query):
-    """Short-circuit for todo ID lookups — no LLM call needed.
-    Matches: 'todo 099', 'todo 99', 'todo #99', '#099', 'todo99'
-    Returns (content, [filename]) or None.
-    """
+    """Short-circuit for todo ID lookups — no LLM call needed."""
     m = re.match(r'^\s*(?:todo\s*#?\s*|#)(\d{1,4})\s*$', query.strip(), re.IGNORECASE)
     if not m:
         return None
@@ -65,61 +84,116 @@ def _try_todo_lookup(query):
         content = f.read(2000)
     return f'[{filename}]\n{content}', [filename]
 
+
 def _load_db():
     cfg = yaml.safe_load(open(CONFIG_PATH))
-    embeddings = HuggingFaceEmbeddings(model_name=cfg['embedding_model'])
+    embeddings = ONNXEmbeddings(model_name=f"sentence-transformers/{cfg['embedding_model']}")
     db = Chroma(persist_directory=cfg['chroma_path'], embedding_function=embeddings)
     return db, cfg
 
-def get_chain(bm25_weight=0.4, vector_weight=0.6):
-    db, cfg = _load_db()
 
-    # Load all indexed docs for BM25 (keyword search complement)
-    all_data = db._collection.get(include=['documents', 'metadatas'])
-    all_docs = [
-        Document(page_content=text, metadata=meta)
-        for text, meta in zip(all_data['documents'], all_data['metadatas'])
-    ]
-
-    bm25_retriever = BM25Retriever.from_documents(all_docs)
-    bm25_retriever.k = 6
-
-    semantic_retriever = db.as_retriever(search_kwargs={'k': 6})
-
-    # Ensemble: BM25 handles exact keyword/IP matches, semantic handles meaning
-    retriever = EnsembleRetriever(
-        retrievers=[bm25_retriever, semantic_retriever],
-        weights=[bm25_weight, vector_weight],
-    )
-
-    llm = ChatOpenAI(
+def _get_llm():
+    return ChatOpenAI(
         base_url=os.environ.get('LLM_BASE_URL', 'https://openrouter.ai/api/v1'),
         api_key=os.environ['OPENROUTER_API_KEY'],
         model=os.environ.get('LLM_MODEL', 'google/gemini-2.5-flash-lite'),
     )
 
-    chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type='stuff',
-        retriever=retriever,
-        return_source_documents=True,
-        chain_type_kwargs={'prompt': PROMPT},
+
+def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: float = 0.6) -> list[Document]:
+    """Hybrid retrieval: FTS5 keyword + ChromaDB vector, merged and deduplicated.
+
+    Retrieves k candidates from each source, then merges with weighted
+    reciprocal rank fusion (RRF) scoring. Returns top-k unique documents.
+    """
+    db, cfg = _load_db()
+    fts = get_fts()
+
+    # Get candidates from both retrievers
+    bm25_docs = fts.search(query, k=k)
+    vector_docs = db.similarity_search(query, k=k)
+
+    # Reciprocal rank fusion — merge by content identity
+    scores: dict[str, float] = {}  # content hash -> score
+    doc_map: dict[str, Document] = {}  # content hash -> Document
+    rrf_k = 60  # standard RRF constant
+
+    for rank, doc in enumerate(bm25_docs):
+        key = f"{doc.metadata.get('source', '')}:{doc.page_content[:100]}"
+        scores[key] = scores.get(key, 0) + bm25_weight / (rrf_k + rank + 1)
+        doc_map[key] = doc
+
+    for rank, doc in enumerate(vector_docs):
+        key = f"{doc.metadata.get('source', '')}:{doc.page_content[:100]}"
+        scores[key] = scores.get(key, 0) + vector_weight / (rrf_k + rank + 1)
+        doc_map[key] = doc
+
+    # Sort by fused score descending, return top k
+    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    return [doc_map[key] for key, _ in ranked[:k]]
+
+
+def _synthesise(query: str, docs: list[Document]) -> str:
+    """Send retrieved documents + query to LLM for answer synthesis."""
+    context = "\n\n".join(
+        f"[{d.metadata.get('filename', 'unknown')}]\n{d.page_content}" for d in docs
     )
-    return chain
+    prompt_text = PROMPT.format(context=context, question=query)
+    llm = _get_llm()
+    result = llm.invoke([HumanMessage(content=prompt_text)])
+    return result.content
 
 
-def search_with_weights(query, bm25_weight, vector_weight):
-    """Run a search with custom ensemble weights. Builds a temporary chain."""
+def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6, final_k: int = 6) -> tuple[str, list[str]]:
+    """Full RAG search: retrieve top-20, rerank to top-6, synthesise."""
     lookup = _try_todo_lookup(query)
     if lookup:
         return lookup
-    chain = get_chain(bm25_weight=bm25_weight, vector_weight=vector_weight)
-    result = chain.invoke({'query': query})
-    answer = result['result']
-    sources = list(dict.fromkeys(doc.metadata.get('filename', 'unknown') for doc in result['source_documents']))
+
+    # Retrieve broad candidate set, then rerank for precision
+    docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight)
+    if not docs:
+        return "No relevant context found in the workspace.", []
+
+    reranker = _get_reranker()
+    if reranker:
+        docs = reranker.rerank(query, docs, top_k=final_k)
+    else:
+        docs = docs[:final_k]
+
+    answer = _synthesise(query, docs)
+    sources = list(dict.fromkeys(d.metadata.get('filename', 'unknown') for d in docs))
     return answer, sources
 
-def similar(query, k=5):
+
+def search_with_weights(query: str, bm25_weight: float, vector_weight: float) -> tuple[str, list[str]]:
+    """Run a search with custom ensemble weights."""
+    return search(query, bm25_weight=bm25_weight, vector_weight=vector_weight)
+
+
+def search_filtered(query: str, exclude_sources: list[str]) -> tuple[str, list[str]]:
+    """Retrieve docs, filter out excluded source files, rerank, then synthesise."""
+    lookup = _try_todo_lookup(query)
+    if lookup:
+        return lookup
+
+    docs = _retrieve(query, k=20)
+    docs = [d for d in docs if d.metadata.get('filename', '') not in exclude_sources]
+    if not docs:
+        return "No relevant context found in the workspace.", []
+
+    reranker = _get_reranker()
+    if reranker:
+        docs = reranker.rerank(query, docs, top_k=6)
+    else:
+        docs = docs[:6]
+
+    answer = _synthesise(query, docs)
+    sources = list(dict.fromkeys(d.metadata.get('filename', 'unknown') for d in docs))
+    return answer, sources
+
+
+def similar(query: str, k: int = 5) -> list[dict]:
     """Return top-k similar documents by vector similarity. No LLM call."""
     db, _ = _load_db()
     results = db.similarity_search_with_score(query, k=k)
@@ -132,40 +206,6 @@ def similar(query, k=5):
         for doc, score in results
     ]
 
-def search(query, chain=None):
-    # Pre-check: direct todo lookup bypasses retriever + LLM entirely
-    lookup = _try_todo_lookup(query)
-    if lookup:
-        return lookup
-
-    if chain is None:
-        chain = get_chain()
-    result = chain.invoke({'query': query})
-    answer = result['result']
-    sources = list(dict.fromkeys(doc.metadata.get('filename', 'unknown') for doc in result['source_documents']))
-    return answer, sources
-
-def search_filtered(query, exclude_sources, chain_obj):
-    """Retrieve docs, filter out excluded source files, then synthesise with LLM."""
-    # Pre-check: direct todo lookup bypasses retriever + LLM entirely
-    lookup = _try_todo_lookup(query)
-    if lookup:
-        return lookup
-
-    from langchain_core.messages import HumanMessage
-    docs = chain_obj.retriever.invoke(query)
-    if exclude_sources:
-        docs = [d for d in docs if d.metadata.get('filename', '') not in exclude_sources]
-    if not docs:
-        return "No relevant context found in the workspace.", []
-    context = "\n\n".join(
-        f"[{d.metadata.get('filename', 'unknown')}]\n{d.page_content}" for d in docs
-    )
-    prompt_text = PROMPT.format(context=context, question=query)
-    llm = chain_obj.combine_documents_chain.llm_chain.llm
-    result = llm.invoke([HumanMessage(content=prompt_text)])
-    sources = list(dict.fromkeys(d.metadata.get('filename', 'unknown') for d in docs))
-    return result.content, sources
 
 if __name__ == '__main__':
     import sys

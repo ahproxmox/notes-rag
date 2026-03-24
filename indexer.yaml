@@ -14,3 +14,4 @@ chunk_size: 300
 chunk_overlap: 60
 embedding_model: all-MiniLM-L6-v2
 chroma_path: /opt/rag/chroma
+rerank: true

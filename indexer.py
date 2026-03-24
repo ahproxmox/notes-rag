@@ -1,11 +1,11 @@
 import os
-import sys
 import yaml
 from pathlib import Path
 from langchain_community.document_loaders import TextLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
+from langchain_core.documents import Document
 from langchain_chroma import Chroma
+from embeddings import ONNXEmbeddings
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(__file__), 'indexer.yaml'))
 
@@ -14,7 +14,7 @@ def load_config():
         return yaml.safe_load(f)
 
 def get_embeddings(cfg):
-    return HuggingFaceEmbeddings(model_name=cfg['embedding_model'])
+    return ONNXEmbeddings(model_name=f"sentence-transformers/{cfg['embedding_model']}")
 
 def get_db(cfg, embeddings):
     return Chroma(persist_directory=cfg['chroma_path'], embedding_function=embeddings)
@@ -29,21 +29,87 @@ def get_md_files(workspace, exclude):
     return files
 
 def chunk_file(path, workspace, cfg):
-    # Prefer splitting at markdown headings to keep sections together
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=cfg['chunk_size'],
-        chunk_overlap=cfg['chunk_overlap'],
-        separators=["\n## ", "\n### ", "\n#### ", "\n\n", "\n", " ", ""],
-    )
+    """Split a markdown file into chunks, preserving header context.
+
+    Two-pass strategy:
+    1. MarkdownHeaderTextSplitter splits on #/##/### boundaries, keeping
+       each section together and recording the header hierarchy in metadata.
+    2. RecursiveCharacterTextSplitter sub-splits any section that exceeds
+       chunk_size, so we never send oversized chunks to the embedding model.
+    """
     loader = TextLoader(str(path), encoding='utf-8', autodetect_encoding=True)
     raw = loader.load()
-    chunks = splitter.split_documents(raw)
+    text = raw[0].page_content
+
+    # Pass 1: split on markdown headers
+    md_splitter = MarkdownHeaderTextSplitter(
+        headers_to_split_on=[
+            ('#', 'h1'),
+            ('##', 'h2'),
+            ('###', 'h3'),
+            ('####', 'h4'),
+        ],
+        strip_headers=False,
+    )
+    header_chunks = md_splitter.split_text(text)
+
+    # Pass 2: sub-split oversized sections
+    sub_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=cfg['chunk_size'],
+        chunk_overlap=cfg['chunk_overlap'],
+        separators=["\n\n", "\n", " ", ""],
+    )
+
     rel = path.relative_to(workspace)
     folder = rel.parts[0] if len(rel.parts) > 1 else 'root'
-    for chunk in chunks:
-        chunk.metadata['source'] = str(path)
-        chunk.metadata['folder'] = folder
-        chunk.metadata['filename'] = path.name
+    chunks = []
+
+    for section in header_chunks:
+        # Build header breadcrumb for context (e.g. "## Setup > ### DNS")
+        headers = ' > '.join(
+            f"{section.metadata[k]}"
+            for k in ('h1', 'h2', 'h3', 'h4')
+            if k in section.metadata
+        )
+
+        if len(section.page_content) > cfg['chunk_size']:
+            sub_chunks = sub_splitter.split_text(section.page_content)
+            for sc in sub_chunks:
+                chunks.append(Document(
+                    page_content=sc,
+                    metadata={
+                        'source': str(path),
+                        'folder': folder,
+                        'filename': path.name,
+                        'headers': headers,
+                    },
+                ))
+        else:
+            chunks.append(Document(
+                page_content=section.page_content,
+                metadata={
+                    'source': str(path),
+                    'folder': folder,
+                    'filename': path.name,
+                    'headers': headers,
+                },
+            ))
+
+    # Fallback: if header splitting produced nothing (e.g. no headers in file),
+    # fall back to simple recursive splitting
+    if not chunks:
+        fallback = RecursiveCharacterTextSplitter(
+            chunk_size=cfg['chunk_size'],
+            chunk_overlap=cfg['chunk_overlap'],
+            separators=["\n\n", "\n", " ", ""],
+        )
+        chunks = fallback.split_documents(raw)
+        for chunk in chunks:
+            chunk.metadata['source'] = str(path)
+            chunk.metadata['folder'] = folder
+            chunk.metadata['filename'] = path.name
+            chunk.metadata['headers'] = ''
+
     return chunks
 
 def delete_file_chunks(db, path):

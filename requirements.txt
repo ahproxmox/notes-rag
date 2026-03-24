@@ -8,20 +8,16 @@ uvicorn==0.41.0
 # LangChain ecosystem
 langchain==1.2.10
 langchain-chroma==1.1.0
-langchain-classic==1.0.2
 langchain-community==0.4.1
 langchain-core==1.2.17
-langchain-huggingface==1.2.1
 langchain-openai==1.1.10
 langchain-text-splitters==1.1.1
 
 # Embeddings + vector store
 chromadb==1.5.4
-sentence-transformers==5.2.3
-torch==2.10.0+cpu
+fastembed>=0.4.0
 
-# BM25 keyword search
-rank-bm25==0.2.2
+# BM25 keyword search (now via SQLite FTS5 — no extra deps)
 
 # Research pipeline
 beautifulsoup4==4.14.3
