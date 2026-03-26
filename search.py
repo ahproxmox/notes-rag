@@ -120,7 +120,12 @@ def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: 
         doc_map[key] = doc
 
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    return [doc_map[key] for key, _ in ranked[:k]]
+    result = []
+    for key, score in ranked[:k]:
+        doc = doc_map[key]
+        doc.metadata['rrf_score'] = score
+        result.append(doc)
+    return result
 
 
 def _synthesise(query: str, docs: list[Document]) -> str:
@@ -134,16 +139,28 @@ def _synthesise(query: str, docs: list[Document]) -> str:
     return result.content
 
 
+def _docs_to_chunks(docs: list[Document]) -> list[dict]:
+    return [
+        {
+            'content': d.page_content,
+            'source': d.metadata.get('filename', 'unknown'),
+            'score': round(d.metadata.get('rrf_score', 0.0), 6),
+        }
+        for d in docs
+    ]
+
+
 def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
-           final_k: int = 6, folder: str | None = None) -> tuple[str, list[str]]:
+           final_k: int = 6, folder: str | None = None) -> tuple[str, list[str], list[dict]]:
     """Full RAG search: retrieve top-20, rerank to top-6, synthesise."""
     lookup = _try_todo_lookup(query)
     if lookup:
-        return lookup
+        answer, sources = lookup
+        return answer, sources, []
 
     docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight, folder=folder)
     if not docs:
-        return "No relevant context found in the workspace.", []
+        return "No relevant context found in the workspace.", [], []
 
     reranker = _get_reranker()
     if reranker:
@@ -153,24 +170,25 @@ def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
 
     answer = _synthesise(query, docs)
     sources = list(dict.fromkeys(d.metadata.get('filename', 'unknown') for d in docs))
-    return answer, sources
+    return answer, sources, _docs_to_chunks(docs)
 
 
-def search_with_weights(query: str, bm25_weight: float, vector_weight: float) -> tuple[str, list[str]]:
+def search_with_weights(query: str, bm25_weight: float, vector_weight: float) -> tuple[str, list[str], list[dict]]:
     """Run a search with custom ensemble weights."""
     return search(query, bm25_weight=bm25_weight, vector_weight=vector_weight)
 
 
-def search_filtered(query: str, exclude_sources: list[str], folder: str | None = None) -> tuple[str, list[str]]:
+def search_filtered(query: str, exclude_sources: list[str], folder: str | None = None) -> tuple[str, list[str], list[dict]]:
     """Retrieve docs, filter out excluded source files, rerank, then synthesise."""
     lookup = _try_todo_lookup(query)
     if lookup:
-        return lookup
+        answer, sources = lookup
+        return answer, sources, []
 
     docs = _retrieve(query, k=20, folder=folder)
     docs = [d for d in docs if d.metadata.get('filename', '') not in exclude_sources]
     if not docs:
-        return "No relevant context found in the workspace.", []
+        return "No relevant context found in the workspace.", [], []
 
     reranker = _get_reranker()
     if reranker:
@@ -180,7 +198,7 @@ def search_filtered(query: str, exclude_sources: list[str], folder: str | None =
 
     answer = _synthesise(query, docs)
     sources = list(dict.fromkeys(d.metadata.get('filename', 'unknown') for d in docs))
-    return answer, sources
+    return answer, sources, _docs_to_chunks(docs)
 
 
 def similar(query: str, k: int = 5) -> list[dict]:

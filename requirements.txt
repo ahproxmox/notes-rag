@@ -4,6 +4,7 @@
 # Core framework
 fastapi==0.135.1
 uvicorn==0.41.0
+aiofiles==24.1.0
 
 # LangChain ecosystem
 langchain==1.2.10

@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notes RAG</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2128;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --text-muted:#8b949e;
+      --accent:    #58a6ff;
+      --accent-dim:#1f3358;
+      --user-bg:   #1d2d3e;
+      --tag-bg:    #21262d;
+      --green:     #3fb950;
+      --code-bg:   #1f2937;
+      --radius:    8px;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* ── Header ── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -0.3px; }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      background: var(--tag-bg);
+    }
+    .badge.green { color: var(--green); border-color: #2ea04330; background: #2ea04310; }
+    .spacer { flex: 1; }
+    .stat { font-size: 11px; color: var(--text-muted); }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Chat panel ── */
+    .chat-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--border);
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      scroll-behavior: smooth;
+    }
+    .messages::-webkit-scrollbar { width: 6px; }
+    .messages::-webkit-scrollbar-track { background: transparent; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Welcome state */
+    .welcome {
+      margin: auto;
+      text-align: center;
+      max-width: 480px;
+    }
+    .welcome h2 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+    .welcome p { color: var(--text-muted); margin-bottom: 24px; }
+    .examples { display: flex; flex-direction: column; gap: 8px; }
+    .example-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      text-align: left;
+      font-size: 13px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .example-btn:hover { border-color: var(--accent); color: var(--text); }
+
+    /* Exchange */
+    .exchange { display: flex; flex-direction: column; gap: 12px; }
+
+    .user-msg {
+      align-self: flex-end;
+      background: var(--user-bg);
+      border: 1px solid #2d4a6a;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      max-width: 75%;
+      color: var(--text);
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    .assistant-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .answer-body {
+      padding: 16px;
+      color: var(--text);
+      font-size: 13.5px;
+      line-height: 1.7;
+    }
+
+    /* Markdown rendering */
+    .answer-body h1, .answer-body h2, .answer-body h3 {
+      font-size: 14px; font-weight: 600; margin: 12px 0 4px;
+    }
+    .answer-body p { margin-bottom: 10px; }
+    .answer-body p:last-child { margin-bottom: 0; }
+    .answer-body strong { color: var(--text); font-weight: 600; }
+    .answer-body em { font-style: italic; color: var(--text-muted); }
+    .answer-body code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 12px;
+      color: #e3b341;
+    }
+    .answer-body pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+    .answer-body pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--text);
+      font-size: 12px;
+    }
+    .answer-body ul, .answer-body ol {
+      padding-left: 20px;
+      margin-bottom: 10px;
+    }
+    .answer-body li { margin-bottom: 3px; }
+    .answer-body blockquote {
+      border-left: 3px solid var(--border);
+      padding-left: 12px;
+      color: var(--text-muted);
+      margin: 8px 0;
+    }
+
+    /* Sources toggle */
+    .sources-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-top: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-muted);
+      user-select: none;
+      transition: color 0.15s;
+    }
+    .sources-toggle:hover { color: var(--text); }
+    .sources-toggle .chevron { transition: transform 0.2s; }
+    .sources-toggle.open .chevron { transform: rotate(90deg); }
+    .sources-count {
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 1px 7px;
+      font-size: 11px;
+    }
+
+    /* Source chips in toggle bar */
+    .source-chips { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+    .chip {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--tag-bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Chunks panel */
+    .chunks-panel {
+      display: none;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--border);
+      border-top: 1px solid var(--border);
+    }
+    .chunks-panel.open { display: flex; }
+
+    .chunk {
+      background: var(--surface2);
+      overflow: hidden;
+    }
+    .chunk-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .chunk-header:hover { background: var(--surface); }
+    .chunk-filename {
+      font-size: 11px;
+      font-family: 'SF Mono', monospace;
+      color: var(--accent);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chunk-score {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: monospace;
+    }
+    .score-bar {
+      width: 40px;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .score-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+    .chunk-expand { color: var(--text-muted); font-size: 10px; transition: transform 0.15s; }
+    .chunk.expanded .chunk-expand { transform: rotate(90deg); }
+
+    .chunk-content {
+      display: none;
+      padding: 0 16px 12px;
+      font-size: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--text-muted);
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border-top: 1px solid var(--border);
+    }
+    .chunk.expanded .chunk-content { display: block; }
+
+    /* Loading */
+    .loading-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Sources sidebar ── */
+    .sources-panel-side {
+      width: 340px;
+      flex-shrink: 0;
+      overflow-y: auto;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+    }
+    .sources-panel-side::-webkit-scrollbar { width: 6px; }
+    .sources-panel-side::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .side-header {
+      padding: 14px 16px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .side-empty {
+      padding: 24px 16px;
+      color: var(--text-muted);
+      font-size: 12px;
+      text-align: center;
+    }
+    .side-chunk {
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .side-chunk-header {
+      padding: 10px 16px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .side-chunk-header:hover { background: var(--surface2); }
+    .side-chunk-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .side-chunk-filename {
+      font-size: 11px;
+      font-family: 'SF Mono', monospace;
+      color: var(--accent);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .side-chunk-score { font-size: 10px; color: var(--text-muted); font-family: monospace; flex-shrink: 0; }
+    .side-score-bar { width: 100%; height: 2px; background: var(--border); border-radius: 2px; }
+    .side-score-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; opacity: 0.7; }
+    .side-chunk-preview {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .side-chunk-body {
+      display: none;
+      padding: 0 16px 12px;
+      font-size: 11px;
+      font-family: 'SF Mono', monospace;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.6;
+    }
+    .side-chunk.expanded .side-chunk-body { display: block; }
+    .side-chunk.expanded .side-chunk-header { background: var(--surface2); }
+
+    /* ── Input bar ── */
+    .input-bar {
+      border-top: 1px solid var(--border);
+      padding: 12px 24px;
+      background: var(--surface);
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+    .input-wrap {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: flex-end;
+      transition: border-color 0.15s;
+    }
+    .input-wrap:focus-within { border-color: var(--accent); }
+    textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 10px 14px;
+      resize: none;
+      max-height: 120px;
+      line-height: 1.5;
+    }
+    textarea::placeholder { color: var(--text-muted); }
+    .send-btn {
+      background: var(--accent);
+      color: #0d1117;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      flex-shrink: 0;
+      transition: opacity 0.15s;
+      align-self: flex-end;
+      margin: 6px 6px 6px 0;
+    }
+    .send-btn:hover { opacity: 0.85; }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    @media (max-width: 768px) {
+      .sources-panel-side { display: none; }
+      .chat-panel { border-right: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Notes RAG</h1>
+  <span class="badge green">● live</span>
+  <span class="badge">hybrid BM25 + vector</span>
+  <span class="badge">chunk_size=300</span>
+  <span class="badge">reranker</span>
+  <span class="spacer"></span>
+  <span class="stat" id="chunk-count">loading...</span>
+</header>
+
+<div class="layout">
+  <div class="chat-panel">
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome">
+        <h2>Ask your workspace</h2>
+        <p>Queries run hybrid BM25 + vector retrieval, reranked, then synthesised by Gemini Flash Lite.</p>
+        <div class="examples">
+          <button class="example-btn">What SSH setup do I have configured?</button>
+          <button class="example-btn">How does the RAG chunking strategy work?</button>
+          <button class="example-btn">What Proxmox containers are running?</button>
+          <button class="example-btn">What todos are currently in progress?</button>
+        </div>
+      </div>
+    </div>
+    <div class="input-bar">
+      <div class="input-wrap">
+        <textarea id="query" placeholder="Ask your workspace..." rows="1"></textarea>
+      </div>
+      <button class="send-btn" id="send">Send</button>
+    </div>
+  </div>
+
+  <div class="sources-panel-side" id="side-panel">
+    <div class="side-header">Retrieved Chunks</div>
+    <div class="side-empty" id="side-empty">Run a query to see retrieved chunks</div>
+  </div>
+</div>
+
+<script>
+  const messagesEl = document.getElementById('messages');
+  const queryEl    = document.getElementById('query');
+  const sendBtn    = document.getElementById('send');
+  const sidePanel  = document.getElementById('side-panel');
+  const sideEmpty  = document.getElementById('side-empty');
+  const welcome    = document.getElementById('welcome');
+
+  // Fetch chunk count from health/stats
+  fetch('/health').then(r => r.json()).then(() => {
+    // Try to get chunk count via a lightweight call — we'll just show a static value
+    // set by the server at startup (exposed via a new /stats endpoint in future)
+    document.getElementById('chunk-count').textContent = '';
+  }).catch(() => {
+    document.getElementById('chunk-count').textContent = 'offline';
+  });
+
+  // Auto-resize textarea
+  queryEl.addEventListener('input', () => {
+    queryEl.style.height = 'auto';
+    queryEl.style.height = Math.min(queryEl.scrollHeight, 120) + 'px';
+  });
+
+  // Enter to send (Shift+Enter for newline)
+  queryEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+  });
+
+  sendBtn.addEventListener('click', submit);
+
+  // Example buttons
+  document.querySelectorAll('.example-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      queryEl.value = btn.textContent;
+      submit();
+    });
+  });
+
+  function submit() {
+    const query = queryEl.value.trim();
+    if (!query || sendBtn.disabled) return;
+
+    welcome?.remove();
+    queryEl.value = '';
+    queryEl.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    // User message
+    const exchange = document.createElement('div');
+    exchange.className = 'exchange';
+
+    const userMsg = document.createElement('div');
+    userMsg.className = 'user-msg';
+    userMsg.textContent = query;
+    exchange.appendChild(userMsg);
+
+    // Loading card
+    const loadingCard = document.createElement('div');
+    loadingCard.className = 'loading-card';
+    loadingCard.innerHTML = '<div class="spinner"></div><span>Retrieving and synthesising...</span>';
+    exchange.appendChild(loadingCard);
+
+    messagesEl.appendChild(exchange);
+    scrollToBottom();
+
+    fetch('/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    })
+    .then(r => r.json())
+    .then(data => {
+      loadingCard.remove();
+
+      const card = document.createElement('div');
+      card.className = 'assistant-card';
+
+      // Answer
+      const answerBody = document.createElement('div');
+      answerBody.className = 'answer-body';
+      answerBody.innerHTML = renderMarkdown(data.answer);
+      card.appendChild(answerBody);
+
+      // Sources toggle + chunks (inline)
+      if (data.chunks && data.chunks.length > 0) {
+        const toggle = document.createElement('div');
+        toggle.className = 'sources-toggle';
+        toggle.innerHTML = `
+          <span class="chevron">▶</span>
+          <span class="sources-count">${data.chunks.length}</span>
+          <span>sources</span>
+          <div class="source-chips">
+            ${[...new Set(data.sources)].slice(0, 4).map(s =>
+              `<span class="chip" title="${s}">${s}</span>`
+            ).join('')}
+          </div>`;
+
+        const chunksPanel = document.createElement('div');
+        chunksPanel.className = 'chunks-panel';
+
+        const maxScore = Math.max(...data.chunks.map(c => c.score), 0.001);
+
+        data.chunks.forEach(chunk => {
+          const chunkEl = document.createElement('div');
+          chunkEl.className = 'chunk';
+          const pct = Math.round((chunk.score / maxScore) * 100);
+          chunkEl.innerHTML = `
+            <div class="chunk-header">
+              <span class="chunk-filename">${chunk.source}</span>
+              <div class="score-bar"><div class="score-bar-fill" style="width:${pct}%"></div></div>
+              <span class="chunk-score">${chunk.score.toFixed(5)}</span>
+              <span class="chunk-expand">▶</span>
+            </div>
+            <div class="chunk-content">${escHtml(chunk.content)}</div>`;
+          chunkEl.querySelector('.chunk-header').addEventListener('click', () => {
+            chunkEl.classList.toggle('expanded');
+          });
+          chunksPanel.appendChild(chunkEl);
+        });
+
+        toggle.addEventListener('click', () => {
+          toggle.classList.toggle('open');
+          chunksPanel.classList.toggle('open');
+        });
+
+        card.appendChild(toggle);
+        card.appendChild(chunksPanel);
+
+        // Update sidebar
+        updateSidebar(data.chunks);
+      }
+
+      exchange.appendChild(card);
+      scrollToBottom();
+    })
+    .catch(err => {
+      loadingCard.remove();
+      const errCard = document.createElement('div');
+      errCard.className = 'assistant-card';
+      errCard.innerHTML = `<div class="answer-body" style="color:#f85149">Error: ${escHtml(err.message)}</div>`;
+      exchange.appendChild(errCard);
+      scrollToBottom();
+    })
+    .finally(() => {
+      sendBtn.disabled = false;
+      queryEl.focus();
+    });
+  }
+
+  function updateSidebar(chunks) {
+    // Remove old chunks
+    sidePanel.querySelectorAll('.side-chunk').forEach(el => el.remove());
+    sideEmpty.style.display = 'none';
+
+    const maxScore = Math.max(...chunks.map(c => c.score), 0.001);
+
+    chunks.forEach(chunk => {
+      const el = document.createElement('div');
+      el.className = 'side-chunk';
+      const pct = Math.round((chunk.score / maxScore) * 100);
+      const preview = chunk.content.replace(/\n/g, ' ').slice(0, 80);
+      el.innerHTML = `
+        <div class="side-chunk-header">
+          <div class="side-chunk-meta">
+            <span class="side-chunk-filename">${chunk.source}</span>
+            <span class="side-chunk-score">${chunk.score.toFixed(5)}</span>
+          </div>
+          <div class="side-score-bar"><div class="side-score-bar-fill" style="width:${pct}%"></div></div>
+          <div class="side-chunk-preview">${escHtml(preview)}…</div>
+        </div>
+        <div class="side-chunk-body">${escHtml(chunk.content)}</div>`;
+      el.querySelector('.side-chunk-header').addEventListener('click', () => {
+        el.classList.toggle('expanded');
+      });
+      sidePanel.appendChild(el);
+    });
+  }
+
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderMarkdown(text) {
+    // Code blocks first (to avoid processing their contents)
+    const blocks = [];
+    text = text.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) => {
+      const idx = blocks.length;
+      blocks.push(`<pre><code>${escHtml(code.trim())}</code></pre>`);
+      return `\x00BLOCK${idx}\x00`;
+    });
+
+    // Inline code
+    text = text.replace(/`([^`]+)`/g, (_, c) => `<code>${escHtml(c)}</code>`);
+
+    // Headings
+    text = text.replace(/^#{1,3} (.+)$/gm, (_, h) => `<h3>${h}</h3>`);
+
+    // Bold / italic
+    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+    // Unordered lists (group consecutive - lines)
+    text = text.replace(/((?:^- .+\n?)+)/gm, match => {
+      const items = match.trim().split('\n').map(l => `<li>${l.replace(/^- /, '')}</li>`).join('');
+      return `<ul>${items}</ul>`;
+    });
+
+    // Ordered lists
+    text = text.replace(/((?:^\d+\. .+\n?)+)/gm, match => {
+      const items = match.trim().split('\n').map(l => `<li>${l.replace(/^\d+\. /, '')}</li>`).join('');
+      return `<ol>${items}</ol>`;
+    });
+
+    // Blockquotes
+    text = text.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+
+    // Paragraphs (blank line separated)
+    text = text.split(/\n\n+/).map(p => {
+      p = p.trim();
+      if (!p) return '';
+      if (/^<(h[1-6]|ul|ol|pre|blockquote)/.test(p)) return p;
+      if (p.startsWith('\x00BLOCK')) return p;
+      return `<p>${p.replace(/\n/g, '<br>')}</p>`;
+    }).join('\n');
+
+    // Restore code blocks
+    blocks.forEach((block, i) => {
+      text = text.replace(`\x00BLOCK${i}\x00`, block);
+    });
+
+    return text;
+  }
+</script>
+</body>
+</html>
