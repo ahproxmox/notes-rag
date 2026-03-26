@@ -9,6 +9,7 @@ exclude:
   - trash
   - tmp
   - temp
+  - docs-archive
 
 chunk_size: 300
 chunk_overlap: 60
