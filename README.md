@@ -1,126 +1,225 @@
 # notes-rag
 
-Hybrid BM25 + vector RAG search engine for markdown workspaces. Indexes `.md` files, watches for changes in real time, and serves a FastAPI HTTP API for search, similarity, and web research.
+A self-hosted hybrid RAG engine for personal markdown workspaces. Indexes `.md` files, watches for changes in real time, and serves a streaming chat UI + HTTP API for search and similarity.
 
-## How it works
+**[Read the engineering writeup →](docs/writeup.md)**
 
-1. **Indexer** scans a workspace directory for `.md` files, splits them into chunks (markdown-aware, configurable size), and stores embeddings in ChromaDB
-2. **Watcher** monitors the filesystem for create/modify/delete events and incrementally re-indexes affected files
-3. **Search** combines BM25 keyword retrieval (40%) with semantic vector search (60%) via an ensemble retriever, then synthesises an answer using an LLM
-4. **Direct lookup** shortcuts — queries like "todo 099" bypass the retriever entirely and return the file contents directly
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    Files["📁 Markdown Workspace\nnotes · todos · context · Obsidian"]
+    Watcher["👁 Watcher\nwatchdog filesystem events"]
+    Indexer["✂️ Indexer\nchunk_size=300 · overlap=60"]
+    DB[("SQLite\nFTS5 + sqlite-vec")]
+    Query["🔍 Query"]
+    BM25["BM25 / FTS5\nKeyword search\nweight 0.4"]
+    Vec["sqlite-vec\nSemantic search\nweight 0.6"]
+    RRF["RRF Merge\ntop-20 candidates"]
+    Reranker["Cross-encoder Reranker\ntop-6"]
+    LLM["Gemini Flash Lite\nvia OpenRouter"]
+    Out["Answer · Sources · Chunks"]
+
+    Files --> Watcher --> Indexer --> DB
+    Query --> BM25 & Vec
+    DB --> BM25 & Vec
+    BM25 & Vec --> RRF --> Reranker --> LLM --> Out
+```
+
+**Retrieval pipeline:**
+1. Query hits two retrievers in parallel — BM25 (FTS5 keyword search) and sqlite-vec (semantic embeddings)
+2. Results merged via Reciprocal Rank Fusion (RRF) — top-20 candidates
+3. Cross-encoder reranker re-scores candidates and trims to top-6
+4. LLM synthesises an answer from the 6 retrieved chunks, citing filenames
+
+**Indexing pipeline:**
+- Files are chunked at 300 chars with 60-char overlap (determined experimentally — see [evaluation](#evaluation))
+- Embeddings generated with `all-MiniLM-L6-v2` via fastembed
+- Both FTS5 and vector indexes stored in a single SQLite DB — no separate vector store
+- Watcher incrementally re-indexes on create/modify/delete; BM25 invalidation is event-driven to prevent stale results
+
+---
+
+## Demo UI
+
+A streaming chat interface is served at `http://localhost:8080/`:
+
+- Queries stream token-by-token via SSE — sidebar populates with retrieved chunks before the LLM finishes
+- Each answer shows retrieval latency and total time
+- Chunks are expandable with RRF scores and score bars
+
+---
+
+## Evaluation
+
+Evaluated against 43 queries across 6 categories: factual, reasoning, security, multi-hop, edge-case, temporal.
+
+### Answer quality
+
+| Stage | Score | Notes |
+|-------|-------|-------|
+| Baseline | 67% | Before any fixes |
+| Post security hardening | 77% | After credential leak fixes |
+| Security queries | 40% → 100% | Vault token, API keys, DB passwords |
+
+Security hardening added explicit rules to the system prompt to refuse credential disclosure. 3 credential leaks were found and fixed.
+
+### Chunk size sweep
+
+Tested chunk sizes 300, 500, 800, 1200 (all with 20% overlap) on the full query set:
+
+| Chunk size | Answer score | MRR |
+|------------|-------------|-----|
+| **300** | **73%** | 0.61 |
+| 500 | 68% | 0.64 |
+| 800 | 65% | 0.67 |
+| 1200 | 61% | 0.69 |
+
+Larger chunks improve MRR (retrieval recall) but hurt answer quality — the LLM gets more context but the relevant signal is diluted. chunk_size=300 is the production setting.
+
+### BM25 / vector weight sweep
+
+Tested 7 weight combinations (BM25 0.0–1.0 / vector 1.0–0.0). Results were nearly identical across all combos, confirming that **chunking strategy is the dominant variable**, not ensemble weighting. Production uses 0.4/0.6.
+
+---
 
 ## API
 
-All endpoints are served by FastAPI on port `8080` (configurable via `RAG_PORT`).
+All endpoints served by FastAPI on port `8080`.
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET` | `/` | Streaming chat UI |
 | `GET` | `/health` | Health check |
-| `POST` | `/search` | Hybrid search with LLM synthesis. Body: `{"query": "...", "exclude_sources": []}` |
-| `POST` | `/similar` | Vector similarity only, no LLM. Body: `{"query": "...", "k": 5}` |
-| `POST` | `/research` | Web research pipeline — Brave Search → scrape → summarise → save. Body: `{"query": "..."}` |
+| `GET` | `/stats` | Chunk count + last indexed timestamp |
+| `POST` | `/search` | Hybrid search, sync response |
+| `POST` | `/search/stream` | Hybrid search, SSE streaming |
+| `POST` | `/similar` | Vector similarity only, no LLM |
+| `POST` | `/research` | Web research → scrape → summarise → save |
+
+### POST /search
+
+```json
+{
+  "query": "What SSH setup do I have?",
+  "folder": null,
+  "exclude_sources": [],
+  "bm25_weight": null,
+  "vector_weight": null
+}
+```
+
+Response includes `answer`, `sources` (deduplicated filenames), and `chunks` (content + source + RRF score per retrieved chunk).
+
+### POST /search/stream
+
+Same request body. Returns SSE events:
+
+```
+data: {"type": "retrieved", "chunks": [...], "sources": [...]}
+data: {"type": "token", "content": "The SSH..."}
+data: {"type": "token", "content": " config..."}
+data: {"type": "done"}
+```
+
+The `retrieved` event fires immediately after retrieval/rerank — before the LLM starts — so UIs can show sources while the answer streams.
+
+---
+
+## Stack
+
+| Component | Library |
+|-----------|---------|
+| API | FastAPI + Uvicorn |
+| Embeddings | fastembed (`all-MiniLM-L6-v2`) |
+| Vector search | sqlite-vec |
+| Keyword search | SQLite FTS5 (porter stemmer) |
+| Reranker | cross-encoder via fastembed |
+| LLM | OpenRouter (default: Gemini Flash Lite) |
+| File watching | watchdog |
+| Config | PyYAML |
+
+---
 
 ## Setup
 
 ```bash
-# Clone
 git clone https://github.com/ahproxmox/notes-rag.git
 cd notes-rag
 
-# Create venv and install deps
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Configure
 cp .env.example .env
-# Edit .env — set OPENROUTER_API_KEY and BRAVE_API_KEY
+# Edit .env — set OPENROUTER_API_KEY
+```
 
-cp indexer.yaml indexer.yaml.local
-# Edit indexer.yaml — set workspace path and chroma_path
+Edit `indexer.yaml` to point at your workspace:
 
-# Build initial index
-python indexer.py
+```yaml
+workspace: /path/to/your/notes
+exclude: [trash, tmp, temp]
+chunk_size: 300
+chunk_overlap: 60
+embedding_model: all-MiniLM-L6-v2
+watch_extra:
+  - /path/to/obsidian/vault   # optional extra directories
+```
 
-# Run (starts API + file watcher)
+```bash
+# Start (builds index on first run, then watches for changes)
 python main.py
 ```
 
+Open `http://localhost:8080` to use the chat UI.
+
+---
+
 ## Configuration
 
-### Environment variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENROUTER_API_KEY` | — | Required. LLM provider |
+| `BRAVE_API_KEY` | — | Optional. Enables `/research` endpoint |
+| `LLM_MODEL` | `google/gemini-2.5-flash-lite` | Any OpenRouter model ID |
+| `LLM_BASE_URL` | `https://openrouter.ai/api/v1` | Override for local LLMs |
+| `RAG_PORT` | `8080` | API port |
+| `RAG_CONFIG_PATH` | `./indexer.yaml` | Config file path |
+| `VAULT_ADDR` | — | Optional. Enables HashiCorp Vault secret fetch on startup |
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OPENROUTER_API_KEY` | Yes | API key for LLM synthesis (OpenRouter) |
-| `BRAVE_API_KEY` | Yes | API key for web research (Brave Search) |
-| `RAG_PORT` | No | API port (default: `8080`) |
-| `RAG_CONFIG_PATH` | No | Path to indexer.yaml (default: `./indexer.yaml`) |
-| `LLM_BASE_URL` | No | LLM API base URL (default: `https://openrouter.ai/api/v1`) |
-| `LLM_MODEL` | No | LLM model ID (default: `google/gemini-2.5-flash-lite`) |
-| `VAULT_ADDR` | No | HashiCorp Vault address — enables vault-fetch.py on startup |
-
-### indexer.yaml
-
-```yaml
-workspace: /mnt/Claude        # directory to index
-exclude: [trash, tmp, temp]   # subdirectories to skip
-chunk_size: 300                # characters per chunk
-chunk_overlap: 60              # overlap between chunks
-embedding_model: all-MiniLM-L6-v2
-chroma_path: ./chroma          # where ChromaDB stores data
-watch_extra:                   # optional extra directories to watch
-  - /mnt/Obsidian
-```
+---
 
 ## Production deployment
 
-A systemd service file is provided at `deploy/rag.service`. Copy it to `/etc/systemd/system/` and adjust paths:
+A systemd service file is at `deploy/rag.service`:
 
 ```bash
 cp deploy/rag.service /etc/systemd/system/rag.service
+# Edit paths in the service file
 systemctl daemon-reload
 systemctl enable --now rag
 ```
 
-## Vault integration
+---
 
-If `VAULT_ADDR` is set, `main.py` runs `vault-fetch.py` on startup to pull secrets from HashiCorp Vault via AppRole auth and write them to `.env`. This requires `/etc/vault/role-id` and `/etc/vault/secret-id` files. If `VAULT_ADDR` is not set, vault-fetch is skipped and secrets are read from `.env` directly.
-
-## Evaluation
-
-The `bench/` directory contains a scoring suite for measuring retrieval quality:
+## Benchmarking
 
 ```bash
-# Run queries against a RAG endpoint
+# Run eval queries against a live endpoint
 python bench/run_bench.py --endpoint http://localhost:8080 --output bench/results.json
 
 # Score the results
 python bench/score.py bench/results.json
+
+# Sweep chunk sizes (rebuilds index each time — slow)
+python bench/chunk_sweep.py
+
+# Sweep BM25/vector weights
+python bench/sweep.py
+
+# Compare two result files side by side
+python bench/compare.py bench/results-a.json bench/results-b.json
 ```
-
-Queries are defined in `bench/queries.yaml`. Scoring methods:
-- **contains**: checks if expected terms appear in the answer
-- **refuse**: checks if the system correctly refuses to reveal sensitive information
-
-## Architecture
-
-```
-main.py          → entry point: vault-fetch → load .env → start watcher thread → start API
-api.py           → FastAPI app, lazy chain building with thread-safe rebuild on dirty flag
-search.py        → hybrid retrieval (BM25 + vector ensemble), LLM synthesis, todo lookup shortcut
-indexer.py       → markdown-aware chunking, ChromaDB storage, full and incremental indexing
-watcher.py       → watchdog filesystem observer, triggers re-index + chain invalidation
-research.py      → Brave Search → scrape → LLM summarise → save to workspace inbox
-vault-fetch.py   → optional Vault AppRole auth → write secrets to .env
-```
-
-## Stack
-
-- Python 3.11+
-- FastAPI + Uvicorn
-- LangChain (retrieval, chains, embeddings)
-- ChromaDB (vector store)
-- sentence-transformers / all-MiniLM-L6-v2 (embeddings)
-- rank-bm25 (keyword search)
-- PyTorch CPU
