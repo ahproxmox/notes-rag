@@ -15,7 +15,6 @@
       --text:      #e6edf3;
       --text-muted:#8b949e;
       --accent:    #58a6ff;
-      --accent-dim:#1f3358;
       --user-bg:   #1d2d3e;
       --tag-bg:    #21262d;
       --green:     #3fb950;
@@ -42,70 +41,47 @@
       padding: 12px 24px;
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
       background: var(--surface);
       flex-shrink: 0;
     }
-    header h1 { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -0.3px; }
+    header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
     .badge {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      background: var(--tag-bg);
+      font-size: 11px; padding: 2px 8px;
+      border-radius: 999px; border: 1px solid var(--border);
+      color: var(--text-muted); background: var(--tag-bg);
     }
     .badge.green { color: var(--green); border-color: #2ea04330; background: #2ea04310; }
     .spacer { flex: 1; }
-    .stat { font-size: 11px; color: var(--text-muted); }
+    #chunk-count { font-size: 11px; color: var(--text-muted); font-family: 'SF Mono', monospace; }
 
     /* ── Layout ── */
-    .layout {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
+    .layout { display: flex; flex: 1; overflow: hidden; }
 
     /* ── Chat panel ── */
     .chat-panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      border-right: 1px solid var(--border);
+      flex: 1; display: flex; flex-direction: column;
+      overflow: hidden; border-right: 1px solid var(--border);
     }
 
     .messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-      scroll-behavior: smooth;
+      flex: 1; overflow-y: auto;
+      padding: 24px; display: flex; flex-direction: column;
+      gap: 24px; scroll-behavior: smooth;
     }
     .messages::-webkit-scrollbar { width: 6px; }
-    .messages::-webkit-scrollbar-track { background: transparent; }
     .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-    /* Welcome state */
-    .welcome {
-      margin: auto;
-      text-align: center;
-      max-width: 480px;
-    }
+    /* Welcome */
+    .welcome { margin: auto; text-align: center; max-width: 480px; }
     .welcome h2 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
     .welcome p { color: var(--text-muted); margin-bottom: 24px; }
     .examples { display: flex; flex-direction: column; gap: 8px; }
     .example-btn {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      padding: 10px 16px;
-      border-radius: var(--radius);
-      cursor: pointer;
-      text-align: left;
-      font-size: 13px;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text-muted); padding: 10px 16px;
+      border-radius: var(--radius); cursor: pointer;
+      text-align: left; font-size: 13px;
       transition: border-color 0.15s, color 0.15s;
     }
     .example-btn:hover { border-color: var(--accent); color: var(--text); }
@@ -114,320 +90,192 @@
     .exchange { display: flex; flex-direction: column; gap: 12px; }
 
     .user-msg {
-      align-self: flex-end;
-      background: var(--user-bg);
-      border: 1px solid #2d4a6a;
-      border-radius: var(--radius);
-      padding: 10px 14px;
-      max-width: 75%;
-      color: var(--text);
-      font-size: 13px;
-      white-space: pre-wrap;
+      align-self: flex-end; background: var(--user-bg);
+      border: 1px solid #2d4a6a; border-radius: var(--radius);
+      padding: 10px 14px; max-width: 75%;
+      color: var(--text); font-size: 13px; white-space: pre-wrap;
     }
 
     .assistant-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
     }
 
     .answer-body {
-      padding: 16px;
-      color: var(--text);
-      font-size: 13.5px;
-      line-height: 1.7;
+      padding: 16px; color: var(--text);
+      font-size: 13.5px; line-height: 1.7;
     }
-
-    /* Markdown rendering */
     .answer-body h1, .answer-body h2, .answer-body h3 {
       font-size: 14px; font-weight: 600; margin: 12px 0 4px;
     }
     .answer-body p { margin-bottom: 10px; }
     .answer-body p:last-child { margin-bottom: 0; }
-    .answer-body strong { color: var(--text); font-weight: 600; }
+    .answer-body strong { font-weight: 600; }
     .answer-body em { font-style: italic; color: var(--text-muted); }
     .answer-body code {
       font-family: 'SF Mono', 'Fira Code', monospace;
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 1px 5px;
-      font-size: 12px;
-      color: #e3b341;
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 5px; font-size: 12px; color: #e3b341;
     }
     .answer-body pre {
-      background: var(--code-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px;
-      overflow-x: auto;
-      margin: 10px 0;
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px;
+      overflow-x: auto; margin: 10px 0;
     }
-    .answer-body pre code {
-      background: none;
-      border: none;
-      padding: 0;
-      color: var(--text);
-      font-size: 12px;
-    }
-    .answer-body ul, .answer-body ol {
-      padding-left: 20px;
-      margin-bottom: 10px;
-    }
+    .answer-body pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 12px; }
+    .answer-body ul, .answer-body ol { padding-left: 20px; margin-bottom: 10px; }
     .answer-body li { margin-bottom: 3px; }
     .answer-body blockquote {
-      border-left: 3px solid var(--border);
-      padding-left: 12px;
-      color: var(--text-muted);
-      margin: 8px 0;
+      border-left: 3px solid var(--border); padding-left: 12px;
+      color: var(--text-muted); margin: 8px 0;
     }
 
-    /* Sources toggle */
+    /* Cursor blink while streaming */
+    .streaming-cursor::after {
+      content: '▍'; animation: blink 0.8s step-end infinite;
+      color: var(--accent); font-size: 12px;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* Card footer: sources + latency */
+    .card-footer {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 16px; border-top: 1px solid var(--border);
+      font-size: 12px; color: var(--text-muted);
+    }
     .sources-toggle {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 16px;
-      border-top: 1px solid var(--border);
-      cursor: pointer;
-      font-size: 12px;
-      color: var(--text-muted);
-      user-select: none;
-      transition: color 0.15s;
+      display: flex; align-items: center; gap: 6px;
+      cursor: pointer; user-select: none;
+      transition: color 0.15s; flex: 1;
     }
     .sources-toggle:hover { color: var(--text); }
-    .sources-toggle .chevron { transition: transform 0.2s; }
+    .sources-toggle .chevron { transition: transform 0.2s; font-size: 10px; }
     .sources-toggle.open .chevron { transform: rotate(90deg); }
     .sources-count {
-      background: var(--tag-bg);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 1px 7px;
-      font-size: 11px;
+      background: var(--tag-bg); border: 1px solid var(--border);
+      border-radius: 999px; padding: 1px 7px; font-size: 11px;
     }
-
-    /* Source chips in toggle bar */
-    .source-chips { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+    .source-chips { display: flex; gap: 4px; flex-wrap: wrap; }
     .chip {
-      font-size: 10px;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: var(--tag-bg);
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      max-width: 180px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: 10px; padding: 1px 6px; border-radius: 999px;
+      background: var(--tag-bg); border: 1px solid var(--border);
+      color: var(--text-muted); max-width: 160px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    .latency {
+      font-size: 11px; color: var(--text-muted);
+      font-family: 'SF Mono', monospace; white-space: nowrap; flex-shrink: 0;
+    }
+    .latency .phase { color: var(--accent); }
 
-    /* Chunks panel */
+    /* Chunks panel (inline) */
     .chunks-panel {
-      display: none;
-      flex-direction: column;
-      gap: 1px;
-      background: var(--border);
+      display: none; flex-direction: column;
+      gap: 1px; background: var(--border);
       border-top: 1px solid var(--border);
     }
     .chunks-panel.open { display: flex; }
 
-    .chunk {
-      background: var(--surface2);
-      overflow: hidden;
-    }
+    .chunk { background: var(--surface2); overflow: hidden; }
     .chunk-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      cursor: pointer;
-      user-select: none;
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 16px; cursor: pointer; user-select: none;
     }
     .chunk-header:hover { background: var(--surface); }
     .chunk-filename {
-      font-size: 11px;
-      font-family: 'SF Mono', monospace;
-      color: var(--accent);
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: 11px; font-family: 'SF Mono', monospace;
+      color: var(--accent); flex: 1;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .chunk-score {
-      font-size: 10px;
-      color: var(--text-muted);
-      font-family: monospace;
-    }
-    .score-bar {
-      width: 40px;
-      height: 3px;
-      background: var(--border);
-      border-radius: 2px;
-      overflow: hidden;
-    }
+    .score-bar { width: 40px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
     .score-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+    .chunk-score { font-size: 10px; color: var(--text-muted); font-family: monospace; }
     .chunk-expand { color: var(--text-muted); font-size: 10px; transition: transform 0.15s; }
     .chunk.expanded .chunk-expand { transform: rotate(90deg); }
-
     .chunk-content {
-      display: none;
-      padding: 0 16px 12px;
-      font-size: 12px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      color: var(--text-muted);
-      line-height: 1.6;
-      white-space: pre-wrap;
-      word-break: break-word;
+      display: none; padding: 0 16px 12px;
+      font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--text-muted); line-height: 1.6;
+      white-space: pre-wrap; word-break: break-word;
       border-top: 1px solid var(--border);
     }
     .chunk.expanded .chunk-content { display: block; }
 
     /* Loading */
     .loading-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      color: var(--text-muted);
-      font-size: 13px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px;
+      display: flex; align-items: center; gap: 10px;
+      color: var(--text-muted); font-size: 13px;
     }
     .spinner {
       width: 14px; height: 14px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      flex-shrink: 0;
+      border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Sources sidebar ── */
+    /* ── Sidebar ── */
     .sources-panel-side {
-      width: 340px;
-      flex-shrink: 0;
-      overflow-y: auto;
-      background: var(--surface);
-      display: flex;
-      flex-direction: column;
+      width: 340px; flex-shrink: 0; overflow-y: auto;
+      background: var(--surface); display: flex; flex-direction: column;
     }
     .sources-panel-side::-webkit-scrollbar { width: 6px; }
     .sources-panel-side::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
     .side-header {
-      padding: 14px 16px 10px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
+      padding: 14px 16px 10px; font-size: 11px; font-weight: 600;
+      color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.6px; border-bottom: 1px solid var(--border); flex-shrink: 0;
     }
-    .side-empty {
-      padding: 24px 16px;
-      color: var(--text-muted);
-      font-size: 12px;
-      text-align: center;
-    }
-    .side-chunk {
-      border-bottom: 1px solid var(--border);
-      overflow: hidden;
-    }
-    .side-chunk-header {
-      padding: 10px 16px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
+    .side-empty { padding: 24px 16px; color: var(--text-muted); font-size: 12px; text-align: center; }
+
+    .side-chunk { border-bottom: 1px solid var(--border); overflow: hidden; }
+    .side-chunk-header { padding: 10px 16px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
     .side-chunk-header:hover { background: var(--surface2); }
-    .side-chunk-meta {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
+    .side-chunk-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .side-chunk-filename {
-      font-size: 11px;
-      font-family: 'SF Mono', monospace;
-      color: var(--accent);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: 11px; font-family: 'SF Mono', monospace;
+      color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .side-chunk-score { font-size: 10px; color: var(--text-muted); font-family: monospace; flex-shrink: 0; }
     .side-score-bar { width: 100%; height: 2px; background: var(--border); border-radius: 2px; }
     .side-score-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; opacity: 0.7; }
     .side-chunk-preview {
-      font-size: 11px;
-      color: var(--text-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-size: 11px; color: var(--text-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .side-chunk-body {
-      display: none;
-      padding: 0 16px 12px;
-      font-size: 11px;
-      font-family: 'SF Mono', monospace;
-      color: var(--text-muted);
-      white-space: pre-wrap;
-      word-break: break-word;
-      line-height: 1.6;
+      display: none; padding: 0 16px 12px;
+      font-size: 11px; font-family: 'SF Mono', monospace;
+      color: var(--text-muted); white-space: pre-wrap;
+      word-break: break-word; line-height: 1.6;
     }
     .side-chunk.expanded .side-chunk-body { display: block; }
     .side-chunk.expanded .side-chunk-header { background: var(--surface2); }
 
     /* ── Input bar ── */
     .input-bar {
-      border-top: 1px solid var(--border);
-      padding: 12px 24px;
-      background: var(--surface);
-      display: flex;
-      gap: 10px;
-      align-items: flex-end;
-      flex-shrink: 0;
+      border-top: 1px solid var(--border); padding: 12px 24px;
+      background: var(--surface); display: flex; gap: 10px;
+      align-items: flex-end; flex-shrink: 0;
     }
     .input-wrap {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      display: flex;
-      align-items: flex-end;
+      flex: 1; background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); display: flex; align-items: flex-end;
       transition: border-color 0.15s;
     }
     .input-wrap:focus-within { border-color: var(--accent); }
     textarea {
-      flex: 1;
-      background: transparent;
-      border: none;
-      outline: none;
-      color: var(--text);
-      font-family: inherit;
-      font-size: 13px;
-      padding: 10px 14px;
-      resize: none;
-      max-height: 120px;
-      line-height: 1.5;
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-family: inherit; font-size: 13px;
+      padding: 10px 14px; resize: none; max-height: 120px; line-height: 1.5;
     }
     textarea::placeholder { color: var(--text-muted); }
     .send-btn {
-      background: var(--accent);
-      color: #0d1117;
-      border: none;
-      border-radius: 6px;
-      padding: 8px 16px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 600;
-      flex-shrink: 0;
-      transition: opacity 0.15s;
-      align-self: flex-end;
-      margin: 6px 6px 6px 0;
+      background: var(--accent); color: #0d1117; border: none;
+      border-radius: 6px; padding: 8px 16px; cursor: pointer;
+      font-size: 13px; font-weight: 600; flex-shrink: 0;
+      transition: opacity 0.15s; align-self: flex-end; margin: 6px 6px 6px 0;
     }
     .send-btn:hover { opacity: 0.85; }
     .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -447,7 +295,7 @@
   <span class="badge">chunk_size=300</span>
   <span class="badge">reranker</span>
   <span class="spacer"></span>
-  <span class="stat" id="chunk-count">loading...</span>
+  <span id="chunk-count"></span>
 </header>
 
 <div class="layout">
@@ -455,7 +303,7 @@
     <div class="messages" id="messages">
       <div class="welcome" id="welcome">
         <h2>Ask your workspace</h2>
-        <p>Queries run hybrid BM25 + vector retrieval, reranked, then synthesised by Gemini Flash Lite.</p>
+        <p>Hybrid BM25 + vector retrieval, reranked, synthesised by Gemini Flash Lite.</p>
         <div class="examples">
           <button class="example-btn">What SSH setup do I have configured?</button>
           <button class="example-btn">How does the RAG chunking strategy work?</button>
@@ -484,16 +332,12 @@
   const sendBtn    = document.getElementById('send');
   const sidePanel  = document.getElementById('side-panel');
   const sideEmpty  = document.getElementById('side-empty');
-  const welcome    = document.getElementById('welcome');
 
-  // Fetch chunk count from health/stats
-  fetch('/health').then(r => r.json()).then(() => {
-    // Try to get chunk count via a lightweight call — we'll just show a static value
-    // set by the server at startup (exposed via a new /stats endpoint in future)
-    document.getElementById('chunk-count').textContent = '';
-  }).catch(() => {
-    document.getElementById('chunk-count').textContent = 'offline';
-  });
+  // Load stats
+  fetch('/stats').then(r => r.json()).then(data => {
+    document.getElementById('chunk-count').textContent =
+      `${data.chunk_count.toLocaleString()} chunks`;
+  }).catch(() => {});
 
   // Auto-resize textarea
   queryEl.addEventListener('input', () => {
@@ -501,31 +345,28 @@
     queryEl.style.height = Math.min(queryEl.scrollHeight, 120) + 'px';
   });
 
-  // Enter to send (Shift+Enter for newline)
   queryEl.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
   });
 
   sendBtn.addEventListener('click', submit);
 
-  // Example buttons
   document.querySelectorAll('.example-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      queryEl.value = btn.textContent;
-      submit();
-    });
+    btn.addEventListener('click', () => { queryEl.value = btn.textContent; submit(); });
   });
 
-  function submit() {
+  async function submit() {
     const query = queryEl.value.trim();
     if (!query || sendBtn.disabled) return;
 
-    welcome?.remove();
+    document.getElementById('welcome')?.remove();
     queryEl.value = '';
     queryEl.style.height = 'auto';
     sendBtn.disabled = true;
 
-    // User message
+    const startTime = Date.now();
+
+    // Build exchange
     const exchange = document.createElement('div');
     exchange.className = 'exchange';
 
@@ -534,124 +375,186 @@
     userMsg.textContent = query;
     exchange.appendChild(userMsg);
 
-    // Loading card
     const loadingCard = document.createElement('div');
     loadingCard.className = 'loading-card';
-    loadingCard.innerHTML = '<div class="spinner"></div><span>Retrieving and synthesising...</span>';
+    loadingCard.innerHTML = '<div class="spinner"></div><span>Retrieving…</span>';
     exchange.appendChild(loadingCard);
 
     messagesEl.appendChild(exchange);
     scrollToBottom();
 
-    fetch('/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query })
-    })
-    .then(r => r.json())
-    .then(data => {
-      loadingCard.remove();
+    try {
+      const response = await fetch('/search/stream', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query}),
+      });
 
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      // Elements built as events arrive
       const card = document.createElement('div');
       card.className = 'assistant-card';
 
-      // Answer
       const answerBody = document.createElement('div');
-      answerBody.className = 'answer-body';
-      answerBody.innerHTML = renderMarkdown(data.answer);
+      answerBody.className = 'answer-body streaming-cursor';
       card.appendChild(answerBody);
 
-      // Sources toggle + chunks (inline)
-      if (data.chunks && data.chunks.length > 0) {
-        const toggle = document.createElement('div');
-        toggle.className = 'sources-toggle';
-        toggle.innerHTML = `
-          <span class="chevron">▶</span>
-          <span class="sources-count">${data.chunks.length}</span>
-          <span>sources</span>
-          <div class="source-chips">
-            ${[...new Set(data.sources)].slice(0, 4).map(s =>
-              `<span class="chip" title="${s}">${s}</span>`
-            ).join('')}
-          </div>`;
+      const cardFooter = document.createElement('div');
+      cardFooter.className = 'card-footer';
+      card.appendChild(cardFooter);
 
-        const chunksPanel = document.createElement('div');
-        chunksPanel.className = 'chunks-panel';
+      const chunksPanel = document.createElement('div');
+      chunksPanel.className = 'chunks-panel';
+      card.appendChild(chunksPanel);
 
-        const maxScore = Math.max(...data.chunks.map(c => c.score), 0.001);
+      let answerText = '';
+      let retrievalMs = null;
+      let cardAdded = false;
 
-        data.chunks.forEach(chunk => {
-          const chunkEl = document.createElement('div');
-          chunkEl.className = 'chunk';
-          const pct = Math.round((chunk.score / maxScore) * 100);
-          chunkEl.innerHTML = `
-            <div class="chunk-header">
-              <span class="chunk-filename">${chunk.source}</span>
-              <div class="score-bar"><div class="score-bar-fill" style="width:${pct}%"></div></div>
-              <span class="chunk-score">${chunk.score.toFixed(5)}</span>
-              <span class="chunk-expand">▶</span>
-            </div>
-            <div class="chunk-content">${escHtml(chunk.content)}</div>`;
-          chunkEl.querySelector('.chunk-header').addEventListener('click', () => {
-            chunkEl.classList.toggle('expanded');
-          });
-          chunksPanel.appendChild(chunkEl);
-        });
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
 
-        toggle.addEventListener('click', () => {
-          toggle.classList.toggle('open');
-          chunksPanel.classList.toggle('open');
-        });
+        buffer += decoder.decode(value, {stream: true});
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop();
 
-        card.appendChild(toggle);
-        card.appendChild(chunksPanel);
+        for (const part of parts) {
+          if (!part.startsWith('data: ')) continue;
+          let event;
+          try { event = JSON.parse(part.slice(6)); } catch { continue; }
 
-        // Update sidebar
-        updateSidebar(data.chunks);
+          if (event.type === 'retrieved') {
+            retrievalMs = Date.now() - startTime;
+
+            // Swap loading card for answer card
+            loadingCard.remove();
+            if (!cardAdded) {
+              exchange.appendChild(card);
+              cardAdded = true;
+            }
+
+            // Update loading label while LLM generates
+            loadingCard.querySelector('span').textContent = 'Generating…';
+
+            // Populate sidebar immediately
+            updateSidebar(event.chunks);
+
+            // Build inline chunks
+            buildChunksPanel(chunksPanel, event.chunks, event.sources, cardFooter);
+          }
+
+          if (event.type === 'token') {
+            answerText += event.content;
+            answerBody.innerHTML = renderMarkdown(answerText);
+            scrollToBottom();
+          }
+
+          if (event.type === 'done') {
+            answerBody.classList.remove('streaming-cursor');
+            const totalMs = Date.now() - startTime;
+            updateLatency(cardFooter, retrievalMs, totalMs);
+          }
+        }
       }
 
-      exchange.appendChild(card);
-      scrollToBottom();
-    })
-    .catch(err => {
+      // Fallback if card wasn't added (empty response)
+      if (!cardAdded) {
+        loadingCard.remove();
+        exchange.appendChild(card);
+      }
+
+    } catch (err) {
       loadingCard.remove();
       const errCard = document.createElement('div');
       errCard.className = 'assistant-card';
       errCard.innerHTML = `<div class="answer-body" style="color:#f85149">Error: ${escHtml(err.message)}</div>`;
       exchange.appendChild(errCard);
-      scrollToBottom();
-    })
-    .finally(() => {
+    } finally {
       sendBtn.disabled = false;
       queryEl.focus();
+      scrollToBottom();
+    }
+  }
+
+  function buildChunksPanel(chunksPanel, chunks, sources, cardFooter) {
+    if (!chunks || chunks.length === 0) return;
+
+    const maxScore = Math.max(...chunks.map(c => c.score), 0.001);
+
+    // Footer: toggle + source chips + latency placeholder
+    const toggle = document.createElement('div');
+    toggle.className = 'sources-toggle';
+    toggle.innerHTML = `
+      <span class="chevron">▶</span>
+      <span class="sources-count">${chunks.length}</span>
+      <span>sources</span>
+      <div class="source-chips">
+        ${[...new Set(sources)].slice(0, 4).map(s =>
+          `<span class="chip" title="${escHtml(s)}">${escHtml(s)}</span>`
+        ).join('')}
+      </div>`;
+
+    toggle.addEventListener('click', () => {
+      toggle.classList.toggle('open');
+      chunksPanel.classList.toggle('open');
+    });
+
+    // Insert toggle before latency slot
+    cardFooter.appendChild(toggle);
+
+    chunks.forEach(chunk => {
+      const pct = Math.round((chunk.score / maxScore) * 100);
+      const el = document.createElement('div');
+      el.className = 'chunk';
+      el.innerHTML = `
+        <div class="chunk-header">
+          <span class="chunk-filename">${escHtml(chunk.source)}</span>
+          <div class="score-bar"><div class="score-bar-fill" style="width:${pct}%"></div></div>
+          <span class="chunk-score">${chunk.score.toFixed(5)}</span>
+          <span class="chunk-expand">▶</span>
+        </div>
+        <div class="chunk-content">${escHtml(chunk.content)}</div>`;
+      el.querySelector('.chunk-header').addEventListener('click', () => el.classList.toggle('expanded'));
+      chunksPanel.appendChild(el);
     });
   }
 
+  function updateLatency(cardFooter, retrievalMs, totalMs) {
+    const el = document.createElement('div');
+    el.className = 'latency';
+    el.innerHTML =
+      `<span class="phase">retrieved</span> ${retrievalMs}ms · ` +
+      `<span class="phase">total</span> ${(totalMs / 1000).toFixed(1)}s`;
+    cardFooter.appendChild(el);
+  }
+
   function updateSidebar(chunks) {
-    // Remove old chunks
     sidePanel.querySelectorAll('.side-chunk').forEach(el => el.remove());
     sideEmpty.style.display = 'none';
+    if (!chunks || chunks.length === 0) { sideEmpty.style.display = ''; return; }
 
     const maxScore = Math.max(...chunks.map(c => c.score), 0.001);
 
     chunks.forEach(chunk => {
-      const el = document.createElement('div');
-      el.className = 'side-chunk';
       const pct = Math.round((chunk.score / maxScore) * 100);
       const preview = chunk.content.replace(/\n/g, ' ').slice(0, 80);
+      const el = document.createElement('div');
+      el.className = 'side-chunk';
       el.innerHTML = `
         <div class="side-chunk-header">
           <div class="side-chunk-meta">
-            <span class="side-chunk-filename">${chunk.source}</span>
+            <span class="side-chunk-filename">${escHtml(chunk.source)}</span>
             <span class="side-chunk-score">${chunk.score.toFixed(5)}</span>
           </div>
           <div class="side-score-bar"><div class="side-score-bar-fill" style="width:${pct}%"></div></div>
           <div class="side-chunk-preview">${escHtml(preview)}…</div>
         </div>
         <div class="side-chunk-body">${escHtml(chunk.content)}</div>`;
-      el.querySelector('.side-chunk-header').addEventListener('click', () => {
-        el.classList.toggle('expanded');
-      });
+      el.querySelector('.side-chunk-header').addEventListener('click', () => el.classList.toggle('expanded'));
       sidePanel.appendChild(el);
     });
   }
@@ -661,57 +564,36 @@
   }
 
   function escHtml(str) {
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
   function renderMarkdown(text) {
-    // Code blocks first (to avoid processing their contents)
     const blocks = [];
     text = text.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) => {
       const idx = blocks.length;
       blocks.push(`<pre><code>${escHtml(code.trim())}</code></pre>`);
       return `\x00BLOCK${idx}\x00`;
     });
-
-    // Inline code
     text = text.replace(/`([^`]+)`/g, (_, c) => `<code>${escHtml(c)}</code>`);
-
-    // Headings
     text = text.replace(/^#{1,3} (.+)$/gm, (_, h) => `<h3>${h}</h3>`);
-
-    // Bold / italic
     text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-    // Unordered lists (group consecutive - lines)
     text = text.replace(/((?:^- .+\n?)+)/gm, match => {
       const items = match.trim().split('\n').map(l => `<li>${l.replace(/^- /, '')}</li>`).join('');
       return `<ul>${items}</ul>`;
     });
-
-    // Ordered lists
     text = text.replace(/((?:^\d+\. .+\n?)+)/gm, match => {
       const items = match.trim().split('\n').map(l => `<li>${l.replace(/^\d+\. /, '')}</li>`).join('');
       return `<ol>${items}</ol>`;
     });
-
-    // Blockquotes
     text = text.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
-
-    // Paragraphs (blank line separated)
     text = text.split(/\n\n+/).map(p => {
       p = p.trim();
       if (!p) return '';
-      if (/^<(h[1-6]|ul|ol|pre|blockquote)/.test(p)) return p;
-      if (p.startsWith('\x00BLOCK')) return p;
+      if (/^<(h[1-6]|ul|ol|pre|blockquote)/.test(p) || p.startsWith('\x00BLOCK')) return p;
       return `<p>${p.replace(/\n/g, '<br>')}</p>`;
     }).join('\n');
-
-    // Restore code blocks
-    blocks.forEach((block, i) => {
-      text = text.replace(`\x00BLOCK${i}\x00`, block);
-    });
-
+    blocks.forEach((block, i) => { text = text.replace(`\x00BLOCK${i}\x00`, block); });
     return text;
   }
 </script>

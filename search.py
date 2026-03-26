@@ -1,7 +1,10 @@
 import os
 import re
+import json
 import glob as globmod
 import yaml
+from datetime import datetime, timezone
+from typing import AsyncGenerator
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.documents import Document
@@ -199,6 +202,70 @@ def search_filtered(query: str, exclude_sources: list[str], folder: str | None =
     answer = _synthesise(query, docs)
     sources = list(dict.fromkeys(d.metadata.get('filename', 'unknown') for d in docs))
     return answer, sources, _docs_to_chunks(docs)
+
+
+def get_stats() -> dict:
+    """Return index stats: chunk count and last modified timestamp."""
+    store = get_store()
+    mtime = os.path.getmtime(store._db_path)
+    last_indexed = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+    return {'chunk_count': store.count(), 'last_indexed': last_indexed}
+
+
+async def search_stream(
+    query: str,
+    bm25_weight: float = 0.4,
+    vector_weight: float = 0.6,
+    final_k: int = 6,
+    folder: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """Streaming RAG search — yields SSE-formatted events:
+      retrieved: {type, chunks, sources}  — emitted after retrieval/rerank
+      token:     {type, content}          — one per LLM output token
+      done:      {type}                   — signals end of stream
+    """
+    def sse(obj: dict) -> str:
+        return f"data: {json.dumps(obj)}\n\n"
+
+    # Todo short-circuit
+    lookup = _try_todo_lookup(query)
+    if lookup:
+        answer, sources = lookup
+        yield sse({'type': 'retrieved', 'chunks': [], 'sources': sources})
+        yield sse({'type': 'token', 'content': answer})
+        yield sse({'type': 'done'})
+        return
+
+    docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight, folder=folder)
+    if not docs:
+        yield sse({'type': 'retrieved', 'chunks': [], 'sources': []})
+        yield sse({'type': 'token', 'content': 'No relevant context found in the workspace.'})
+        yield sse({'type': 'done'})
+        return
+
+    reranker = _get_reranker()
+    if reranker:
+        docs = reranker.rerank(query, docs, top_k=final_k)
+    else:
+        docs = docs[:final_k]
+
+    sources = list(dict.fromkeys(d.metadata.get('filename', 'unknown') for d in docs))
+    chunks = _docs_to_chunks(docs)
+
+    # Emit retrieved chunks immediately — frontend can show them before LLM starts
+    yield sse({'type': 'retrieved', 'chunks': chunks, 'sources': sources})
+
+    context = "\n\n".join(
+        f"[{d.metadata.get('filename', 'unknown')}]\n{d.page_content}" for d in docs
+    )
+    prompt_text = PROMPT.format(context=context, question=query)
+    llm = _get_llm()
+
+    async for chunk in llm.astream([HumanMessage(content=prompt_text)]):
+        if chunk.content:
+            yield sse({'type': 'token', 'content': chunk.content})
+
+    yield sse({'type': 'done'})
 
 
 def similar(query: str, k: int = 5) -> list[dict]:

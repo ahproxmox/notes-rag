@@ -1,8 +1,8 @@
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from search import search, search_filtered, search_with_weights, similar
+from search import search, search_filtered, search_with_weights, search_stream, similar, get_stats
 from research import research
 import os
 
@@ -39,6 +39,11 @@ def health():
     return {'status': 'ok'}
 
 
+@app.get('/stats')
+def stats():
+    return get_stats()
+
+
 @app.post('/search')
 def search_endpoint(req: SearchRequest):
     if req.bm25_weight is not None and req.vector_weight is not None:
@@ -48,6 +53,15 @@ def search_endpoint(req: SearchRequest):
     else:
         answer, sources, chunks = search(req.query, folder=req.folder)
     return {'answer': answer, 'sources': sources, 'chunks': chunks}
+
+
+@app.post('/search/stream')
+async def search_stream_endpoint(req: SearchRequest):
+    return StreamingResponse(
+        search_stream(req.query, folder=req.folder),
+        media_type='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
 
 
 @app.post('/similar')
