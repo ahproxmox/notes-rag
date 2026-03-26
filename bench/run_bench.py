@@ -4,7 +4,7 @@ Run RAG evaluation queries against a configurable endpoint.
 
 Usage:
     python bench/run_bench.py                           # default: http://localhost:8080
-    python bench/run_bench.py --endpoint http://192.168.88.71:8080
+    python bench/run_bench.py --endpoint http://192.168.1.100:8080
     python bench/run_bench.py --output bench/results/baseline.json
     python bench/run_bench.py --bm25-weight 0.6 --vector-weight 0.4
 """
