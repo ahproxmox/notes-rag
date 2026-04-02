@@ -38,6 +38,7 @@ class MarkdownHandler(FileSystemEventHandler):
         self.workspace = Path(cfg['workspace'])
         self.exclude = set(cfg.get('exclude', []))
         self._queue = index_queue
+        self._debounce_timers = {}  # path -> threading.Timer
 
     def is_excluded(self, path):
         try:
@@ -72,8 +73,21 @@ class MarkdownHandler(FileSystemEventHandler):
             return
         if self.is_excluded(event.src_path):
             return
-        print(f'[watcher] modified: {event.src_path}', flush=True)
-        self._queue.submit(self._do_index, event.src_path)
+        path = event.src_path
+        # Debounce: cancel any pending re-index for this file and restart the timer.
+        # This means a file that is saved repeatedly (e.g. a daily note being edited)
+        # only triggers one re-index, 8 seconds after the last save.
+        existing = self._debounce_timers.pop(path, None)
+        if existing:
+            existing.cancel()
+        t = threading.Timer(8.0, self._enqueue_index, args=(path,))
+        self._debounce_timers[path] = t
+        t.start()
+
+    def _enqueue_index(self, path):
+        self._debounce_timers.pop(path, None)
+        print(f'[watcher] modified: {path}', flush=True)
+        self._queue.submit(self._do_index, path)
 
     def on_deleted(self, event):
         if event.is_directory or not event.src_path.endswith('.md'):

@@ -76,12 +76,13 @@ class Store:
             embeddings = self._embed_fn.embed_documents(texts)
 
         cur = self._conn.cursor()
-        # Delete old data for this source
+        # Delete old data for this source (chunks, FTS, and vectors)
         old_ids = [r[0] for r in cur.execute('SELECT id FROM chunks WHERE source = ?', (source,)).fetchall()]
         if old_ids:
-            cur.execute('DELETE FROM chunks WHERE source = ?', (source,))
             placeholders = ','.join('?' * len(old_ids))
+            cur.execute(f'DELETE FROM chunks_fts WHERE rowid IN ({placeholders})', old_ids)
             cur.execute(f'DELETE FROM chunks_vec WHERE chunk_id IN ({placeholders})', old_ids)
+            cur.execute('DELETE FROM chunks WHERE source = ?', (source,))
 
         # Insert new chunks
         for i, chunk in enumerate(chunks):
@@ -92,6 +93,7 @@ class Store:
                  meta.get('headers', ''), chunk.page_content),
             )
             chunk_id = cur.lastrowid
+            cur.execute('INSERT INTO chunks_fts (rowid, content) VALUES (?, ?)', (chunk_id, chunk.page_content))
             if embeddings and i < len(embeddings):
                 cur.execute(
                     'INSERT INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)',
@@ -105,9 +107,10 @@ class Store:
         old_ids = [r[0] for r in cur.execute('SELECT id FROM chunks WHERE source = ?', (source,)).fetchall()]
         if not old_ids:
             return 0
-        cur.execute('DELETE FROM chunks WHERE source = ?', (source,))
         placeholders = ','.join('?' * len(old_ids))
+        cur.execute(f'DELETE FROM chunks_fts WHERE rowid IN ({placeholders})', old_ids)
         cur.execute(f'DELETE FROM chunks_vec WHERE chunk_id IN ({placeholders})', old_ids)
+        cur.execute('DELETE FROM chunks WHERE source = ?', (source,))
         self._conn.commit()
         return len(old_ids)
 
