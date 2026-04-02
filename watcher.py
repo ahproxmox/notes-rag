@@ -1,12 +1,136 @@
 import os
+import re
+import shutil
 import time
 import queue
 import threading
+from datetime import date
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from indexer import load_config, get_embeddings, get_store, index_file, chunk_file
 from search import get_store as search_get_store
+
+# Frontmatter fields injected into new notes under Notes/
+_FRONTMATTER_DEFAULTS = {
+    'date_created': None,   # filled with today's date at inject time
+    'reviewed': 'unreviewed',
+    'tags': '[]',
+}
+
+NOTES_SUBDIR = 'Notes'
+ARCHIVE_SUBDIR = 'Notes/Archive'
+
+
+def _parse_frontmatter(text):
+    """Return (fields_dict, body_after_closing_fence) or (None, text) if no frontmatter."""
+    if not text.startswith('---'):
+        return None, text
+    end = text.find('---', 3)
+    if end == -1:
+        return None, text
+    raw = text[3:end]
+    fields = {}
+    for line in raw.splitlines():
+        if ':' in line:
+            k, _, v = line.partition(':')
+            fields[k.strip()] = v.strip()
+    body = text[end + 3:]
+    return fields, body
+
+
+def _serialize_frontmatter(fields, body):
+    """Rebuild a file's text from a fields dict and remaining body."""
+    lines = ['---']
+    for k, v in fields.items():
+        lines.append(f'{k}: {v}')
+    lines.append('---')
+    return '\n'.join(lines) + body
+
+
+def inject_frontmatter(path):
+    """Inject missing frontmatter fields into a note. No-op if all present."""
+    try:
+        text = Path(path).read_text(encoding='utf-8')
+    except Exception as e:
+        print(f'[watcher] inject_frontmatter: could not read {path}: {e}', flush=True)
+        return
+
+    fields, body = _parse_frontmatter(text)
+    if fields is None:
+        fields = {}
+
+    today = date.today().isoformat()
+    defaults = {
+        'date_created': today,
+        'reviewed': 'unreviewed',
+        'tags': '[]',
+    }
+
+    changed = False
+    for k, v in defaults.items():
+        if k not in fields:
+            fields[k] = v
+            changed = True
+
+    if not changed:
+        return
+
+    new_text = _serialize_frontmatter(fields, body)
+    try:
+        Path(path).write_text(new_text, encoding='utf-8')
+        print(f'[watcher] injected frontmatter: {path}', flush=True)
+    except Exception as e:
+        print(f'[watcher] inject_frontmatter: could not write {path}: {e}', flush=True)
+
+
+def is_in_notes_root(path, workspace):
+    """Return True if path is directly inside Notes/ (not in a subdirectory like Notes/Archive/)."""
+    try:
+        rel = Path(path).relative_to(workspace)
+        # Must be exactly Notes/<filename>.md — one level deep
+        return rel.parts[0] == NOTES_SUBDIR and len(rel.parts) == 2
+    except ValueError:
+        return False
+
+
+def archive_note(path, workspace, store):
+    """Move a reviewed note from Notes/ to Notes/Archive/ and remove it from the index."""
+    src = Path(path)
+    archive_dir = Path(workspace) / ARCHIVE_SUBDIR
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    dest = archive_dir / src.name
+
+    # Avoid clobbering an existing archive file
+    if dest.exists():
+        stem = src.stem
+        suffix = src.suffix
+        dest = archive_dir / f'{stem}-{date.today().isoformat()}{suffix}'
+
+    try:
+        shutil.move(str(src), str(dest))
+        print(f'[watcher] archived: {src.name} → {ARCHIVE_SUBDIR}/', flush=True)
+    except Exception as e:
+        print(f'[watcher] archive failed for {path}: {e}', flush=True)
+        return
+
+    try:
+        n = store.delete_file(str(src))
+        print(f'[watcher] removed from index: {src.name} ({n} chunks)', flush=True)
+    except Exception as e:
+        print(f'[watcher] index delete failed for {path}: {e}', flush=True)
+
+
+def get_reviewed_value(path):
+    """Return the value of the `reviewed` frontmatter field, or None if absent."""
+    try:
+        text = Path(path).read_text(encoding='utf-8')
+    except Exception:
+        return None
+    fields, _ = _parse_frontmatter(text)
+    if fields is None:
+        return None
+    return fields.get('reviewed')
 
 
 class IndexQueue:
@@ -66,6 +190,9 @@ class MarkdownHandler(FileSystemEventHandler):
         if self.is_excluded(event.src_path):
             return
         print(f'[watcher] created: {event.src_path}', flush=True)
+        # Inject missing frontmatter for notes created directly in Notes/
+        if is_in_notes_root(event.src_path, self.workspace):
+            inject_frontmatter(event.src_path)
         self._queue.submit(self._do_index, event.src_path)
 
     def on_modified(self, event):
@@ -75,17 +202,23 @@ class MarkdownHandler(FileSystemEventHandler):
             return
         path = event.src_path
         # Debounce: cancel any pending re-index for this file and restart the timer.
-        # This means a file that is saved repeatedly (e.g. a daily note being edited)
+        # This means a file that is saved repeatedly (e.g. a note being edited)
         # only triggers one re-index, 8 seconds after the last save.
         existing = self._debounce_timers.pop(path, None)
         if existing:
             existing.cancel()
-        t = threading.Timer(8.0, self._enqueue_index, args=(path,))
+        t = threading.Timer(8.0, self._enqueue_modified, args=(path,))
         self._debounce_timers[path] = t
         t.start()
 
-    def _enqueue_index(self, path):
+    def _enqueue_modified(self, path):
         self._debounce_timers.pop(path, None)
+        # If a Notes/ file has been marked reviewed, archive it instead of re-indexing
+        if is_in_notes_root(path, self.workspace):
+            reviewed = get_reviewed_value(path)
+            if reviewed is not None and reviewed != 'unreviewed':
+                archive_note(path, str(self.workspace), self.store)
+                return
         print(f'[watcher] modified: {path}', flush=True)
         self._queue.submit(self._do_index, path)
 
