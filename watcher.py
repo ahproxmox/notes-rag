@@ -1,5 +1,4 @@
 import os
-import re
 import shutil
 import time
 import queue
@@ -10,13 +9,6 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from indexer import load_config, get_embeddings, get_store, index_file, chunk_file
 from search import get_store as search_get_store
-
-# Frontmatter fields injected into new notes under Notes/
-_FRONTMATTER_DEFAULTS = {
-    'date_created': None,   # filled with today's date at inject time
-    'reviewed': 'unreviewed',
-    'tags': '[]',
-}
 
 NOTES_SUBDIR = 'Notes'
 ARCHIVE_SUBDIR = 'Notes/Archive'
