@@ -77,11 +77,19 @@ def inject_frontmatter(path):
         return
 
     new_text = _serialize_frontmatter(fields, body)
+    # Write via a temp file in the same directory, then atomically replace.
+    # rename() only requires write permission on the parent directory, so this
+    # works even when the original file is owned by a different uid (e.g. nobody/65534
+    # from Obsidian sync into an unprivileged LXC container).
+    p = Path(path)
+    tmp = p.parent / f'.tmp_{os.getpid()}_{p.name}'
     try:
-        Path(path).write_text(new_text, encoding='utf-8')
+        tmp.write_text(new_text, encoding='utf-8')
+        os.replace(str(tmp), path)
         print(f'[watcher] injected frontmatter: {path}', flush=True)
     except Exception as e:
         print(f'[watcher] inject_frontmatter: could not write {path}: {e}', flush=True)
+        tmp.unlink(missing_ok=True)
 
 
 def is_in_notes_root(path, workspace):
@@ -122,7 +130,12 @@ def archive_note(path, workspace, store):
 
 
 def get_reviewed_value(path):
-    """Return the value of the `reviewed` frontmatter field, or None if absent."""
+    """Return the reviewed state from frontmatter.
+
+    Checks 'reviewed' first, then 'status' as a fallback so that daily notes
+    (which use 'status: unreviewed' instead of 'reviewed: unreviewed') are also
+    handled correctly.  Returns None if neither field is present.
+    """
     try:
         text = Path(path).read_text(encoding='utf-8')
     except Exception:
@@ -130,7 +143,36 @@ def get_reviewed_value(path):
     fields, _ = _parse_frontmatter(text)
     if fields is None:
         return None
-    return fields.get('reviewed')
+    return fields.get('reviewed') or fields.get('status')
+
+
+def startup_scan(cfg, store, index_queue, handler):
+    """Process all existing .md files in Notes/ root at startup.
+
+    Covers three cases the event-driven watcher misses:
+      - Files that existed before the watcher started (no on_created fired)
+      - Files that were marked reviewed while the service was down (on_modified missed)
+      - Files that failed frontmatter injection on a previous run (e.g. permission error)
+    """
+    workspace = Path(cfg['workspace'])
+    notes_dir = workspace / NOTES_SUBDIR
+    if not notes_dir.exists():
+        return
+
+    count = 0
+    for path in sorted(notes_dir.glob('*.md')):
+        path_str = str(path)
+        if handler.is_excluded(path_str):
+            continue
+        count += 1
+        reviewed = get_reviewed_value(path_str)
+        if reviewed is not None and reviewed != 'unreviewed':
+            archive_note(path_str, str(workspace), store)
+        else:
+            inject_frontmatter(path_str)
+            index_queue.submit(handler._do_index, path_str)
+
+    print(f'[watcher] startup scan: {count} file(s) in {notes_dir}', flush=True)
 
 
 class IndexQueue:
@@ -244,6 +286,7 @@ def start_watcher():
     handler = MarkdownHandler(cfg, embeddings, store, index_queue)
     observer.schedule(handler, ws, recursive=True)
     print(f'[watcher] watching {ws}', flush=True)
+    startup_scan(cfg, store, index_queue, handler)
 
     # Watch additional directories (e.g. Obsidian vault) if configured
     extra_dirs = cfg.get('watch_extra', [])
@@ -253,6 +296,7 @@ def start_watcher():
             extra_handler = MarkdownHandler(extra_cfg, embeddings, store, index_queue)
             observer.schedule(extra_handler, extra, recursive=True)
             print(f'[watcher] watching {extra}', flush=True)
+            startup_scan(extra_cfg, store, index_queue, extra_handler)
         else:
             print(f'[watcher] {extra} not found, skipping', flush=True)
 
