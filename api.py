@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from search import search, search_filtered, search_with_weights, search_stream, similar, get_stats
 from research import research
 import os
+import re
+from datetime import date
 from pathlib import Path
 
 app = FastAPI()
@@ -13,6 +15,7 @@ _ui_dir = os.path.join(os.path.dirname(__file__), 'ui')
 app.mount('/ui', StaticFiles(directory=_ui_dir), name='ui')
 
 _log_path = Path('/mnt/Claude/log.md')
+_wiki_dir = Path('/mnt/Claude/wiki')
 
 
 class SearchRequest(BaseModel):
@@ -30,6 +33,13 @@ class SimilarRequest(BaseModel):
 
 class ResearchRequest(BaseModel):
     query: str
+
+
+class WikiSaveRequest(BaseModel):
+    topic: str          # slug, e.g. "openclaw-memory"
+    title: str          # display title, e.g. "OpenClaw Memory System"
+    answer: str         # synthesised content to save as page body
+    sources: list[str] = []  # source filenames that contributed
 
 
 @app.get('/')
@@ -53,11 +63,75 @@ def log_recent(n: int = Query(default=50, ge=1, le=500)):
     if not _log_path.exists():
         return {'lines': [], 'path': str(_log_path), 'error': 'log.md not found'}
     text = _log_path.read_text(encoding='utf-8', errors='replace')
-    # Skip header lines (before the --- separator), return only log entries
     all_lines = text.splitlines()
     entry_lines = [l for l in all_lines if l.startswith('[20')]
     recent = entry_lines[-n:]
     return {'lines': recent, 'total': len(entry_lines), 'returned': len(recent)}
+
+
+@app.get('/wiki')
+def wiki_list():
+    """List all wiki pages with their metadata."""
+    if not _wiki_dir.exists():
+        return {'pages': []}
+    pages = []
+    for p in sorted(_wiki_dir.glob('*.md')):
+        text = p.read_text(encoding='utf-8', errors='replace')
+        # Extract frontmatter fields
+        generated = ''
+        title = p.stem
+        if text.startswith('---'):
+            end = text.find('---', 3)
+            if end != -1:
+                for line in text[3:end].splitlines():
+                    if line.startswith('title:'):
+                        title = line.partition(':')[2].strip().strip('"')
+                    elif line.startswith('generated:'):
+                        generated = line.partition(':')[2].strip()
+        pages.append({'slug': p.stem, 'title': title, 'generated': generated, 'path': str(p)})
+    return {'pages': pages}
+
+
+@app.post('/wiki/save')
+def wiki_save(req: WikiSaveRequest):
+    """Save a synthesised answer as a wiki page in /mnt/Claude/wiki/.
+
+    Creates or overwrites wiki/<topic>.md. The watcher picks it up and
+    indexes it automatically. Intended for agents and the notes-curator
+    to persist high-quality synthesis results.
+    """
+    _wiki_dir.mkdir(parents=True, exist_ok=True)
+
+    # Sanitise slug — lowercase, hyphens only
+    slug = re.sub(r'[^a-z0-9-]', '-', req.topic.lower().strip())
+    slug = re.sub(r'-+', '-', slug).strip('-')
+    if not slug:
+        return {'error': 'Invalid topic slug'}, 400
+
+    path = _wiki_dir / f'{slug}.md'
+    today = date.today().isoformat()
+    sources_yaml = '\n'.join(f'  - {s}' for s in req.sources) if req.sources else '  []'
+
+    # Strip a leading h1 if the answer already contains one
+    body = re.sub(r'^#\s+.+\n+', '', req.answer.strip()).strip()
+
+    content = f"""---
+title: "{req.title}"
+type: wiki
+topic: {slug}
+generated: {today}
+sources:
+{sources_yaml}
+---
+
+# {req.title}
+
+{body}
+"""
+    path.write_text(content, encoding='utf-8')
+
+    action = 'updated' if path.exists() else 'created'
+    return {'saved': str(path), 'slug': slug, 'action': action}
 
 
 @app.post('/search')
