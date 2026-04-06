@@ -1,15 +1,18 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from search import search, search_filtered, search_with_weights, search_stream, similar, get_stats
 from research import research
 import os
+from pathlib import Path
 
 app = FastAPI()
 
 _ui_dir = os.path.join(os.path.dirname(__file__), 'ui')
 app.mount('/ui', StaticFiles(directory=_ui_dir), name='ui')
+
+_log_path = Path('/mnt/Claude/log.md')
 
 
 class SearchRequest(BaseModel):
@@ -42,6 +45,19 @@ def health():
 @app.get('/stats')
 def stats():
     return get_stats()
+
+
+@app.get('/log/recent')
+def log_recent(n: int = Query(default=50, ge=1, le=500)):
+    """Return the last N lines of the workspace event log. No embedding — direct tail."""
+    if not _log_path.exists():
+        return {'lines': [], 'path': str(_log_path), 'error': 'log.md not found'}
+    text = _log_path.read_text(encoding='utf-8', errors='replace')
+    # Skip header lines (before the --- separator), return only log entries
+    all_lines = text.splitlines()
+    entry_lines = [l for l in all_lines if l.startswith('[20')]
+    recent = entry_lines[-n:]
+    return {'lines': recent, 'total': len(entry_lines), 'returned': len(recent)}
 
 
 @app.post('/search')
