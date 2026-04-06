@@ -95,6 +95,109 @@ def _get_llm():
     )
 
 
+# ---------------------------------------------------------------------------
+# Intent classification
+# ---------------------------------------------------------------------------
+
+def _classify_intent(query: str) -> str:
+    """Classify query intent to select optimal retrieval strategy.
+
+    Returns one of: 'recent', 'keyword', 'synthesis', 'default'
+
+    - recent:    queries about recent activity → bypass embedding, tail log.md + sessions/
+    - keyword:   short/specific queries → BM25-heavy (0.7/0.3)
+    - synthesis: conceptual/explanatory queries → vector-heavy (0.2/0.8)
+    - default:   everything else → standard hybrid (0.4/0.6)
+    """
+    q = query.lower().strip()
+    words = q.split()
+
+    # Recent activity — highest priority, check first
+    recent_signals = [
+        'recent', 'lately', 'latest', 'today', 'yesterday',
+        'last week', 'this week', 'last month',
+        'what happened', 'what have', 'what did', 'what was done',
+        'any updates', 'any news', 'current status',
+    ]
+    if any(sig in q for sig in recent_signals):
+        return 'recent'
+
+    # Keyword — short queries or queries with concrete identifiers
+    has_ip      = bool(re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', q))
+    has_port    = bool(re.search(r':\d{2,5}\b', q))
+    has_ct      = bool(re.search(r'\bct\s*\d{2,3}\b', q))
+    has_file    = bool(re.search(r'\.(md|py|yaml|yml|json|sh|go|js|ts)\b', q))
+    is_short    = len(words) <= 3
+
+    if has_ip or has_port or has_ct or has_file or is_short:
+        return 'keyword'
+
+    # Synthesis — conceptual / explanatory
+    synthesis_signals = [
+        'how ', 'why ', 'explain', 'overview', 'summarise', 'summarize',
+        'describe', 'what is', "what's", 'tell me about', 'walk me through',
+        'how does', 'how do', 'architecture', 'design',
+    ]
+    if any(sig in q for sig in synthesis_signals):
+        return 'synthesis'
+
+    return 'default'
+
+
+def _search_recent(query: str) -> tuple[str, list[str], list[dict]]:
+    """Answer recent-activity queries by tailing log.md and recent session files directly.
+
+    Bypasses embedding entirely — reads files chronologically, no vector lookup.
+    """
+    from datetime import date, timedelta
+    cfg = yaml.safe_load(open(CONFIG_PATH))
+    workspace = cfg['workspace']
+
+    context_parts = []
+    sources = []
+
+    # Tail log.md — last 100 event entries
+    log_path = os.path.join(workspace, 'log.md')
+    if os.path.exists(log_path):
+        lines = open(log_path, encoding='utf-8').read().splitlines()
+        entry_lines = [l for l in lines if re.match(r'^\[20\d\d-', l)]
+        recent_entries = entry_lines[-100:]
+        if recent_entries:
+            context_parts.append('[log.md — recent events]\n' + '\n'.join(recent_entries))
+            sources.append('log.md')
+
+    # Recent session files (last 7 days), newest first
+    sessions_dir = os.path.join(workspace, 'sessions')
+    if os.path.exists(sessions_dir):
+        cutoff = (date.today() - timedelta(days=7)).isoformat()
+        session_files = sorted(
+            globmod.glob(os.path.join(sessions_dir, '*.md')), reverse=True
+        )
+        for sf in session_files[:10]:
+            fname = os.path.basename(sf)
+            # Session filenames start YYYY-MM-DD — skip older ones
+            if fname[:10] >= cutoff:
+                try:
+                    content = open(sf, encoding='utf-8').read(1500)
+                    context_parts.append(f'[{fname}]\n{content}')
+                    sources.append(fname)
+                except Exception:
+                    pass
+
+    if not context_parts:
+        return 'No recent activity found in log.md or session files.', [], []
+
+    context = '\n\n'.join(context_parts)
+    prompt_text = PROMPT.format(context=context, question=query)
+    llm = _get_llm()
+    result = llm.invoke([HumanMessage(content=prompt_text)])
+    return result.content, sources, []
+
+
+# ---------------------------------------------------------------------------
+# Retrieval
+# ---------------------------------------------------------------------------
+
 def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: float = 0.6,
               folder: str | None = None) -> list[Document]:
     """Hybrid retrieval: FTS5 keyword + sqlite-vec vector, merged via RRF.
@@ -162,17 +265,38 @@ def _docs_to_chunks(docs: list[Document]) -> list[dict]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Public search API
+# ---------------------------------------------------------------------------
+
 def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
            final_k: int = 6, folder: str | None = None) -> tuple[str, list[str], list[dict]]:
-    """Full RAG search: retrieve top-20, rerank to top-6, synthesise."""
+    """Full RAG search with intent-aware routing.
+
+    When called with default weights (0.4/0.6), classifies query intent and
+    adjusts retrieval strategy automatically. Callers that pass explicit weights
+    (e.g. search_with_weights) bypass intent routing.
+    """
     lookup = _try_todo_lookup(query)
     if lookup:
         answer, sources = lookup
         return answer, sources, []
 
+    # Intent routing — only when caller has not overridden weights
+    if bm25_weight == 0.4 and vector_weight == 0.6:
+        intent = _classify_intent(query)
+        print(f'[search] intent={intent} query={query!r}', flush=True)
+        if intent == 'recent':
+            return _search_recent(query)
+        elif intent == 'keyword':
+            bm25_weight, vector_weight = 0.7, 0.3
+        elif intent == 'synthesis':
+            bm25_weight, vector_weight = 0.2, 0.8
+        # 'default' keeps 0.4/0.6
+
     docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight, folder=folder)
     if not docs:
-        return "No relevant context found in the workspace.", [], []
+        return 'No relevant context found in the workspace.', [], []
 
     reranker = _get_reranker()
     if reranker:
@@ -186,7 +310,7 @@ def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
 
 
 def search_with_weights(query: str, bm25_weight: float, vector_weight: float) -> tuple[str, list[str], list[dict]]:
-    """Run a search with custom ensemble weights."""
+    """Run a search with explicit weights — bypasses intent routing."""
     return search(query, bm25_weight=bm25_weight, vector_weight=vector_weight)
 
 
@@ -200,7 +324,7 @@ def search_filtered(query: str, exclude_sources: list[str], folder: str | None =
     docs = _retrieve(query, k=20, folder=folder)
     docs = [d for d in docs if d.metadata.get('filename', '') not in exclude_sources]
     if not docs:
-        return "No relevant context found in the workspace.", [], []
+        return 'No relevant context found in the workspace.', [], []
 
     reranker = _get_reranker()
     if reranker:
@@ -228,11 +352,7 @@ async def search_stream(
     final_k: int = 6,
     folder: str | None = None,
 ) -> AsyncGenerator[str, None]:
-    """Streaming RAG search — yields SSE-formatted events:
-      retrieved: {type, chunks, sources}  — emitted after retrieval/rerank
-      token:     {type, content}          — one per LLM output token
-      done:      {type}                   — signals end of stream
-    """
+    """Streaming RAG search with intent routing — yields SSE-formatted events."""
     def sse(obj: dict) -> str:
         return f"data: {json.dumps(obj)}\n\n"
 
@@ -244,6 +364,21 @@ async def search_stream(
         yield sse({'type': 'token', 'content': answer})
         yield sse({'type': 'done'})
         return
+
+    # Intent routing for streaming
+    if bm25_weight == 0.4 and vector_weight == 0.6:
+        intent = _classify_intent(query)
+        print(f'[search/stream] intent={intent} query={query!r}', flush=True)
+        if intent == 'recent':
+            answer, sources, chunks = _search_recent(query)
+            yield sse({'type': 'retrieved', 'chunks': chunks, 'sources': sources})
+            yield sse({'type': 'token', 'content': answer})
+            yield sse({'type': 'done'})
+            return
+        elif intent == 'keyword':
+            bm25_weight, vector_weight = 0.7, 0.3
+        elif intent == 'synthesis':
+            bm25_weight, vector_weight = 0.2, 0.8
 
     docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight, folder=folder)
     if not docs:
@@ -261,7 +396,6 @@ async def search_stream(
     sources = list(dict.fromkeys(d.metadata.get('filename', 'unknown') for d in docs))
     chunks = _docs_to_chunks(docs)
 
-    # Emit retrieved chunks immediately — frontend can show them before LLM starts
     yield sse({'type': 'retrieved', 'chunks': chunks, 'sources': sources})
 
     context = "\n\n".join(
@@ -295,6 +429,6 @@ if __name__ == '__main__':
     import sys
     query = ' '.join(sys.argv[1:]) or 'What SSH setup do I have?'
     print(f'Query: {query}\n')
-    answer, sources = search(query)
+    answer, sources, _ = search(query)
     print(f'Answer:\n{answer}\n')
     print(f'Sources: {sources}')
