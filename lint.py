@@ -7,10 +7,9 @@ Checks:
   1. Review notes with empty related: [] field
   2. Stale context notes (no update in >90 days)
   3. Duplicate todo IDs
-  4. Orphan notes (not referenced by any other note)
+  4. Orphan wiki pages (wiki/ only — standalone dirs like memory/, inbox/ are exempt by design)
 """
 
-import os
 import re
 import sys
 from collections import defaultdict
@@ -22,6 +21,7 @@ OBSIDIAN  = Path('/mnt/Obsidian')
 REVIEWS   = OBSIDIAN / 'Inbox' / 'Reviews'
 CONTEXT   = WORKSPACE / 'context'
 TODOS     = WORKSPACE / 'todos'
+WIKI      = WORKSPACE / 'wiki'
 REPORT    = WORKSPACE / 'inbox' / 'lint-report.md'
 
 STALE_DAYS = 90
@@ -97,7 +97,6 @@ def check_stale_context() -> list[tuple[str, str]]:
     cutoff = TODAY - timedelta(days=STALE_DAYS)
     for p in sorted(CONTEXT.glob('*.md')):
         fm = parse_frontmatter(p)
-        # Try frontmatter date fields, then fall back to mtime
         date_val = None
         for field in ('updated', 'date', 'created', 'date_created'):
             if field in fm:
@@ -130,41 +129,50 @@ def check_duplicate_todo_ids() -> list[tuple[str, list[str]]]:
 
 
 # ---------------------------------------------------------------------------
-# Check 4: Orphan notes
+# Check 4: Orphan wiki pages
 # ---------------------------------------------------------------------------
 
-def check_orphan_notes() -> list[str]:
-    """Find notes in /mnt/Claude that are not referenced by any other note."""
+def check_orphan_wiki_pages() -> list[str] | None:
+    """
+    Find wiki/ pages not referenced by any other note in the workspace.
+
+    Scope is intentionally limited to wiki/ — directories like memory/, inbox/,
+    context/, sessions/, and todos/ contain standalone notes by design and are
+    not expected to be cross-linked.
+
+    Returns None if wiki/ doesn't exist yet (not an error — just not built yet).
+    """
+    if not WIKI.exists():
+        return None
+
+    wiki_files = sorted(WIKI.glob('*.md'))
+    if not wiki_files:
+        return []
+
+    # Build a corpus from all workspace .md files (excluding trash/tmp)
     exclude = {'trash', 'tmp', 'temp', 'docs-archive', '__pycache__', '.git', 'completed'}
     all_files = all_md_files(WORKSPACE, exclude=exclude)
 
-    # Build full text corpus of all notes (for reference scanning)
-    all_text = ''
-    file_texts: dict[str, str] = {}
+    # Read all non-wiki files into a combined reference corpus
+    corpus = ''
     for p in all_files:
+        if p.parent == WIKI:
+            continue  # don't count self-references within wiki/
         try:
-            t = p.read_text(encoding='utf-8', errors='replace')
+            corpus += p.read_text(encoding='utf-8', errors='replace') + '\n'
         except Exception:
-            t = ''
-        file_texts[str(p)] = t
-        all_text += t + '\n'
+            pass
 
     orphans = []
-    for p in sorted(all_files):
-        stem = p.stem          # filename without extension
-        name = p.name          # filename with extension
-
-        # A note is referenced if any OTHER note mentions its stem or full name
-        # Search in the combined text minus this file's own content
-        other_text = all_text.replace(file_texts.get(str(p), ''), '', 1)
-
-        # Match [[stem]], [[name]], bare stem, or direct path fragment
+    for p in wiki_files:
+        stem = p.stem
+        name = p.name
         patterns = [
             re.escape(stem),
             re.escape(name),
             re.escape(str(p.relative_to(WORKSPACE))),
         ]
-        referenced = any(re.search(pat, other_text, re.IGNORECASE) for pat in patterns)
+        referenced = any(re.search(pat, corpus, re.IGNORECASE) for pat in patterns)
         if not referenced:
             orphans.append(str(p.relative_to(WORKSPACE)))
 
@@ -179,17 +187,17 @@ def build_report(
     empty_related: list[str],
     stale_context: list[tuple[str, str]],
     dup_ids: list[tuple[str, list[str]]],
-    orphans: list[str],
+    orphans: list[str] | None,
 ) -> str:
     lines = [
-        f'---',
+        '---',
         f'title: Workspace Lint Report',
         f'date: {TODAY.isoformat()}',
-        f'tags: [lint, health]',
-        f'---',
-        f'',
+        'tags: [lint, health]',
+        '---',
+        '',
         f'# Workspace Lint Report — {TODAY.isoformat()}',
-        f'',
+        '',
     ]
 
     def section(title, items, fmt_fn):
@@ -220,20 +228,21 @@ def build_report(
         lambda x: f'- ID `{x[0]}`: {", ".join(f"`{f}`" for f in x[1])}',
     )
 
-    # Orphans list can be long — cap at 50 and note total
-    orphan_display = orphans[:50]
-    orphan_title = f'Orphan Notes ({len(orphans)})'
-    if len(orphans) > 50:
-        orphan_title += f' — showing first 50'
-    section(
-        orphan_title,
-        orphan_display,
-        lambda x: f'- `{x}`',
-    )
+    # Orphan wiki pages
+    lines.append('## Orphan Wiki Pages')
+    lines.append('')
+    if orphans is None:
+        lines.append('_`wiki/` not yet created — this check will activate once Todo 123 task 1 (wiki layer) is built._')
+    elif not orphans:
+        lines.append('_None — all clear._')
+    else:
+        for item in orphans:
+            lines.append(f'- `{item}`')
+    lines.append('')
 
-    total = len(empty_related) + len(stale_context) + len(dup_ids) + len(orphans)
-    lines.append(f'---')
-    lines.append(f'**{total} issue(s) found.** Generated by `lint.py`.')
+    tracked = len(empty_related) + len(stale_context) + len(dup_ids) + (len(orphans) if orphans else 0)
+    lines.append('---')
+    lines.append(f'**{tracked} issue(s) found.** Generated by `lint.py`.')
     lines.append('')
 
     return '\n'.join(lines)
@@ -253,16 +262,16 @@ def main():
     print('[lint] Checking duplicate todo IDs...', flush=True)
     dup_ids = check_duplicate_todo_ids()
 
-    print('[lint] Checking orphan notes...', flush=True)
-    orphans = check_orphan_notes()
+    print('[lint] Checking orphan wiki pages...', flush=True)
+    orphans = check_orphan_wiki_pages()
 
     report = build_report(empty_related, stale_context, dup_ids, orphans)
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text(report, encoding='utf-8')
 
-    total = len(empty_related) + len(stale_context) + len(dup_ids) + len(orphans)
-    print(f'[lint] Done. {total} issue(s) found. Report: {REPORT}', flush=True)
+    tracked = len(empty_related) + len(stale_context) + len(dup_ids) + (len(orphans) if orphans else 0)
+    print(f'[lint] Done. {tracked} issue(s) found. Report: {REPORT}', flush=True)
 
     if '--summary' in sys.argv:
         print(report)
