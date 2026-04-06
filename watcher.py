@@ -10,6 +10,7 @@ from indexer import load_config, get_embeddings, get_store, index_file, chunk_fi
 from search import get_store as search_get_store
 
 NOTES_SUBDIR = 'Notes'
+REVIEWS_PARTS = ('Inbox', 'Reviews')
 
 
 def _parse_frontmatter(text):
@@ -36,6 +37,17 @@ def _serialize_frontmatter(fields, body):
         lines.append(f'{k}: {v}')
     lines.append('---')
     return '\n'.join(lines) + body
+
+
+def _atomic_write(path: Path, text: str):
+    """Write text to path atomically via a sibling temp file."""
+    tmp = path.parent / f'.tmp_{os.getpid()}_{path.name}'
+    try:
+        tmp.write_text(text, encoding='utf-8')
+        os.replace(str(tmp), str(path))
+    except Exception as e:
+        tmp.unlink(missing_ok=True)
+        raise e
 
 
 def inject_frontmatter(path):
@@ -67,19 +79,12 @@ def inject_frontmatter(path):
         return
 
     new_text = _serialize_frontmatter(fields, body)
-    # Write via a temp file in the same directory, then atomically replace.
-    # rename() only requires write permission on the parent directory, so this
-    # works even when the original file is owned by a different uid (e.g. nobody/65534
-    # from Obsidian sync into an unprivileged LXC container).
     p = Path(path)
-    tmp = p.parent / f'.tmp_{os.getpid()}_{p.name}'
     try:
-        tmp.write_text(new_text, encoding='utf-8')
-        os.replace(str(tmp), path)
+        _atomic_write(p, new_text)
         print(f'[watcher] injected frontmatter: {path}', flush=True)
     except Exception as e:
         print(f'[watcher] inject_frontmatter: could not write {path}: {e}', flush=True)
-        tmp.unlink(missing_ok=True)
 
 
 def is_in_notes_root(path, workspace):
@@ -91,6 +96,14 @@ def is_in_notes_root(path, workspace):
     except ValueError:
         return False
 
+
+def is_review_note(path, workspace):
+    """Return True if path is directly inside Inbox/Reviews/ of the given workspace."""
+    try:
+        rel = Path(path).relative_to(workspace)
+        return rel.parts[:2] == REVIEWS_PARTS and len(rel.parts) == 3
+    except ValueError:
+        return False
 
 
 def startup_scan(cfg, store, index_queue, handler):
@@ -168,8 +181,68 @@ class MarkdownHandler(FileSystemEventHandler):
         except Exception as e:
             print(f'[watcher] error deleting {path}: {e}', flush=True)
 
+    def _do_relate(self, path):
+        """Auto-fill related: frontmatter for a newly indexed review note.
+
+        Runs after _do_index (queue is serial) so the note is already indexed.
+        Only writes related: if it is currently empty — never overwrites curated data.
+        Scoped to Obsidian Inbox/Reviews/ notes only.
+        """
+        p = Path(path)
+        try:
+            text = p.read_text(encoding='utf-8')
+        except Exception as e:
+            print(f'[watcher] relate: could not read {path}: {e}', flush=True)
+            return
+
+        fields, body = _parse_frontmatter(text)
+        if fields is None:
+            fields = {}
+
+        # Skip if related: already has content
+        existing = fields.get('related', '').strip()
+        if existing and existing not in ('[]', 'null', ''):
+            return
+
+        # Use first 400 chars of body as similarity query
+        query_text = body.strip()[:400]
+        if not query_text:
+            return
+
+        try:
+            similar_docs = self.store.search_vector(query_text, k=8)
+        except Exception as e:
+            print(f'[watcher] relate: search_vector failed for {path}: {e}', flush=True)
+            return
+
+        # Collect unique filenames, excluding this file itself
+        own_filename = p.name
+        seen = []
+        for doc in similar_docs:
+            fname = doc.metadata.get('filename', '')
+            if fname and fname != own_filename and fname not in seen:
+                seen.append(fname)
+            if len(seen) >= 3:
+                break
+
+        if not seen:
+            return
+
+        # Write back as inline YAML list
+        related_value = '[' + ', '.join(seen) + ']'
+        fields['related'] = related_value
+
+        new_text = _serialize_frontmatter(fields, body)
+        try:
+            _atomic_write(p, new_text)
+            print(f'[watcher] related: set for {p.name} → {related_value}', flush=True)
+        except Exception as e:
+            print(f'[watcher] relate: could not write {path}: {e}', flush=True)
+
     def on_created(self, event):
         if event.is_directory or not event.src_path.endswith('.md'):
+            return
+        if Path(event.src_path).name.startswith('.'):
             return
         if self.is_excluded(event.src_path):
             return
@@ -178,9 +251,14 @@ class MarkdownHandler(FileSystemEventHandler):
         if is_in_notes_root(event.src_path, self.workspace):
             inject_frontmatter(event.src_path)
         self._queue.submit(self._do_index, event.src_path)
+        # Auto-fill related: for new Obsidian review notes (runs after indexing)
+        if is_review_note(event.src_path, self.workspace):
+            self._queue.submit(self._do_relate, event.src_path)
 
     def on_modified(self, event):
         if event.is_directory or not event.src_path.endswith('.md'):
+            return
+        if Path(event.src_path).name.startswith('.'):
             return
         if self.is_excluded(event.src_path):
             return
@@ -202,6 +280,8 @@ class MarkdownHandler(FileSystemEventHandler):
 
     def on_deleted(self, event):
         if event.is_directory or not event.src_path.endswith('.md'):
+            return
+        if Path(event.src_path).name.startswith('.'):
             return
         if self.is_excluded(event.src_path):
             return
