@@ -1,0 +1,46 @@
+# Wiki topic configuration
+# Each topic generates one synthesised page in /mnt/Claude/wiki/
+# Pages are rebuilt on each run; sources tracked in frontmatter.
+
+topics:
+  - slug: proxmox-containers
+    title: Proxmox Containers
+    queries:
+      - "proxmox LXC container IP addresses setup configuration"
+      - "container networking bind mounts storage"
+      - "pct exec container commands proxmox"
+
+  - slug: openclaw
+    title: OpenClaw
+    queries:
+      - "openclaw agent config skills memory"
+      - "openclaw AGENTS.md SOUL.md boot startup"
+      - "openclaw exec approvals safeBins skills deployment"
+
+  - slug: rag-architecture
+    title: RAG Architecture
+    queries:
+      - "notes-rag search BM25 vector hybrid retrieval"
+      - "RAG indexer watcher embeddings chroma"
+      - "search.py store.py reranker retrieval pipeline"
+
+  - slug: networking
+    title: Networking
+    queries:
+      - "DNS Technitium golinks internal domains"
+      - "Tailscale VPN subnet routing accept-routes"
+      - "OPNsense firewall DMZ vmbr1 rules"
+
+  - slug: notes-workflow
+    title: Notes Workflow
+    queries:
+      - "note capture frontmatter conventions todos inbox context"
+      - "notes-curator review queue daily workflow"
+      - "obsidian vault sync notes pipeline"
+
+  - slug: monitoring
+    title: Monitoring
+    queries:
+      - "Grafana Prometheus Uptime Kuma monitoring dashboards"
+      - "token logging cost metrics openclaw sessions"
+      - "pushgateway metrics alerting"

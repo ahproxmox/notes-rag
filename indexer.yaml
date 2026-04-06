@@ -19,3 +19,8 @@ rerank: true
 
 watch_extra:
   - /mnt/Obsidian
+
+# Wiki layer — synthesised topic pages (Todo 123 task 1)
+# wiki/ pages get a score multiplier in retrieval to surface above raw notes.
+# Override via env: WIKI_BOOST=1.5 (default)
+wiki_boost: 1.5

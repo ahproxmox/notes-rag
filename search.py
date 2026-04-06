@@ -122,6 +122,15 @@ def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: 
         scores[key] = scores.get(key, 0) + vector_weight / (rrf_k + rank + 1)
         doc_map[key] = doc
 
+    # Boost wiki/ pages — they are synthesised cross-note summaries and should
+    # rank higher than raw note chunks for broad queries.
+    wiki_boost = float(os.environ.get('WIKI_BOOST', '1.5'))
+    for key in scores:
+        doc = doc_map[key]
+        source = doc.metadata.get('source', '')
+        if '/wiki/' in source or source.startswith('wiki/'):
+            scores[key] *= wiki_boost
+
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     result = []
     for key, score in ranked[:k]:
