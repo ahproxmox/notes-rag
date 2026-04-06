@@ -1,5 +1,4 @@
 import os
-import shutil
 import time
 import queue
 import threading
@@ -11,7 +10,6 @@ from indexer import load_config, get_embeddings, get_store, index_file, chunk_fi
 from search import get_store as search_get_store
 
 NOTES_SUBDIR = 'Notes'
-ARCHIVE_SUBDIR = 'Notes/Archive'
 
 
 def _parse_frontmatter(text):
@@ -94,56 +92,12 @@ def is_in_notes_root(path, workspace):
         return False
 
 
-def archive_note(path, workspace, store):
-    """Move a reviewed note from Notes/ to Notes/Archive/ and remove it from the index."""
-    src = Path(path)
-    archive_dir = Path(workspace) / ARCHIVE_SUBDIR
-    archive_dir.mkdir(parents=True, exist_ok=True)
-    dest = archive_dir / src.name
-
-    # Avoid clobbering an existing archive file
-    if dest.exists():
-        stem = src.stem
-        suffix = src.suffix
-        dest = archive_dir / f'{stem}-{date.today().isoformat()}{suffix}'
-
-    try:
-        shutil.move(str(src), str(dest))
-        print(f'[watcher] archived: {src.name} → {ARCHIVE_SUBDIR}/', flush=True)
-    except Exception as e:
-        print(f'[watcher] archive failed for {path}: {e}', flush=True)
-        return
-
-    try:
-        n = store.delete_file(str(src))
-        print(f'[watcher] removed from index: {src.name} ({n} chunks)', flush=True)
-    except Exception as e:
-        print(f'[watcher] index delete failed for {path}: {e}', flush=True)
-
-
-def get_reviewed_value(path):
-    """Return the reviewed state from frontmatter.
-
-    Checks 'reviewed' first, then 'status' as a fallback so that daily notes
-    (which use 'status: unreviewed' instead of 'reviewed: unreviewed') are also
-    handled correctly.  Returns None if neither field is present.
-    """
-    try:
-        text = Path(path).read_text(encoding='utf-8')
-    except Exception:
-        return None
-    fields, _ = _parse_frontmatter(text)
-    if fields is None:
-        return None
-    return fields.get('reviewed') or fields.get('status')
-
 
 def startup_scan(cfg, store, index_queue, handler):
     """Process all existing .md files in Notes/ root at startup.
 
-    Covers three cases the event-driven watcher misses:
+    Covers two cases the event-driven watcher misses:
       - Files that existed before the watcher started (no on_created fired)
-      - Files that were marked reviewed while the service was down (on_modified missed)
       - Files that failed frontmatter injection on a previous run (e.g. permission error)
     """
     workspace = Path(cfg['workspace'])
@@ -157,12 +111,8 @@ def startup_scan(cfg, store, index_queue, handler):
         if handler.is_excluded(path_str):
             continue
         count += 1
-        reviewed = get_reviewed_value(path_str)
-        if reviewed is not None and reviewed != 'unreviewed':
-            archive_note(path_str, str(workspace), store)
-        else:
-            inject_frontmatter(path_str)
-            index_queue.submit(handler._do_index, path_str)
+        inject_frontmatter(path_str)
+        index_queue.submit(handler._do_index, path_str)
 
     print(f'[watcher] startup scan: {count} file(s) in {notes_dir}', flush=True)
 
@@ -247,12 +197,6 @@ class MarkdownHandler(FileSystemEventHandler):
 
     def _enqueue_modified(self, path):
         self._debounce_timers.pop(path, None)
-        # If a Notes/ file has been marked reviewed, archive it instead of re-indexing
-        if is_in_notes_root(path, self.workspace):
-            reviewed = get_reviewed_value(path)
-            if reviewed is not None and reviewed != 'unreviewed':
-                archive_note(path, str(self.workspace), self.store)
-                return
         print(f'[watcher] modified: {path}', flush=True)
         self._queue.submit(self._do_index, path)
 
