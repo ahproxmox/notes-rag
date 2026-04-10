@@ -24,6 +24,8 @@ class SearchRequest(BaseModel):
     bm25_weight: float | None = None
     vector_weight: float | None = None
     folder: str | None = None
+    wing: str | None = None
+    room: str | None = None
 
 
 class SimilarRequest(BaseModel):
@@ -139,16 +141,17 @@ def search_endpoint(req: SearchRequest):
     if req.bm25_weight is not None and req.vector_weight is not None:
         answer, sources, chunks = search_with_weights(req.query, req.bm25_weight, req.vector_weight)
     elif req.exclude_sources:
-        answer, sources, chunks = search_filtered(req.query, req.exclude_sources, folder=req.folder)
+        answer, sources, chunks = search_filtered(req.query, req.exclude_sources,
+                                                  folder=req.folder, wing=req.wing, room=req.room)
     else:
-        answer, sources, chunks = search(req.query, folder=req.folder)
+        answer, sources, chunks = search(req.query, folder=req.folder, wing=req.wing, room=req.room)
     return {'answer': answer, 'sources': sources, 'chunks': chunks}
 
 
 @app.post('/search/stream')
 async def search_stream_endpoint(req: SearchRequest):
     return StreamingResponse(
-        search_stream(req.query, folder=req.folder),
+        search_stream(req.query, folder=req.folder, wing=req.wing, room=req.room),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
     )

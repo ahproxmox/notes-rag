@@ -6,6 +6,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHea
 from langchain_core.documents import Document
 from embeddings import ONNXEmbeddings
 from store import Store
+from wings import classify_document
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(__file__), 'indexer.yaml'))
 
@@ -41,6 +42,11 @@ def chunk_file(path, workspace, cfg):
     loader = TextLoader(str(path), encoding='utf-8', autodetect_encoding=True)
     raw = loader.load()
     text = raw[0].page_content
+
+    # Classify document into wing/room once — all chunks inherit these tags.
+    # rel_path is the workspace-relative path used by path_pattern rules.
+    rel_path_str = str(path.relative_to(workspace)) if isinstance(workspace, Path) else str(path.relative_to(Path(workspace)))
+    wing, room = classify_document(rel_path_str, path.name, text)
 
     # Pass 1: split on markdown headers
     md_splitter = MarkdownHeaderTextSplitter(
@@ -83,6 +89,8 @@ def chunk_file(path, workspace, cfg):
                         'folder': folder,
                         'filename': path.name,
                         'headers': headers,
+                        'wing': wing,
+                        'room': room,
                     },
                 ))
         else:
@@ -93,6 +101,8 @@ def chunk_file(path, workspace, cfg):
                     'folder': folder,
                     'filename': path.name,
                     'headers': headers,
+                    'wing': wing,
+                    'room': room,
                 },
             ))
 
@@ -110,6 +120,8 @@ def chunk_file(path, workspace, cfg):
             chunk.metadata['folder'] = folder
             chunk.metadata['filename'] = path.name
             chunk.metadata['headers'] = ''
+            chunk.metadata['wing'] = wing
+            chunk.metadata['room'] = room
 
     return chunks
 

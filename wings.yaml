@@ -1,0 +1,190 @@
+# Wings Classification Config
+#
+# Each indexed file is assigned exactly one wing and (optionally) one room.
+# Classification order of precedence:
+#   1. path_patterns  — glob-style match against workspace-relative path (strongest)
+#   2. slug matches   — keyword match against filename slug (weight x3)
+#   3. body matches   — keyword match against first 500 chars of content (weight x1)
+# Highest-scoring wing wins. Ties fall through to wing='unknown'.
+# Within a winning wing, rooms are scored the same way (slug x3, body x1).
+
+wings:
+  infra:
+    path_patterns:
+      - "context/proxmox*"
+      - "context/opnsense*"
+      - "context/caddy*"
+      - "context/monitoring*"
+      - "context/uptime*"
+      - "context/tailscale*"
+      - "context/container*"
+      - "context/vault*"
+      - "context/api-key*"
+      - "context/token-manifest*"
+      - "context/security-audit*"
+    keywords:
+      - proxmox
+      - opnsense
+      - caddy
+      - tailscale
+      - vmbr
+      - firewall
+      - vault
+      - "pve-exporter"
+      - "uptime kuma"
+      - grafana
+      - bazarr
+      - sonarr
+      - radarr
+      - wireguard
+      - "pct exec"
+      - "lxc"
+      - nas
+      - "dns"
+      - "ct 1"
+      - "ct1"
+      - "ram-fix"
+      - "ram fix"
+      - "container"
+      - "systemd"
+    rooms:
+      caddy-opnsense:
+        keywords: [caddy, opnsense, "reverse proxy", tls, "dns-01"]
+      network:
+        keywords: [tailscale, wireguard, firewall, dns, vmbr, golinks]
+      vault:
+        keywords: [vault, secret, token, approle, "api-key", "github app"]
+      monitoring:
+        keywords: ["uptime kuma", grafana, "pve-exporter", prometheus, pushgateway]
+      media:
+        keywords: [bazarr, sonarr, radarr, jellyfin, plex, arr]
+      proxmox:
+        keywords: [proxmox, "pct exec", lxc, pvesh, pve]
+      containers:
+        keywords: ["ram-fix", "ct 1", "ct1", "ct-1"]
+
+  agents:
+    path_patterns:
+      - "context/openclaw*"
+      - "context/rag*"
+      - "context/agent*"
+      - "context/hermes*"
+      - "context/notes-curator*"
+      - "context/skills*"
+      - "context/research-skill*"
+      - "context/tool-logger*"
+      - "context/multi-agent*"
+      - "context/mcp-permissions*"
+      - "context/mcp-server*"
+      - "context/cognee*"
+    keywords:
+      - openclaw
+      - "claude-code"
+      - "claude code"
+      - mcp
+      - rag
+      - "sqlite-vec"
+      - fastembed
+      - hermes
+      - "notes-curator"
+      - skill
+      - embedding
+      - agent
+    rooms:
+      openclaw:
+        keywords: [openclaw, "exec-approvals", agentdir, "boot.md", "agents.md"]
+      rag:
+        keywords: ["notes-rag", "rag.db", "sqlite-vec", fastembed, embedding, "wiki layer", "ct 111"]
+      mcp:
+        keywords: [mcp, permissions, run_command, search_memory, "mcp-server"]
+      hermes:
+        keywords: [hermes, "ct 128", "research queue", "forecast pipeline"]
+      notes-curator:
+        keywords: [curator, "daily notes", review, "notes-curator"]
+      skills:
+        keywords: [skill, "skill-stocktake", superpowers, "skill tool"]
+      claude-code:
+        keywords: ["claude code", "claude.md", "close skill", briefing]
+
+  apps:
+    path_patterns: []
+    keywords:
+      - kanban
+      - pickleball
+      - polymarket
+      - "doc-scraper"
+      - mirofish
+      - "inbox-viewer"
+      - "gh-actions-fixer"
+      - "mission control"
+      - "service dashboard"
+      - forecast
+    rooms:
+      kanban:
+        keywords: [kanban]
+      pickleball:
+        keywords: [pickleball, playwright]
+      polymarket:
+        keywords: [polymarket]
+      doc-scraper:
+        keywords: ["doc-scraper", "doc scraper"]
+      mirofish-forecast:
+        keywords: [mirofish, "forecast pipeline", "ct 123"]
+      inbox-viewer:
+        keywords: ["inbox viewer", "inbox-viewer"]
+      gh-actions-fixer:
+        keywords: ["gh-actions", "actions-fixer", "github actions"]
+      mission-control:
+        keywords: ["mission control"]
+      service-dashboard:
+        keywords: ["service dashboard", "tokens studio"]
+
+  notes:
+    path_patterns:
+      - "context/obsidian*"
+      - "context/livesync*"
+      - "inbox/*"
+    keywords:
+      - obsidian
+      - inbox
+      - stash
+      - "daily note"
+      - "daily notes"
+      - "manual note"
+      - "manual notes"
+      - "research report"
+      - "deep research"
+      - "notes workflow"
+      - "notes pipeline"
+    rooms:
+      obsidian:
+        keywords: [obsidian, "vault mount", "ios sync", livesync, couchdb]
+      workflow:
+        keywords: ["manual notes", "daily notes", "curator pipeline", watcher]
+      stash:
+        keywords: [stash, "research queue"]
+      research:
+        keywords: ["deep research", "forecast report", "research output"]
+
+  meta:
+    path_patterns:
+      - "SOUL.md"
+      - "USER.md"
+      - "MEMORY.md"
+      - "todos/*"
+      - "context/shared-protocols*"
+      - "context/swimlanes*"
+      - "context/TODOS*"
+      - "context/SYSTEM*"
+      - "context/agent-handoffs*"
+      - "context/enrichment-template*"
+    keywords: []
+    rooms:
+      identity:
+        keywords: [soul, user.md, memory.md, angelo, "who you are"]
+      protocols:
+        keywords: ["agent-handoffs", "shared-protocols", swimlanes, "enrichment"]
+      todos:
+        keywords: []   # path-based only (todos/ dir)
+      conventions:
+        keywords: [conventions, "swimlanes.json"]
