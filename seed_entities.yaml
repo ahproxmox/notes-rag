@@ -1,0 +1,399 @@
+# Initial entity seed for the entity tracker.
+#
+# Grounded in memory/proxmox.md + MEMORY.md project files. Idempotent — re-run
+# entity_cli.py import seed_entities.yaml as often as you like.
+#
+# Conventions:
+#   slug:     lowercase, hyphenated, unique. Prefer stable IDs (ct-111) over
+#             service names that may move between containers.
+#   type:     container | vm | host | service | repo | dashboard | concept
+#   wing:     reuses the RAG wing taxonomy (infra/agents/apps/notes/meta)
+#   attrs:    free-form structured facts. Reference other entities by slug
+#             (e.g. runs_on: ct-111).
+#   aliases:  alternate names used in docs, queries, or other entities.
+
+entities:
+  # --- Host / hypervisor ---
+  - slug: pve
+    type: host
+    name: Proxmox VE host
+    wing: infra
+    summary: Proxmox VE 8.4.14 hypervisor hosting all CTs and VMs.
+    attrs: {ip: 192.168.88.5, version: 8.4.14}
+    aliases: [proxmox, pve-host, homelab]
+
+  # --- Containers ---
+  - slug: ct-101
+    type: container
+    name: CT 101 — nas
+    wing: infra
+    summary: NAS storage, nginx reports server, and Inbox Viewer web UI on :80.
+    attrs: {ip: 192.168.88.55, runs_on: pve}
+    aliases: [nas, inbox-viewer]
+
+  - slug: ct-102
+    type: container
+    name: CT 102 — jellyfin
+    wing: infra
+    summary: Jellyfin media server.
+    attrs: {ip: 192.168.88.58, runs_on: pve}
+    aliases: [jellyfin]
+
+  - slug: ct-104
+    type: container
+    name: CT 104 — openclaw
+    wing: agents
+    summary: OpenClaw Discord agent (@NotAgentSmith) + Mission Control dashboard :4000. Shares /mnt/Claude workspace with CT 109.
+    attrs:
+      ip: 192.168.88.63
+      runs_on: pve
+      pm2: true
+      services: [openclaw, mission-control, gateway]
+      workspace: /mnt/Claude
+    aliases: [openclaw-ct, notagentsmith, mission-control-ct]
+
+  - slug: ct-106
+    type: container
+    name: CT 106 — vaultwarden
+    wing: infra
+    summary: Vaultwarden password manager.
+    attrs: {ip: 192.168.88.60, runs_on: pve}
+    aliases: [vaultwarden, bitwarden]
+
+  - slug: ct-107
+    type: container
+    name: CT 107 — vpn-downloads
+    wing: infra
+    summary: VPN-gated download host.
+    attrs: {ip: 192.168.88.61, runs_on: pve}
+    aliases: [vpn-downloads]
+
+  - slug: ct-108
+    type: container
+    name: CT 108 — arr-stack
+    wing: infra
+    summary: Sonarr, Radarr, Bazarr and friends for media automation.
+    attrs: {ip: 192.168.88.62, runs_on: pve}
+    aliases: [arr-stack, sonarr, radarr, bazarr]
+
+  - slug: ct-109
+    type: container
+    name: CT 109 — mcp-server
+    wing: agents
+    summary: Claude Code MCP server — primary tool surface for Claude Code (proxmox MCP). Shares /mnt/Claude with CT 104.
+    attrs:
+      ip: 192.168.88.64
+      runs_on: pve
+      workspace: /mnt/Claude
+      services: [mcp-server]
+    aliases: [mcp, mcp-server, claude-code-mcp]
+
+  - slug: ct-110
+    type: container
+    name: CT 110 — uptime-kuma
+    wing: infra
+    summary: Uptime Kuma monitoring.
+    attrs: {ip: 192.168.88.67, runs_on: pve}
+    aliases: [uptime-kuma, kuma]
+
+  - slug: ct-111
+    type: container
+    name: CT 111 — notes-rag
+    wing: agents
+    summary: Hybrid RAG service — FTS5 + sqlite-vec in unified rag.db. Indexes /mnt/Claude and /mnt/Obsidian. HTTP API on :8080.
+    attrs:
+      ip: 192.168.88.71
+      runs_on: pve
+      port: 8080
+      systemd_unit: rag.service
+      db: /opt/rag/rag.db
+      embedding_model: all-MiniLM-L6-v2
+      embedding_dim: 384
+      indexes: [/mnt/Claude, /mnt/Obsidian]
+    aliases: [notes-rag, rag, langchain-rag, rag-api]
+
+  - slug: ct-112
+    type: container
+    name: CT 112 — n8n
+    wing: infra
+    summary: n8n workflow automation.
+    attrs: {ip: 192.168.88.75, runs_on: pve}
+    aliases: [n8n]
+
+  - slug: ct-113
+    type: container
+    name: CT 113 — vault
+    wing: infra
+    summary: HashiCorp Vault — canonical secrets backend for the homelab.
+    attrs: {ip: 192.168.88.65, runs_on: pve}
+    aliases: [vault, hashicorp-vault]
+
+  - slug: ct-114
+    type: container
+    name: CT 114 — technitium
+    wing: infra
+    summary: Technitium DNS — LAN resolver with ad blocking.
+    attrs: {ip: 192.168.88.68, runs_on: pve}
+    aliases: [technitium, dns, lan-dns]
+
+  - slug: ct-115
+    type: container
+    name: CT 115 — golink
+    wing: infra
+    summary: golink — go/ shortlink service.
+    attrs: {ip: 192.168.88.69, runs_on: pve}
+    aliases: [golink, golinks, go-links]
+
+  - slug: ct-116
+    type: container
+    name: CT 116 — immich
+    wing: infra
+    summary: Immich photo management.
+    attrs: {ip: 192.168.88.70, runs_on: pve}
+    aliases: [immich]
+
+  - slug: ct-117
+    type: container
+    name: CT 117 — redis
+    wing: infra
+    summary: Redis (used by the RAG service).
+    attrs: {ip: 192.168.88.72, runs_on: pve}
+    aliases: [redis]
+
+  - slug: ct-118
+    type: container
+    name: CT 118 — monitoring
+    wing: infra
+    summary: Prometheus + Grafana + Pushgateway for homelab metrics.
+    attrs:
+      ip: 192.168.88.73
+      runs_on: pve
+      services: [prometheus, grafana, pushgateway]
+      pushgateway_port: 9091
+    aliases: [monitoring, prometheus, grafana, pushgateway]
+
+  - slug: ct-120
+    type: container
+    name: CT 120 — chrome-browse
+    wing: agents
+    summary: Headless Chromium + Playwright — REST API for page fetches, screenshots, and batch crawls.
+    attrs:
+      ip: 192.168.88.76
+      runs_on: pve
+      api_port: 8935
+      novnc_port: 6080
+    aliases: [chrome-browse, chromium, playwright-ct]
+
+  - slug: ct-121
+    type: container
+    name: CT 121 — github-runner
+    wing: infra
+    summary: Self-hosted GitHub Actions runner for the ahproxmox org. Nightly 3am restart cron because it goes stale silently.
+    attrs:
+      ip: 192.168.88.77
+      runs_on: pve
+      org: ahproxmox
+      restart_cron: "0 3 * * *"
+    aliases: [github-runner, homelab-runner, actions-runner]
+
+  - slug: ct-122
+    type: container
+    name: CT 122 — kanban-board
+    wing: apps
+    summary: Kanban UI and todos-indexer API. pm2 processes; API on :3000, kanban UI at /kanban.
+    attrs:
+      ip: 192.168.88.78
+      runs_on: pve
+      port: 3000
+      pm2_processes: [todos-indexer, kanban]
+    aliases: [kanban, kanban-board, todos-indexer]
+
+  - slug: ct-123
+    type: container
+    name: CT 123 — mirofish
+    wing: apps
+    summary: MiroFish forecasting stack — Docker Compose (app + Neo4j + Ollama). Frontend :3000, API :5001.
+    attrs:
+      ip: 192.168.88.79
+      runs_on: pve
+      frontend_port: 3000
+      api_port: 5001
+    aliases: [mirofish, forecast, forecast-pipeline]
+
+  - slug: ct-124
+    type: container
+    name: CT 124 — github-mcp
+    wing: agents
+    summary: GitHub MCP server. Had a RAM leak from orphaned processes — fixed 2026-04-08.
+    attrs: {ip: 192.168.88.80, runs_on: pve}
+    aliases: [github-mcp]
+
+  - slug: ct-125
+    type: container
+    name: CT 125 — doc-scraper
+    wing: agents
+    summary: Go doc-scraper — recursive crawl of tech docs, admin UI :8080, feeds into RAG.
+    attrs:
+      ip: 192.168.88.81
+      runs_on: pve
+      port: 8080
+      repo: ahproxmox/doc-scraper
+    aliases: [doc-scraper, docscraper]
+
+  - slug: ct-126
+    type: container
+    name: CT 126 — caddy
+    wing: infra
+    summary: Internal HTTPS reverse proxy. Wildcard TLS for *.internal.ahproxmox-claude.cc via Cloudflare DNS-01.
+    attrs:
+      ip: 192.168.88.82
+      runs_on: pve
+      tls_domain: "*.internal.ahproxmox-claude.cc"
+      dns_provider: cloudflare
+    aliases: [caddy, caddy-proxy, internal-proxy]
+
+  - slug: ct-127
+    type: container
+    name: CT 127 — service-dashboard
+    wing: apps
+    summary: Go+Vue service dashboard. Tokens Studio design token pipeline with Figma integration.
+    attrs: {ip: 192.168.88.83, runs_on: pve}
+    aliases: [service-dashboard, tokens-studio]
+
+  - slug: ct-128
+    type: container
+    name: CT 128 — hermes
+    wing: agents
+    summary: Hermes research agent — research queue + forecast pipeline, cron-driven.
+    attrs:
+      ip: 192.168.88.84
+      runs_on: pve
+      cron_driven: true
+    aliases: [hermes, hermes-agent]
+
+  # --- VMs ---
+  - slug: vm-200
+    type: vm
+    name: VM 200 — opnsense
+    wing: infra
+    summary: OPNsense firewall / DMZ gateway. WAN=vtnet0 (LAN side), LAN=vtnet1 (10.0.1.1/24). DMZ→LAN blocked.
+    attrs:
+      ip: 192.168.88.243
+      runs_on: pve
+      bridge: vmbr1
+      dmz_cidr: 10.0.1.0/24
+    aliases: [opnsense, dmz-firewall]
+
+  # --- Key services / daemons ---
+  - slug: openclaw
+    type: service
+    name: OpenClaw Discord agent
+    wing: agents
+    summary: Discord bot (@NotAgentSmith). Runs on CT 104 via pm2. Uses shared /mnt/Claude workspace.
+    attrs:
+      runs_on: ct-104
+      discord: true
+      workspace: /mnt/Claude
+      config_files: [AGENTS.md, BOOT.md, openclaw.json, exec-approvals.json]
+    aliases: [claw, openclaw-agent, notagentsmith, discord-bot]
+
+  - slug: rag-service
+    type: service
+    name: notes-rag HTTP API
+    wing: agents
+    summary: FastAPI service on CT 111 exposing hybrid search (BM25 + sqlite-vec), wiki layer, and /research. Used by Claude Code, OpenClaw, and Hermes.
+    attrs:
+      runs_on: ct-111
+      port: 8080
+      systemd_unit: rag.service
+      db: /opt/rag/rag.db
+      wing_filters: true
+    aliases: [rag, rag-api, notes-rag-api]
+
+  - slug: todos-indexer
+    type: service
+    name: todos-indexer API
+    wing: apps
+    summary: Live todos API parsing frontmatter (status, priority, assignee). Reads /mnt/Claude/todos/ on demand.
+    attrs:
+      runs_on: ct-122
+      port: 3000
+      pm2_process: todos-indexer
+      data_source: /mnt/Claude/todos
+    aliases: [todos-api, kanban-api]
+
+  - slug: notes-curator
+    type: service
+    name: notes-curator agent
+    wing: agents
+    summary: Periodic curator that reviews /mnt/Claude/inbox/, triages items, and archives on reviewed:true. Runs every 30min.
+    attrs:
+      runs_on: ct-104
+      interval_minutes: 30
+      inbox: /mnt/Claude/inbox
+    aliases: [curator, notes-curator-agent]
+
+  # --- Repos ---
+  - slug: notes-rag-repo
+    type: repo
+    name: ahproxmox/notes-rag
+    wing: agents
+    summary: Public repo for the RAG service (CT 111). CI/CD via GitHub Actions self-hosted runner on CT 121.
+    attrs:
+      github: ahproxmox/notes-rag
+      deploys_to: ct-111
+      ci_runner: ct-121
+    aliases: [notes-rag-github]
+
+  - slug: openclaw-config-repo
+    type: repo
+    name: ahproxmox/openclaw-config
+    wing: agents
+    summary: OpenClaw configuration — AGENTS.md, BOOT.md, models.json, exec-approvals.json.
+    attrs:
+      github: ahproxmox/openclaw-config
+      deploys_to: ct-104
+    aliases: [openclaw-config]
+
+  - slug: kanban-board-repo
+    type: repo
+    name: ahproxmox/kanban-board
+    wing: apps
+    summary: Kanban board frontend + todos-indexer. Deployed to CT 122 via self-hosted runner.
+    attrs:
+      github: ahproxmox/kanban-board
+      deploys_to: ct-122
+      ci_runner: ct-121
+    aliases: [kanban-repo]
+
+  # --- People ---
+  - slug: angelo
+    type: person
+    name: Angelo Hastings
+    wing: meta
+    summary: Homelab owner. Learning Linux/networking/infra — prefers small verifiable steps and explained risks.
+    attrs: {role: homelab-owner}
+    aliases: [user, owner]
+
+  # --- Concepts ---
+  - slug: shared-workspace
+    type: concept
+    name: Shared agent workspace (/mnt/Claude)
+    wing: meta
+    summary: Bind-mounted directory shared between CT 104 (OpenClaw) and CT 109 (MCP). Canonical source of todos, sessions, memory, context, wiki.
+    attrs:
+      path: /mnt/Claude
+      mounted_on: [ct-104, ct-109]
+      indexed_by: ct-111
+    aliases: [workspace, mnt-claude, claude-workspace]
+
+  - slug: obsidian-vault
+    type: concept
+    name: Obsidian vault (/mnt/Obsidian)
+    wing: notes
+    summary: Obsidian vault mounted on CT 104 and CT 111. Inbox + daily notes + specs. Synced via CouchDB LiveSync.
+    attrs:
+      path: /mnt/Obsidian
+      mounted_on: [ct-104, ct-111]
+      sync: livesync-couchdb
+    aliases: [obsidian, vault, obsidian-notes]

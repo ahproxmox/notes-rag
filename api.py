@@ -1,9 +1,10 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from search import search, search_filtered, search_with_weights, search_stream, similar, get_stats
 from research import research
+from entities import EntityStore
 import os
 import re
 from datetime import date
@@ -16,6 +17,9 @@ app.mount('/ui', StaticFiles(directory=_ui_dir), name='ui')
 
 _log_path = Path('/mnt/Claude/log.md')
 _wiki_dir = Path('/mnt/Claude/wiki')
+
+_entities_db = os.environ.get('ENTITIES_DB', os.path.join(os.path.dirname(__file__), 'entities.db'))
+_entity_store = EntityStore(_entities_db)
 
 
 class SearchRequest(BaseModel):
@@ -35,6 +39,16 @@ class SimilarRequest(BaseModel):
 
 class ResearchRequest(BaseModel):
     query: str
+
+
+class EntityUpsertRequest(BaseModel):
+    slug: str
+    type: str
+    name: str
+    wing: str | None = None
+    summary: str | None = None
+    attrs: dict = {}
+    aliases: list[str] = []
 
 
 class WikiSaveRequest(BaseModel):
@@ -57,6 +71,39 @@ def health():
 @app.get('/stats')
 def stats():
     return get_stats()
+
+
+@app.get('/entities')
+def entities_list(type: str | None = None, wing: str | None = None,
+                  q: str | None = None, k: int = Query(default=20, ge=1, le=200)):
+    """List or search entities.
+
+    - Pass `q=...` for FTS fuzzy search
+    - Otherwise returns filtered by type/wing
+    """
+    if q:
+        return {'entities': _entity_store.search(q, k=k)}
+    return {'entities': _entity_store.list(type=type, wing=wing)}
+
+
+@app.get('/entities/{slug}')
+def entities_get(slug: str):
+    """Fetch a single entity by slug or alias."""
+    e = _entity_store.get(slug)
+    if not e:
+        raise HTTPException(status_code=404, detail=f'entity not found: {slug}')
+    return e
+
+
+@app.post('/entities')
+def entities_upsert(req: EntityUpsertRequest):
+    """Insert or update an entity."""
+    e = _entity_store.upsert(
+        slug=req.slug, type=req.type, name=req.name,
+        wing=req.wing, summary=req.summary,
+        attrs=req.attrs, aliases=req.aliases,
+    )
+    return e
 
 
 @app.get('/log/recent')
