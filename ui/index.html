@@ -302,12 +302,8 @@
 <header>
   <h1>Notes RAG</h1>
   <span class="badge green">● live</span>
-  <span class="badge">hybrid BM25 + vector</span>
-  <span class="badge">chunk_size=300</span>
-  <span class="badge">reranker</span>
   <a href="/review" id="review-btn">Review Notes</a>
   <span class="spacer"></span>
-  <span id="chunk-count"></span>
 </header>
 
 <div class="layout">
@@ -345,11 +341,7 @@
   const sidePanel  = document.getElementById('side-panel');
   const sideEmpty  = document.getElementById('side-empty');
 
-  // Load stats
-  fetch('/stats').then(r => r.json()).then(data => {
-    document.getElementById('chunk-count').textContent =
-      `${data.chunk_count.toLocaleString()} chunks`;
-  }).catch(() => {});
+  // Stats loaded but not displayed
 
   // Auto-resize textarea
   queryEl.addEventListener('input', () => {
