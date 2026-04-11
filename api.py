@@ -61,6 +61,15 @@ class WikiSaveRequest(BaseModel):
 @app.get('/')
 def index():
     return FileResponse(os.path.join(_ui_dir, 'index.html'))
+@app.get('/manifest.json')
+def manifest():
+    return FileResponse(os.path.join(_ui_dir, 'manifest.json'), media_type='application/manifest+json')
+
+@app.get('/sw.js')
+def service_worker():
+    return FileResponse(os.path.join(_ui_dir, 'sw.js'), media_type='application/javascript')
+
+
 
 
 @app.get('/health')
@@ -215,3 +224,244 @@ def similar_endpoint(req: SimilarRequest):
 def research_endpoint(req: ResearchRequest):
     summary, filepath = research(req.query)
     return {'summary': summary, 'filepath': filepath}
+
+import json
+from review import (
+    scan_unreviewed, parse_frontmatter, write_frontmatter,
+    group_notes, SessionManager, generate_question, infer_tags,
+    build_review_content,
+)
+
+_session_mgr = SessionManager()
+_notes_dir = '/mnt/Obsidian/Notes'
+
+
+class ReviewStartRequest(BaseModel):
+    note_ids: list[str]  # filenames e.g. ["Wedding notes.md"]
+
+
+class ReviewReplyRequest(BaseModel):
+    answer: str
+    question: str = ''  # question this answer is for
+
+
+# ---------------------------------------------------------------------------
+# Review routes
+# ---------------------------------------------------------------------------
+
+@app.get('/review')
+def review_page():
+    return FileResponse(os.path.join(_ui_dir, 'review.html'))
+
+
+@app.get('/review/queue')
+def review_queue():
+    """Scan for unreviewed notes, group by similarity, return triage queue."""
+    notes = scan_unreviewed(_notes_dir)
+    if not notes:
+        return {'notes': [], 'groups': []}
+
+    similarity = {}
+    if len(notes) > 1:
+        for i, a in enumerate(notes):
+            for b in notes[i + 1:]:
+                try:
+                    results = similar(a['preview'], k=5)
+                    b_score = 0.0
+                    for r in results:
+                        if b['filename'] in r.get('source', ''):
+                            b_score = 0.65
+                            break
+                    similarity[(a['filename'], b['filename'])] = b_score
+                except Exception:
+                    similarity[(a['filename'], b['filename'])] = 0.0
+
+    groups = group_notes(notes, similarity, threshold=0.4)
+    return {'notes': notes, 'groups': groups}
+
+@app.post('/review/start')
+async def review_start(req: ReviewStartRequest):
+    """Start a review session -- validates notes, loads content, gets RAG context, streams first question."""
+    notes_data = []
+    for fname in req.note_ids:
+        path = os.path.join(_notes_dir, fname)
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail=f'Note not found: {fname}')
+        with open(path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        fm, body = parse_frontmatter(content)
+
+        # Extract Q&A from previous ## Review N sections for re-reviews
+        previous_reviews = []
+        for m in re.finditer(r'\*\*(.+?)\*\*\s+(.+)', body):
+            previous_reviews.append({'q': m.group(1), 'a': m.group(2)})
+
+        notes_data.append({
+            'filename': fname,
+            'path': path,
+            'body': body,
+            'review_count': fm.get('review_count', 0),
+            'previous_reviews': previous_reviews,
+        })
+
+    # RAG context for all notes combined
+    combined_text = ' '.join(n['body'][:200] for n in notes_data)
+    rag_context = ''
+    try:
+        _, _, chunks = search(combined_text)
+        rag_context = '\n'.join(
+            f"[{c['source']}] {c['content'][:200]}" for c in chunks[:3]
+        )
+    except Exception:
+        pass
+
+    session = _session_mgr.create(req.note_ids, notes_data)
+    session['rag_context'] = rag_context
+
+    all_previous = []
+    for n in notes_data:
+        all_previous.extend(n.get('previous_reviews', []))
+
+    async def stream():
+        yield f"data: {json.dumps({'type': 'session', 'session_id': session['session_id'], 'notes': [{'filename': n['filename'], 'body': n['body']} for n in notes_data]})}\n\n"
+        question_text = ''
+        async for token in generate_question(notes_data, rag_context, all_previous, [], 0):
+            question_text += token
+            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+        session['pending_question'] = question_text
+        yield f"data: {json.dumps({'type': 'question_done', 'full_question': question_text})}\n\n"
+
+    return StreamingResponse(
+        stream(),
+        media_type='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
+
+
+@app.post('/review/{session_id}/reply')
+async def review_reply(session_id: str, req: ReviewReplyRequest):
+    """Process an interview answer and stream the next question (or signal done)."""
+    session = _session_mgr.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail='Session not found')
+
+    question = req.question or session.get('pending_question', '')
+    _session_mgr.add_qa(session_id, question, req.answer)
+
+    if session['question_count'] >= 3:
+        async def stream_done():
+            yield f"data: {json.dumps({'type': 'interview_done'})}\n\n"
+        return StreamingResponse(stream_done(), media_type='text/event-stream',
+                                 headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+    all_previous = []
+    for n in session['notes']:
+        all_previous.extend(n.get('previous_reviews', []))
+
+    async def stream():
+        question_text = ''
+        async for token in generate_question(
+            session['notes'], session.get('rag_context', ''),
+            all_previous, session['qa'], session['question_count'],
+        ):
+            question_text += token
+            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+        session['pending_question'] = question_text
+        yield f"data: {json.dumps({'type': 'question_done', 'full_question': question_text})}\n\n"
+
+    return StreamingResponse(stream(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+@app.post('/review/{session_id}/complete')
+async def review_complete(session_id: str):
+    """Complete interview -- infer tags, append review section, update frontmatter, verify write."""
+    session = _session_mgr.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail='Session not found')
+
+    results = []
+    for note in session['notes']:
+        path = note['path']
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except OSError as e:
+            results.append({'filename': note['filename'], 'success': False, 'error': str(e)})
+            continue
+
+        fm, body = parse_frontmatter(content)
+        review_num = fm.get('review_count', 0) + 1
+        tags = await infer_tags([note], session.get('rag_context', ''), session['qa'])
+        review_content = build_review_content(session['qa'])
+        new_content = write_frontmatter(fm, body, tags, review_num, review_content)
+
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+        except OSError as e:
+            results.append({'filename': note['filename'], 'success': False, 'error': str(e)})
+            continue
+
+        # Verify write
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                verify_fm, _ = parse_frontmatter(f.read())
+            if verify_fm.get('reviewed') is not True:
+                # Retry once
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+                with open(path, 'r', encoding='utf-8') as f:
+                    verify_fm, _ = parse_frontmatter(f.read())
+                if verify_fm.get('reviewed') is not True:
+                    results.append({'filename': note['filename'], 'success': False,
+                                    'error': 'Write verification failed after retry'})
+                    continue
+        except OSError as e:
+            results.append({'filename': note['filename'], 'success': False, 'error': str(e)})
+            continue
+
+        results.append({'filename': note['filename'], 'success': True,
+                        'tags': tags, 'review_num': review_num})
+
+    _session_mgr.remove(session_id)
+    return {'results': results}
+
+
+@app.post('/review/{note_id:path}/skip')
+def review_skip(note_id: str):
+    return {'skipped': note_id}
+
+
+@app.post('/review/{note_id:path}/auto-tag')
+async def review_auto_tag(note_id: str):
+    """Auto-tag without interview -- infer tags from content and RAG context."""
+    path = os.path.join(_notes_dir, note_id)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail=f'Note not found: {note_id}')
+
+    with open(path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    fm, body = parse_frontmatter(content)
+    review_num = fm.get('review_count', 0) + 1
+
+    rag_context = ''
+    try:
+        _, _, chunks = search(body[:200])
+        rag_context = '\n'.join(f"[{c['source']}] {c['content'][:200]}" for c in chunks[:3])
+    except Exception:
+        pass
+
+    tags = await infer_tags([{'filename': note_id, 'body': body}], rag_context, [])
+    review_content = build_review_content([])
+    new_content = write_frontmatter(fm, body, tags, review_num, review_content)
+
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(new_content)
+
+    with open(path, 'r', encoding='utf-8') as f:
+        verify_fm, _ = parse_frontmatter(f.read())
+    if verify_fm.get('reviewed') is not True:
+        return {'success': False, 'error': 'Write verification failed'}
+
+    return {'success': True, 'tags': tags, 'filename': note_id, 'review_num': review_num}
