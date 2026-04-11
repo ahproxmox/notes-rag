@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Notes RAG">
+  <link rel="apple-touch-icon" href="/ui/icon.svg">
   <title>Notes RAG</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -52,6 +59,10 @@
       color: var(--text-muted); background: var(--tag-bg);
     }
     .badge.green { color: var(--green); border-color: #2ea04330; background: #2ea04310; }
+    #review-btn { background: var(--tag-bg); border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: 6px; padding: 5px 12px; font-size: 12px; text-decoration: none;
+      transition: border-color 0.15s, color 0.15s; }
+    #review-btn:hover { border-color: var(--accent); color: var(--text); }
     .spacer { flex: 1; }
     #chunk-count { font-size: 11px; color: var(--text-muted); font-family: 'SF Mono', monospace; }
 
@@ -294,6 +305,7 @@
   <span class="badge">hybrid BM25 + vector</span>
   <span class="badge">chunk_size=300</span>
   <span class="badge">reranker</span>
+  <a href="/review" id="review-btn">Review Notes</a>
   <span class="spacer"></span>
   <span id="chunk-count"></span>
 </header>
@@ -595,6 +607,11 @@
     }).join('\n');
     blocks.forEach((block, i) => { text = text.replace(`\x00BLOCK${i}\x00`, block); });
     return text;
+  }
+</script>
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js");
   }
 </script>
 </body>

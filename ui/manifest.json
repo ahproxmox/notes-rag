@@ -1,0 +1,17 @@
+{
+  "name": "Notes",
+  "short_name": "Notes",
+  "description": "Personal notes search and review",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    {
+      "src": "/ui/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
