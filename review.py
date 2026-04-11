@@ -210,7 +210,7 @@ class SessionManager:
         self._sessions.pop(session_id, None)
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from typing import AsyncGenerator
 
 
@@ -232,7 +232,7 @@ def _detect_note_style(body: str) -> str:
     lines_ = [l for l in body.strip().split(chr(10)) if l.strip() and not l.strip().startswith('#')]
     if len(lines_) <= 2:
         return 'sparse'
-    list_lines = [l for l in lines_ if __import__('re').match(r'^\s*[-*\d]+[.)]\s', l)]
+    list_lines = [l for l in lines_ if re.match(r'^\s*[-*\d]+[.)]\s', l)]
     if list_lines and len(list_lines) >= len(lines_) * 0.6:
         return 'list'
     return 'normal'
@@ -293,8 +293,8 @@ async def generate_question(
     system = build_interview_prompt(notes, rag_context, previous_reviews, question_count)
     messages = [SystemMessage(content=system)]
     for qa in qa_so_far:
-        messages.append(HumanMessage(content=f"[Interviewer]: {qa['q']}"))
-        messages.append(HumanMessage(content=f"[Angelo]: {qa['a']}"))
+        messages.append(AIMessage(content=qa['q']))
+        messages.append(HumanMessage(content=qa['a']))
     messages.append(HumanMessage(content='Ask your next question.'))
     llm = _get_review_llm()
     async for chunk in llm.astream(messages):
@@ -320,7 +320,7 @@ async def infer_tags(
     response = await llm.ainvoke([HumanMessage(content=prompt)])
     raw = response.content.strip()
     tags = [t.strip().lower().replace(' ', '-') for t in raw.split(',')]
-    return [t for t in tags if t and __import__('re').match(r'^[a-z0-9-]+$', t)][:5]
+    return [t for t in tags if t and re.match(r'^[a-z0-9-]+$', t)][:5]
 
 
 def build_review_content(qa: list) -> str:
