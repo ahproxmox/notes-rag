@@ -52,6 +52,52 @@ A streaming chat interface is served at `http://localhost:8080/`:
 
 ---
 
+
+## Notes Review
+
+A second mode alongside search — lets you review, interview, and tag unreviewed Obsidian notes from the same PWA.
+
+Access via the **Review Notes** button in the header, or navigate to `/review`.
+
+### How it works
+
+1. **Triage** — tap "Review Notes" to scan for all notes with `reviewed: unreviewed` in their frontmatter. Notes are grouped by RAG vector similarity (related notes shown together with a badge).
+2. **Interview** — select a note or group. The LLM asks 2–3 contextual questions based on note content, RAG connections to existing knowledge, and any previous review history (for re-reviews).
+3. **Complete** — tags are inferred and written to frontmatter (`reviewed: true`, `tags: [...]`, `review_count: N`). A `## Review N` section is appended to the note body with a Q&A summary.
+
+### Re-review
+
+Set `reviewed: unreviewed` on any note to queue it for another pass. The system tracks `review_count` in frontmatter and shows previous review Q&A to the LLM so it asks different questions.
+
+### Note grouping
+
+Notes are grouped using pairwise vector similarity (union-find, threshold 0.4). Grouped notes can be reviewed together in a single joint interview — the LLM asks bridging questions that connect them.
+
+### Review engine
+
+| Component | File | Description |
+|-----------|------|-------------|
+| Frontmatter parse/write | `review.py` | Safe YAML round-trip, `---` in body handled correctly |
+| Session manager | `review.py` | In-memory sessions per browser session |
+| Note grouping | `review.py` | Union-find on pairwise RAG similarity |
+| Interview LLM | `review.py` | Gemini Flash Lite, streaming via `generate_question()` |
+| Tag inference | `review.py` | Async `infer_tags()` — up to 5 lowercase-hyphenated tags |
+| API routes | `api.py` | `/review/*` route group |
+| UI | `ui/review.html` | Mobile-first, dark theme, SSE streaming |
+
+### Review API routes
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/review` | Review UI page |
+| `GET` | `/review/queue` | Scan unreviewed notes, return grouped triage list |
+| `POST` | `/review/start` | Start session, stream first question |
+| `POST` | `/review/{id}/reply` | Submit answer, stream next question |
+| `POST` | `/review/{id}/complete` | Infer tags, write frontmatter, return results |
+| `POST` | `/review/{id}/skip` | Skip note (no-op) |
+| `POST` | `/review/{id}/auto-tag` | Tag without interview |
+
+
 ## Evaluation
 
 Evaluated against 43 queries across 6 categories: factual, reasoning, security, multi-hop, edge-case, temporal.
@@ -98,6 +144,12 @@ All endpoints served by FastAPI on port `8080`.
 | `POST` | `/search/stream` | Hybrid search, SSE streaming |
 | `POST` | `/similar` | Vector similarity only, no LLM |
 | `POST` | `/research` | Web research → scrape → summarise → save |
+|  |  | Notes review UI (triage + interview) |
+|  |  | Scan for unreviewed notes, grouped by similarity |
+|  |  | Start interview session, stream first question |
+|  |  | Submit answer, stream next question |
+|  |  | Complete review — write tags + review section |
+|  |  | Auto-tag note without interview |
 
 ### POST /search
 

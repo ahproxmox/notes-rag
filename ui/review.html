@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Notes RAG">
+  <link rel="apple-touch-icon" href="/ui/icon.png">
+  <title>Review Notes</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface2: #1c2128;
+      --border: #30363d; --text: #e6edf3; --text-muted: #8b949e;
+      --accent: #58a6ff; --green: #3fb950; --yellow: #d29922;
+      --red: #f85149; --tag-bg: #21262d; --radius: 8px;
+    }
+    html, body { height: 100%; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; height: 100%; font-size: 14px; line-height: 1.6; }
+
+    header { border-bottom: 1px solid var(--border); padding: 12px 16px;
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface); flex-shrink: 0; }
+    header h1 { font-size: 15px; font-weight: 600; }
+    .back-link { color: var(--text-muted); text-decoration: none; font-size: 13px;
+      border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }
+    .back-link:hover { border-color: var(--accent); color: var(--text); }
+    .spacer { flex: 1; }
+    .queue-badge { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+
+    .view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    .view.active { display: flex; }
+
+    /* Triage */
+    .triage-scroll { flex: 1; overflow-y: auto; padding: 8px; }
+    .loading { padding: 48px 16px; text-align: center; color: var(--text-muted); }
+    .spinner { width: 18px; height: 18px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty { margin: auto; text-align: center; padding: 48px 24px; color: var(--text-muted); }
+    .empty h2 { color: var(--text); margin-bottom: 8px; font-size: 17px; }
+
+    .group-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; }
+    .group-header { padding: 8px 12px; display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-muted); }
+    .group-badge { background: var(--accent); color: var(--bg); font-size: 10px;
+      padding: 1px 7px; border-radius: 999px; font-weight: 600; }
+    .group-review-btn { margin-left: auto; }
+
+    .note-row { padding: 12px; border-bottom: 1px solid var(--border); }
+    .note-row:last-child { border-bottom: none; }
+    .note-title { font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .re-badge { font-size: 10px; color: var(--yellow); border: 1px solid var(--yellow);
+      padding: 0 5px; border-radius: 999px; flex-shrink: 0; }
+    .note-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 6px;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .note-preview { font-size: 12px; color: var(--text-muted); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; margin-bottom: 8px; }
+    .note-actions { display: flex; gap: 6px; }
+    .tag { font-size: 10px; padding: 1px 6px; border-radius: 999px;
+      background: var(--tag-bg); border: 1px solid var(--border); color: var(--text-muted); }
+
+    /* Buttons */
+    .btn { border: 1px solid var(--border); background: var(--surface2); color: var(--text-muted);
+      border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 12px;
+      transition: border-color 0.15s, color 0.15s; font-family: inherit; }
+    .btn:hover { border-color: var(--accent); color: var(--text); }
+    .btn.primary { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
+    .btn.primary:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Review view */
+    .note-panel { flex-shrink: 0; max-height: 38vh; overflow-y: auto;
+      background: var(--surface); border-bottom: 2px solid var(--border); }
+    .note-tabs { display: flex; padding: 8px 12px 0; gap: 4px; }
+    .note-tab { font-size: 11px; padding: 4px 10px; border-radius: 6px 6px 0 0;
+      background: var(--surface2); border: 1px solid var(--border); border-bottom: none;
+      cursor: pointer; color: var(--text-muted); }
+    .note-tab.active { background: var(--surface); color: var(--text); }
+    .note-body { padding: 12px 14px; font-size: 12px; font-family: 'SF Mono', monospace;
+      white-space: pre-wrap; line-height: 1.6; color: var(--text-muted); }
+    .note-body-wrap { display: none; }
+    .note-body-wrap.active { display: block; }
+
+    .chat-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex;
+      flex-direction: column; gap: 10px; }
+    .chat-messages::-webkit-scrollbar { width: 5px; }
+    .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .bubble { max-width: 88%; padding: 9px 13px; border-radius: var(--radius);
+      font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+    .bubble.assistant { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); }
+    .bubble.user { align-self: flex-end; background: #1d2d3e; border: 1px solid #2d4a6a; }
+    .streaming::after { content: '▍'; animation: blink 0.8s step-end infinite; color: var(--accent); }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .chat-input-bar { border-top: 1px solid var(--border); padding: 10px 12px;
+      background: var(--surface); display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
+    .input-wrap { flex: 1; background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); display: flex; transition: border-color 0.15s; }
+    .input-wrap:focus-within { border-color: var(--accent); }
+    .input-wrap textarea { flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-family: inherit; font-size: 13px;
+      padding: 9px 12px; resize: none; max-height: 90px; line-height: 1.5; }
+    .input-wrap textarea::placeholder { color: var(--text-muted); }
+
+    .review-actions { border-top: 1px solid var(--border); padding: 10px 12px;
+      background: var(--surface); display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
+
+    .result-panel { padding: 20px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .result-row { padding: 10px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); }
+    .result-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+
+    @media (min-width: 768px) {
+      .triage-scroll { max-width: 700px; margin: 0 auto; width: 100%; padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="back-link">← Search</a>
+  <h1>Review Notes</h1>
+  <span class="spacer"></span>
+  <span class="queue-badge" id="queue-badge"></span>
+</header>
+
+<!-- Triage View -->
+<div class="view active" id="triage-view">
+  <div class="triage-scroll" id="triage-scroll">
+    <div class="loading" id="loading"><div class="spinner"></div>Scanning for unreviewed notes…</div>
+    <div id="triage-list"></div>
+    <div class="empty" id="empty" style="display:none">
+      <h2>All caught up</h2>
+      <p>No unreviewed notes found.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Review View -->
+<div class="view" id="review-view">
+  <div class="note-panel" id="note-panel">
+    <div class="note-tabs" id="note-tabs"></div>
+    <div id="note-bodies"></div>
+  </div>
+  <div class="chat-panel">
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-input-bar" id="chat-input-bar">
+      <div class="input-wrap">
+        <textarea id="chat-input" placeholder="Type your answer…" rows="1"></textarea>
+      </div>
+      <button class="btn primary" id="send-btn">Send</button>
+    </div>
+    <div class="review-actions">
+      <button class="btn" id="skip-btn">Skip</button>
+      <button class="btn primary" id="complete-btn">Complete Review</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let sessionId = null;
+let currentQuestion = '';
+let queueData = null;
+
+const triageView = document.getElementById('triage-view');
+const reviewView = document.getElementById('review-view');
+const loading = document.getElementById('loading');
+const triageList = document.getElementById('triage-list');
+const emptyEl = document.getElementById('empty');
+const queueBadge = document.getElementById('queue-badge');
+const noteTabs = document.getElementById('note-tabs');
+const noteBodies = document.getElementById('note-bodies');
+const chatMessages = document.getElementById('chat-messages');
+const chatInput = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-btn');
+const skipBtn = document.getElementById('skip-btn');
+const completeBtn = document.getElementById('complete-btn');
+
+chatInput.addEventListener('input', () => {
+  chatInput.style.height = 'auto';
+  chatInput.style.height = Math.min(chatInput.scrollHeight, 90) + 'px';
+});
+chatInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
+});
+sendBtn.addEventListener('click', sendReply);
+skipBtn.addEventListener('click', () => showTriage());
+completeBtn.addEventListener('click', completeReview);
+
+loadQueue();
+
+async function loadQueue() {
+  loading.style.display = '';
+  triageList.innerHTML = '';
+  emptyEl.style.display = 'none';
+  try {
+    const res = await fetch('/review/queue');
+    queueData = await res.json();
+    renderTriage();
+  } catch (e) {
+    loading.innerHTML = '<span style="color:var(--red)">Failed to load queue</span>';
+  }
+}
+
+function renderTriage() {
+  loading.style.display = 'none';
+  const notes = queueData.notes || [];
+  const groups = queueData.groups || [];
+  queueBadge.textContent = notes.length ? `${notes.length} note${notes.length !== 1 ? 's' : ''}` : '';
+  if (!notes.length) { emptyEl.style.display = ''; return; }
+
+  let html = '';
+  for (const g of groups) {
+    const gNotes = g.filenames.map(f => notes.find(n => n.filename === f)).filter(Boolean);
+    const isMulti = gNotes.length > 1;
+    html += '<div class="group-card">';
+    if (isMulti) {
+      html += `<div class="group-header"><span class="group-badge">${gNotes.length} related</span><span>${esc(g.label)}</span>`
+        + `<button class="btn primary group-review-btn" onclick='startReview(${JSON.stringify(g.filenames)})'>Review together</button></div>`;
+    }
+    for (const n of gNotes) {
+      const reReview = (n.review_count || 0) > 0;
+      html += `<div class="note-row">
+        <div class="note-title">${esc(n.filename.replace('.md',''))}${reReview ? `<span class="re-badge">re-review #${n.review_count + 1}</span>` : ''}</div>
+        <div class="note-meta"><span>${esc(n.date_created)}</span><span>${n.body_line_count} line${n.body_line_count !== 1 ? 's' : ''}</span>${(n.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+        <div class="note-preview">${esc(n.preview)}</div>
+        <div class="note-actions">
+          <button class="btn primary" onclick='startReview(["${escAttr(n.filename)}"])'>Review</button>
+          <button class="btn" onclick="autoTag('${escAttr(n.filename)}',this)">Auto-tag</button>
+          <button class="btn" onclick="this.closest('.note-row').style.display='none'">Skip</button>
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  triageList.innerHTML = html;
+}
+
+async function startReview(noteIds) {
+  showReview();
+  noteTabs.innerHTML = '';
+  noteBodies.innerHTML = '';
+  chatMessages.innerHTML = '';
+  sessionId = null;
+  currentQuestion = '';
+  sendBtn.disabled = false;
+  chatInput.disabled = false;
+  completeBtn.disabled = false;
+  completeBtn.textContent = 'Complete Review';
+
+  try {
+    const res = await fetch('/review/start', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({note_ids: noteIds}),
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    let qBubble = null;
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      const parts = buf.split('\n\n'); buf = parts.pop();
+      for (const part of parts) {
+        if (!part.startsWith('data: ')) continue;
+        let ev; try { ev = JSON.parse(part.slice(6)); } catch { continue; }
+        if (ev.type === 'session') {
+          sessionId = ev.session_id;
+          renderNotePanels(ev.notes);
+        }
+        if (ev.type === 'token') {
+          if (!qBubble) qBubble = addBubble('assistant', '', true);
+          qBubble.textContent += ev.content;
+          scrollChat();
+        }
+        if (ev.type === 'question_done') {
+          if (qBubble) qBubble.classList.remove('streaming');
+          currentQuestion = ev.full_question;
+          qBubble = null;
+          chatInput.focus();
+        }
+      }
+    }
+  } catch (e) { addBubble('assistant', 'Error: ' + e.message); }
+}
+
+async function sendReply() {
+  const answer = chatInput.value.trim();
+  if (!answer || !sessionId) return;
+  chatInput.value = '';
+  chatInput.style.height = 'auto';
+  addBubble('user', answer);
+
+  try {
+    const res = await fetch(`/review/${sessionId}/reply`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({answer, question: currentQuestion}),
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = ''; let qBubble = null;
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      const parts = buf.split('\n\n'); buf = parts.pop();
+      for (const part of parts) {
+        if (!part.startsWith('data: ')) continue;
+        let ev; try { ev = JSON.parse(part.slice(6)); } catch { continue; }
+        if (ev.type === 'token') {
+          if (!qBubble) qBubble = addBubble('assistant', '', true);
+          qBubble.textContent += ev.content;
+          scrollChat();
+        }
+        if (ev.type === 'question_done') {
+          if (qBubble) qBubble.classList.remove('streaming');
+          currentQuestion = ev.full_question;
+          qBubble = null;
+          chatInput.focus();
+        }
+        if (ev.type === 'interview_done') {
+          addBubble('assistant', 'Done — tap Complete Review to save, or keep chatting.');
+          chatInput.disabled = true; sendBtn.disabled = true;
+        }
+      }
+    }
+  } catch (e) { addBubble('assistant', 'Error: ' + e.message); }
+}
+
+async function completeReview() {
+  if (!sessionId) return;
+  completeBtn.disabled = true; completeBtn.textContent = 'Saving…';
+  try {
+    const res = await fetch(`/review/${sessionId}/complete`, {method:'POST'});
+    const data = await res.json();
+    chatMessages.innerHTML = '';
+    const panel = document.createElement('div');
+    panel.className = 'result-panel';
+    for (const r of data.results) {
+      const row = document.createElement('div'); row.className = 'result-row';
+      if (r.success) {
+        row.innerHTML = `<div style="color:var(--green);font-weight:600">✓ ${esc(r.filename)} — Review ${r.review_num}</div>`
+          + `<div class="result-tags">${(r.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`;
+      } else {
+        row.innerHTML = `<div style="color:var(--red)">✗ ${esc(r.filename)}: ${esc(r.error)}</div>`;
+      }
+      panel.appendChild(row);
+    }
+    const backBtn = document.createElement('button');
+    backBtn.className = 'btn primary'; backBtn.textContent = 'Back to queue';
+    backBtn.style.alignSelf = 'center';
+    backBtn.onclick = () => { showTriage(); loadQueue(); };
+    panel.appendChild(backBtn);
+    chatMessages.appendChild(panel);
+    scrollChat();
+  } catch (e) {
+    addBubble('assistant', 'Error: ' + e.message);
+    completeBtn.disabled = false; completeBtn.textContent = 'Complete Review';
+  }
+}
+
+async function autoTag(filename, btn) {
+  btn.disabled = true; btn.textContent = 'Tagging…';
+  try {
+    const res = await fetch(`/review/${encodeURIComponent(filename)}/auto-tag`, {method:'POST'});
+    const data = await res.json();
+    if (data.success) { btn.textContent = '✓'; btn.style.color = 'var(--green)'; setTimeout(loadQueue, 600); }
+    else { btn.textContent = 'Failed'; btn.style.color = 'var(--red)'; }
+  } catch { btn.textContent = 'Error'; btn.style.color = 'var(--red)'; }
+}
+
+function renderNotePanels(notes) {
+  noteTabs.innerHTML = '';
+  noteBodies.innerHTML = '';
+  notes.forEach((n, i) => {
+    const tab = document.createElement('div');
+    tab.className = 'note-tab' + (i === 0 ? ' active' : '');
+    tab.textContent = n.filename.replace('.md', '');
+    tab.onclick = () => {
+      noteTabs.querySelectorAll('.note-tab').forEach((t,j) => t.classList.toggle('active', j===i));
+      noteBodies.querySelectorAll('.note-body-wrap').forEach((b,j) => b.classList.toggle('active', j===i));
+    };
+    noteTabs.appendChild(tab);
+    const wrap = document.createElement('div');
+    wrap.className = 'note-body-wrap' + (i === 0 ? ' active' : '');
+    wrap.innerHTML = `<div class="note-body">${esc(n.body)}</div>`;
+    noteBodies.appendChild(wrap);
+  });
+}
+
+function addBubble(role, text, streaming=false) {
+  const el = document.createElement('div');
+  el.className = 'bubble ' + role + (streaming ? ' streaming' : '');
+  el.textContent = text;
+  chatMessages.appendChild(el);
+  scrollChat();
+  return el;
+}
+
+function scrollChat() { chatMessages.scrollTop = chatMessages.scrollHeight; }
+function showTriage() { triageView.classList.add('active'); reviewView.classList.remove('active'); }
+function showReview() { reviewView.classList.add('active'); triageView.classList.remove('active'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+</script>
+<script>if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
+</body>
+</html>
