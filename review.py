@@ -208,3 +208,124 @@ class SessionManager:
 
     def remove(self, session_id: str):
         self._sessions.pop(session_id, None)
+
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
+from typing import AsyncGenerator
+
+
+# ---------------------------------------------------------------------------
+# LLM helpers
+# ---------------------------------------------------------------------------
+
+def _get_review_llm() -> ChatOpenAI:
+    return ChatOpenAI(
+        base_url=os.environ.get('LLM_BASE_URL', 'https://openrouter.ai/api/v1'),
+        api_key=os.environ.get('OPENROUTER_API_KEY', ''),
+        model=os.environ.get('LLM_MODEL', 'google/gemini-2.5-flash-lite'),
+        temperature=0.7,
+        max_tokens=200,
+    )
+
+
+def _detect_note_style(body: str) -> str:
+    lines_ = [l for l in body.strip().split(chr(10)) if l.strip() and not l.strip().startswith('#')]
+    if len(lines_) <= 2:
+        return 'sparse'
+    list_lines = [l for l in lines_ if __import__('re').match(r'^\s*[-*\d]+[.)]\s', l)]
+    if list_lines and len(list_lines) >= len(lines_) * 0.6:
+        return 'list'
+    return 'normal'
+
+
+# ---------------------------------------------------------------------------
+# Interview engine
+# ---------------------------------------------------------------------------
+
+def build_interview_prompt(
+    notes: list,
+    rag_context: str,
+    previous_reviews: list,
+    question_count: int,
+) -> str:
+    grouped = len(notes) > 1
+    note_sections = []
+    for n in notes:
+        style = _detect_note_style(n['body'])
+        style_hint = ''
+        if style == 'sparse':
+            style_hint = ' [SHORT NOTE ask open-ended questions to expand: purpose, timeline, context]'
+        elif style == 'list':
+            style_hint = ' [LIST NOTE ask about the list as a whole: purpose, selection criteria, whats missing]'
+        note_sections.append(f"### {n['filename']}{style_hint}\n{n['body']}")
+    notes_text = '\n\n'.join(note_sections)
+    prev_section = ''
+    if previous_reviews:
+        prev_lines = '\n'.join(f"- {qa['q']}" for qa in previous_reviews)
+        prev_section = f'\nPREVIOUS REVIEW QUESTIONS do not repeat these:\n{prev_lines}\n'
+    rag_section = ''
+    if rag_context:
+        rag_section = f'\nRELATED NOTES FROM KNOWLEDGE BASE:\n{rag_context}\nUse these to ask bridging questions.\n'
+    grouped_note = ''
+    if grouped:
+        grouped_note = f'\nYou are reviewing {len(notes)} related notes together. Ask bridging questions that connect them.\n'
+    return (
+        "You are a notes interviewer helping Angelo enrich his personal notes.\n"
+        f"Ask ONE contextual question at a time. No preamble, no explanation just the question.{grouped_note}\n"
+        "RULES:\n"
+        "- Ask about purpose, timeline, constraints, connections, next steps\n"
+        "- NEVER answer, research, or explain the note topic\n"
+        f"- Maximum 3 questions total (this is question {question_count + 1})\n"
+        "- Stop earlier if the conversation reaches a natural conclusion\n"
+        f"{prev_section}{rag_section}\n"
+        "NOTES:\n"
+        f"{notes_text}"
+    )
+
+
+async def generate_question(
+    notes: list,
+    rag_context: str,
+    previous_reviews: list,
+    qa_so_far: list,
+    question_count: int,
+):
+    system = build_interview_prompt(notes, rag_context, previous_reviews, question_count)
+    messages = [SystemMessage(content=system)]
+    for qa in qa_so_far:
+        messages.append(HumanMessage(content=f"[Interviewer]: {qa['q']}"))
+        messages.append(HumanMessage(content=f"[Angelo]: {qa['a']}"))
+    messages.append(HumanMessage(content='Ask your next question.'))
+    llm = _get_review_llm()
+    async for chunk in llm.astream(messages):
+        if chunk.content:
+            yield chunk.content
+
+
+async def infer_tags(
+    notes: list,
+    rag_context: str,
+    qa: list,
+) -> list:
+    note_sections = '\n\n'.join(f"### {n['filename']}\n{n['body']}" for n in notes)
+    qa_section = '\n'.join(f"Q: {q['q']} A: {q['a']}" for q in qa) if qa else 'No interview.'
+    prompt = (
+        "Suggest 2-5 tags for these notes. Return ONLY a comma-separated list of lowercase hyphenated tags.\n\n"
+        f"NOTES:\n{note_sections}\n\n"
+        f"INTERVIEW:\n{qa_section}\n\n"
+        f"RELATED:\n{rag_context}\n\n"
+        "Tags:"
+    )
+    llm = _get_review_llm()
+    response = await llm.ainvoke([HumanMessage(content=prompt)])
+    raw = response.content.strip()
+    tags = [t.strip().lower().replace(' ', '-') for t in raw.split(',')]
+    return [t for t in tags if t and __import__('re').match(r'^[a-z0-9-]+$', t)][:5]
+
+
+def build_review_content(qa: list) -> str:
+    today = date.today().isoformat()
+    lines = [f'_{today}_']
+    for pair in qa:
+        lines.append(f"\n- **{pair['q']}** {pair['a']}")
+    return '\n'.join(lines)

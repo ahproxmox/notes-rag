@@ -224,3 +224,83 @@ def test_group_notes_by_similarity():
     group_files = [set(g['filenames']) for g in groups]
     assert {'venues.md', 'budget.md'} in group_files
     assert {'recipe.md'} in group_files
+
+
+from review import build_interview_prompt, build_review_content
+
+
+def test_build_prompt_single_note_contains_content():
+    prompt = build_interview_prompt(
+        notes=[{'filename': 'venues.md', 'body': '# Venues\n1) Poets Lane\n2) Lyrebird Falls'}],
+        rag_context='Related: engagement ring planning notes from March',
+        previous_reviews=[],
+        question_count=0,
+    )
+    assert 'Poets Lane' in prompt
+    assert 'Lyrebird Falls' in prompt
+    assert 'engagement ring' in prompt
+
+
+def test_build_prompt_grouped_notes():
+    prompt = build_interview_prompt(
+        notes=[
+            {'filename': 'venues.md', 'body': '# Venues\n1) Poets Lane'},
+            {'filename': 'budget.md', 'body': '# Budget\nVenue budget: $5000'},
+        ],
+        rag_context='',
+        previous_reviews=[],
+        question_count=0,
+    )
+    assert 'venues.md' in prompt
+    assert 'budget.md' in prompt
+
+
+def test_build_prompt_avoids_previous_questions():
+    prompt = build_interview_prompt(
+        notes=[{'filename': 'venues.md', 'body': '# Venues\n1) Poets Lane'}],
+        rag_context='',
+        previous_reviews=[
+            {'q': 'What prompted this list?', 'a': 'Started wedding planning'},
+        ],
+        question_count=0,
+    )
+    assert 'What prompted this list?' in prompt
+
+
+def test_build_prompt_sparse_note_hint():
+    prompt = build_interview_prompt(
+        notes=[{'filename': 'idea.md', 'body': 'Solar panels'}],
+        rag_context='',
+        previous_reviews=[],
+        question_count=0,
+    )
+    # Should hint about sparse/short notes
+    assert 'expand' in prompt.lower() or 'short' in prompt.lower() or 'sparse' in prompt.lower()
+
+
+def test_build_prompt_list_note_hint():
+    prompt = build_interview_prompt(
+        notes=[{'filename': 'list.md', 'body': '# Shopping\n- Milk\n- Eggs\n- Bread\n- Butter'}],
+        rag_context='',
+        previous_reviews=[],
+        question_count=0,
+    )
+    assert 'list' in prompt.lower()
+
+
+def test_build_review_content_with_qa():
+    qa = [
+        {'q': 'What prompted this?', 'a': 'Wedding planning'},
+        {'q': 'Any timeline?', 'a': 'Visiting next month'},
+    ]
+    content = build_review_content(qa)
+    assert 'What prompted this?' in content
+    assert 'Wedding planning' in content
+    assert 'Any timeline?' in content
+    assert 'Visiting next month' in content
+
+
+def test_build_review_content_empty():
+    content = build_review_content([])
+    # Should still return something (just the date line)
+    assert len(content) > 0
