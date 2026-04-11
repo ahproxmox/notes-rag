@@ -113,3 +113,98 @@ def scan_unreviewed(notes_dir: str) -> list[dict]:
 
     results.sort(key=lambda r: r['date_created'])
     return results
+
+import uuid
+
+
+# ---------------------------------------------------------------------------
+# Note grouping
+# ---------------------------------------------------------------------------
+
+def group_notes(
+    notes: list[dict],
+    similarity: dict[tuple[str, str], float],
+    threshold: float = 0.4,
+) -> list[dict]:
+    """Group notes by pairwise similarity using union-find.
+
+    Args:
+        notes: list of note dicts with filename key
+        similarity: dict mapping (filename_a, filename_b) -> float score
+        threshold: minimum score to group together
+
+    Returns list of group dicts: {group_id, filenames, label}
+    """
+    filenames = [n["filename"] for n in notes]
+    parent = {f: f for f in filenames}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for (a, b), score in similarity.items():
+        if score >= threshold and a in parent and b in parent:
+            union(a, b)
+
+    groups_map: dict[str, list[str]] = {}
+    for f in filenames:
+        root = find(f)
+        groups_map.setdefault(root, []).append(f)
+
+    groups = []
+    for i, (root, members) in enumerate(groups_map.items()):
+        groups.append({
+            'group_id': f'g{i}',
+            'filenames': members,
+            'label': members[0].replace('.md', '').replace('-', ' '),
+        })
+    return groups
+
+
+# ---------------------------------------------------------------------------
+# Session manager
+# ---------------------------------------------------------------------------
+
+class SessionManager:
+    """In-memory session store for active note reviews."""
+
+    def __init__(self):
+        self._sessions: dict[str, dict] = {}
+
+    def create(self, filenames: list[str], notes_data: list[dict]) -> dict:
+        """Create a new review session."""
+        session_id = uuid.uuid4().hex[:12]
+        session = {
+            'session_id': session_id,
+            'notes': notes_data,
+            'qa': [],
+            'question_count': 0,
+            'pending_question': '',
+            'done': False,
+        }
+        self._sessions[session_id] = session
+        return session
+
+    def get(self, session_id: str) -> dict | None:
+        return self._sessions.get(session_id)
+
+    def add_qa(self, session_id: str, question: str, answer: str):
+        session = self._sessions.get(session_id)
+        if session:
+            session['qa'].append({'q': question, 'a': answer})
+            session['question_count'] += 1
+
+    def mark_done(self, session_id: str):
+        session = self._sessions.get(session_id)
+        if session:
+            session['done'] = True
+
+    def remove(self, session_id: str):
+        self._sessions.pop(session_id, None)

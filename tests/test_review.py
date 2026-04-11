@@ -149,3 +149,78 @@ More content
     assert fm.get("reviewed") == "unreviewed"
     assert "---" in body
     assert "More content" in body
+
+
+from review import SessionManager, group_notes
+
+
+def test_session_create_single_note():
+    mgr = SessionManager()
+    session = mgr.create(['note1.md'], notes_data=[{
+        'filename': 'note1.md',
+        'path': '/tmp/note1.md',
+        'body': '# Venues\n1) Poets Lane',
+        'review_count': 0,
+        'previous_reviews': [],
+    }])
+    assert session['session_id'] is not None
+    assert len(session['notes']) == 1
+    assert session['notes'][0]['filename'] == 'note1.md'
+
+
+def test_session_create_grouped_notes():
+    mgr = SessionManager()
+    session = mgr.create(['note1.md', 'note2.md'], notes_data=[
+        {'filename': 'note1.md', 'path': '/tmp/note1.md',
+         'body': '# Venues\n1) Poets Lane', 'review_count': 0, 'previous_reviews': []},
+        {'filename': 'note2.md', 'path': '/tmp/note2.md',
+         'body': '# Budget\nVenue budget: $5000', 'review_count': 0, 'previous_reviews': []},
+    ])
+    assert len(session["notes"]) == 2
+
+
+def test_session_add_qa():
+    mgr = SessionManager()
+    session = mgr.create(['note1.md'], notes_data=[{
+        'filename': 'note1.md', 'path': '/tmp/note1.md',
+        'body': '# Venues', 'review_count': 0, 'previous_reviews': [],
+    }])
+    sid = session['session_id']
+    mgr.add_qa(sid, 'What prompted this list?', 'We started wedding planning last month')
+    state = mgr.get(sid)
+    assert len(state['qa']) == 1
+    assert state['qa'][0]['q'] == 'What prompted this list?'
+    assert state['qa'][0]['a'] == 'We started wedding planning last month'
+
+
+def test_session_get_nonexistent():
+    mgr = SessionManager()
+    assert mgr.get('nonexistent') is None
+
+
+def test_session_remove():
+    mgr = SessionManager()
+    session = mgr.create(['note1.md'], notes_data=[{
+        'filename': 'note1.md', 'path': '/tmp/note1.md',
+        'body': '# Venues', 'review_count': 0, 'previous_reviews': [],
+    }])
+    sid = session['session_id']
+    mgr.remove(sid)
+    assert mgr.get(sid) is None
+
+
+def test_group_notes_by_similarity():
+    notes = [
+        {'filename': 'venues.md', 'preview': 'Poets Lane, Lyrebird Falls'},
+        {'filename': 'budget.md', 'preview': 'Venue budget $5000'},
+        {'filename': 'recipe.md', 'preview': 'Focaccia recipe with rosemary'},
+    ]
+    similarity = {
+        ('venues.md', 'budget.md'): 0.75,
+        ('venues.md', 'recipe.md'): 0.1,
+        ('budget.md', 'recipe.md'): 0.05,
+    }
+    groups = group_notes(notes, similarity, threshold=0.4)
+    group_files = [set(g['filenames']) for g in groups]
+    assert {'venues.md', 'budget.md'} in group_files
+    assert {'recipe.md'} in group_files
