@@ -263,6 +263,11 @@ class MarkdownHandler(FileSystemEventHandler):
         if self.is_excluded(event.src_path):
             return
         path = event.src_path
+        # Inject frontmatter immediately for Notes/ files seen as modified events.
+        # Obsidian renames (Untitled → final name) fire as modified, not created,
+        # so on_created never runs for these files.
+        if is_in_notes_root(path, self.workspace):
+            inject_frontmatter(path)
         # Debounce: cancel any pending re-index for this file and restart the timer.
         # This means a file that is saved repeatedly (e.g. a note being edited)
         # only triggers one re-index, 8 seconds after the last save.
