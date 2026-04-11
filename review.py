@@ -23,7 +23,8 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
     if not content.startswith('---'):
         return {}, content
 
-    end = content.find('---', 3)
+    m = re.search(r'^\-\-\-\s*$', content[3:], re.MULTILINE)
+    end = (3 + m.start()) if m else -1
     if end == -1:
         return {}, content
 
@@ -57,7 +58,8 @@ def write_frontmatter(
     skip = {'date_created', 'reviewed', 'tags', 'review_count'}
     for k, v in fm.items():
         if k not in skip:
-            lines.append(f"{k}: {v}")
+            dumped = yaml.dump({k: v}, default_flow_style=False).strip()
+            lines.append(dumped)
     lines.append('---')
 
     review_section = f"\n## Review {review_num}\n{review_content}\n"

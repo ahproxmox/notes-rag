@@ -114,3 +114,38 @@ def test_scan_unreviewed():
         assert 'note3.md' in filenames
         note3 = next(r for r in results if r['filename'] == 'note3.md')
         assert note3['review_count'] == 1
+
+
+def test_write_frontmatter_preserves_passthrough_fields():
+    note = """---
+date_created: 2026-04-10
+reviewed: unreviewed
+tags: []
+source: discord
+---
+# Test note
+Some content
+"""
+    fm, body = parse_frontmatter(note)
+    result = write_frontmatter(fm, body, tags=["test"], review_num=1, review_content="_2026-04-11_")
+    assert "source: discord" in result
+
+
+def test_parse_frontmatter_with_hr_in_body():
+    note = """---
+date_created: 2026-04-10
+reviewed: unreviewed
+tags: []
+---
+# Note with divider
+
+Some content
+
+---
+
+More content
+"""
+    fm, body = parse_frontmatter(note)
+    assert fm.get("reviewed") == "unreviewed"
+    assert "---" in body
+    assert "More content" in body
