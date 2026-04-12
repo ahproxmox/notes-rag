@@ -128,7 +128,7 @@
 <body>
 
 <header>
-  <a href="/" class="back-link">← Search</a>
+  <a href="/" class="back-link">← Home</a>
   <h1>Review Notes</h1>
   <span class="spacer"></span>
   <span class="queue-badge" id="queue-badge"></span>
@@ -204,7 +204,7 @@ async function loadQueue() {
   triageList.innerHTML = '';
   emptyEl.style.display = 'none';
   try {
-    const res = await fetch('/review/queue');
+    const res = await fetch('/api/review/queue');
     queueData = await res.json();
     renderTriage();
   } catch (e) {
@@ -259,7 +259,7 @@ async function startReview(noteIds) {
   completeBtn.textContent = 'Complete Review';
 
   try {
-    const res = await fetch('/review/start', {
+    const res = await fetch('/api/review/start', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({note_ids: noteIds}),
     });
@@ -304,7 +304,7 @@ async function sendReply() {
   addBubble('user', answer);
 
   try {
-    const res = await fetch(`/review/${sessionId}/reply`, {
+    const res = await fetch(`/api/review/${sessionId}/reply`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({answer, question: currentQuestion}),
     });
@@ -343,7 +343,7 @@ async function completeReview() {
   if (!sessionId) return;
   completeBtn.disabled = true; completeBtn.textContent = 'Saving…';
   try {
-    const res = await fetch(`/review/${sessionId}/complete`, {method:'POST'});
+    const res = await fetch(`/api/review/${sessionId}/complete`, {method:'POST'});
     const data = await res.json();
     chatMessages.innerHTML = '';
     const panel = document.createElement('div');
@@ -374,7 +374,7 @@ async function completeReview() {
 async function autoTag(filename, btn) {
   btn.disabled = true; btn.textContent = 'Tagging…';
   try {
-    const res = await fetch(`/review/${encodeURIComponent(filename)}/auto-tag`, {method:'POST'});
+    const res = await fetch(`/api/review/${encodeURIComponent(filename)}/auto-tag`, {method:'POST'});
     const data = await res.json();
     if (data.success) { btn.textContent = '✓'; btn.style.color = 'var(--green)'; setTimeout(loadQueue, 600); }
     else { btn.textContent = 'Failed'; btn.style.color = 'var(--red)'; }

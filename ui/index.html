@@ -59,10 +59,10 @@
       color: var(--text-muted); background: var(--tag-bg);
     }
     .badge.green { color: var(--green); border-color: #2ea04330; background: #2ea04310; }
-    #review-btn { background: var(--tag-bg); border: 1px solid var(--border); color: var(--text-muted);
+    #home-btn, #review-btn { background: var(--tag-bg); border: 1px solid var(--border); color: var(--text-muted);
       border-radius: 6px; padding: 5px 12px; font-size: 12px; text-decoration: none;
       transition: border-color 0.15s, color 0.15s; }
-    #review-btn:hover { border-color: var(--accent); color: var(--text); }
+    #home-btn:hover, #review-btn:hover { border-color: var(--accent); color: var(--text); }
     .spacer { flex: 1; }
     #chunk-count { font-size: 11px; color: var(--text-muted); font-family: 'SF Mono', monospace; }
 
@@ -302,6 +302,7 @@
 <header>
   <h1>Notes RAG</h1>
   <span class="badge green">● live</span>
+  <a href="/" id="home-btn">← Home</a>
   <a href="/review" id="review-btn">Review Notes</a>
   <span class="spacer"></span>
 </header>
@@ -388,13 +389,14 @@
     scrollToBottom();
 
     try {
-      const response = await fetch('/search/stream', {
+      const response = await fetch('/api/search/stream', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({query}),
       });
 
       const reader = response.body.getReader();
+
       const decoder = new TextDecoder();
       let buffer = '';
 

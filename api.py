@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, APIRouter
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -7,20 +7,27 @@ from research import research
 from entities import EntityStore
 import os
 import re
+import requests as http_requests
 from datetime import date
 from pathlib import Path
 
 app = FastAPI()
+api = APIRouter(prefix='/api')
 
 _ui_dir = os.path.join(os.path.dirname(__file__), 'ui')
 app.mount('/ui', StaticFiles(directory=_ui_dir), name='ui')
 
 _log_path = Path('/mnt/Claude/log.md')
 _wiki_dir = Path('/mnt/Claude/wiki')
+_todos_dir = Path('/mnt/Claude/todos')
+_inbox_dir = Path('/mnt/Obsidian/Inbox')
+_TODOS_INDEXER = 'http://192.168.88.78:3000'
 
 _entities_db = os.environ.get('ENTITIES_DB', os.path.join(os.path.dirname(__file__), 'entities.db'))
 _entity_store = EntityStore(_entities_db)
 
+
+# ── Pydantic models ──────────────────────────────────────────────────────────
 
 class SearchRequest(BaseModel):
     query: str
@@ -58,9 +65,37 @@ class WikiSaveRequest(BaseModel):
     sources: list[str] = []  # source filenames that contributed
 
 
+class TodoCreateRequest(BaseModel):
+    title: str
+    description: str = ''
+    priority: str = 'medium'
+    swimlane: str = 'Dev'
+    assignee: str = ''
+
+
+class NoteCreateRequest(BaseModel):
+    title: str
+    description: str = ''
+
+
+# ── UI routes ────────────────────────────────────────────────────────────────
+
 @app.get('/')
-def index():
+def home():
+    return FileResponse(os.path.join(_ui_dir, 'home.html'))
+
+@app.get('/search')
+def search_page():
     return FileResponse(os.path.join(_ui_dir, 'index.html'))
+
+@app.get('/new')
+def new_page():
+    return FileResponse(os.path.join(_ui_dir, 'new.html'))
+
+@app.get('/review')
+def review_page():
+    return FileResponse(os.path.join(_ui_dir, 'review.html'))
+
 @app.get('/manifest.json')
 def manifest():
     return FileResponse(os.path.join(_ui_dir, 'manifest.json'), media_type='application/manifest+json')
@@ -70,43 +105,35 @@ def service_worker():
     return FileResponse(os.path.join(_ui_dir, 'sw.js'), media_type='application/javascript')
 
 
+# ── API: health, stats ───────────────────────────────────────────────────────
 
-
-@app.get('/health')
+@api.get('/health')
 def health():
     return {'status': 'ok'}
 
-
-@app.get('/stats')
+@api.get('/stats')
 def stats():
     return get_stats()
 
 
-@app.get('/entities')
+# ── API: entities ────────────────────────────────────────────────────────────
+
+@api.get('/entities')
 def entities_list(type: str | None = None, wing: str | None = None,
                   q: str | None = None, k: int = Query(default=20, ge=1, le=200)):
-    """List or search entities.
-
-    - Pass `q=...` for FTS fuzzy search
-    - Otherwise returns filtered by type/wing
-    """
     if q:
         return {'entities': _entity_store.search(q, k=k)}
     return {'entities': _entity_store.list(type=type, wing=wing)}
 
-
-@app.get('/entities/{slug}')
+@api.get('/entities/{slug}')
 def entities_get(slug: str):
-    """Fetch a single entity by slug or alias."""
     e = _entity_store.get(slug)
     if not e:
         raise HTTPException(status_code=404, detail=f'entity not found: {slug}')
     return e
 
-
-@app.post('/entities')
+@api.post('/entities')
 def entities_upsert(req: EntityUpsertRequest):
-    """Insert or update an entity."""
     e = _entity_store.upsert(
         slug=req.slug, type=req.type, name=req.name,
         wing=req.wing, summary=req.summary,
@@ -115,9 +142,10 @@ def entities_upsert(req: EntityUpsertRequest):
     return e
 
 
-@app.get('/log/recent')
+# ── API: log ─────────────────────────────────────────────────────────────────
+
+@api.get('/log/recent')
 def log_recent(n: int = Query(default=50, ge=1, le=500)):
-    """Return the last N lines of the workspace event log. No embedding — direct tail."""
     if not _log_path.exists():
         return {'lines': [], 'path': str(_log_path), 'error': 'log.md not found'}
     text = _log_path.read_text(encoding='utf-8', errors='replace')
@@ -127,15 +155,15 @@ def log_recent(n: int = Query(default=50, ge=1, le=500)):
     return {'lines': recent, 'total': len(entry_lines), 'returned': len(recent)}
 
 
-@app.get('/wiki')
+# ── API: wiki ────────────────────────────────────────────────────────────────
+
+@api.get('/wiki')
 def wiki_list():
-    """List all wiki pages with their metadata."""
     if not _wiki_dir.exists():
         return {'pages': []}
     pages = []
     for p in sorted(_wiki_dir.glob('*.md')):
         text = p.read_text(encoding='utf-8', errors='replace')
-        # Extract frontmatter fields
         generated = ''
         title = p.stem
         if text.startswith('---'):
@@ -149,30 +177,17 @@ def wiki_list():
         pages.append({'slug': p.stem, 'title': title, 'generated': generated, 'path': str(p)})
     return {'pages': pages}
 
-
-@app.post('/wiki/save')
+@api.post('/wiki/save')
 def wiki_save(req: WikiSaveRequest):
-    """Save a synthesised answer as a wiki page in /mnt/Claude/wiki/.
-
-    Creates or overwrites wiki/<topic>.md. The watcher picks it up and
-    indexes it automatically. Intended for agents and the notes-curator
-    to persist high-quality synthesis results.
-    """
     _wiki_dir.mkdir(parents=True, exist_ok=True)
-
-    # Sanitise slug — lowercase, hyphens only
     slug = re.sub(r'[^a-z0-9-]', '-', req.topic.lower().strip())
     slug = re.sub(r'-+', '-', slug).strip('-')
     if not slug:
         return {'error': 'Invalid topic slug'}, 400
-
     path = _wiki_dir / f'{slug}.md'
     today = date.today().isoformat()
     sources_yaml = '\n'.join(f'  - {s}' for s in req.sources) if req.sources else '  []'
-
-    # Strip a leading h1 if the answer already contains one
     body = re.sub(r'^#\s+.+\n+', '', req.answer.strip()).strip()
-
     content = f"""---
 title: "{req.title}"
 type: wiki
@@ -187,12 +202,13 @@ sources:
 {body}
 """
     path.write_text(content, encoding='utf-8')
-
     action = 'updated' if path.exists() else 'created'
     return {'saved': str(path), 'slug': slug, 'action': action}
 
 
-@app.post('/search')
+# ── API: search ───────────────────────────────────────────────────────────────
+
+@api.post('/search')
 def search_endpoint(req: SearchRequest):
     if req.bm25_weight is not None and req.vector_weight is not None:
         answer, sources, chunks = search_with_weights(req.query, req.bm25_weight, req.vector_weight)
@@ -203,8 +219,7 @@ def search_endpoint(req: SearchRequest):
         answer, sources, chunks = search(req.query, folder=req.folder, wing=req.wing, room=req.room)
     return {'answer': answer, 'sources': sources, 'chunks': chunks}
 
-
-@app.post('/search/stream')
+@api.post('/search/stream')
 async def search_stream_endpoint(req: SearchRequest):
     return StreamingResponse(
         search_stream(req.query, folder=req.folder, wing=req.wing, room=req.room),
@@ -212,18 +227,111 @@ async def search_stream_endpoint(req: SearchRequest):
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
     )
 
-
-@app.post('/similar')
+@api.post('/similar')
 def similar_endpoint(req: SimilarRequest):
-    """Return top-k similar documents by vector similarity. No LLM call."""
     results = similar(req.query, k=req.k)
     return {'results': results}
 
-
-@app.post('/research')
+@api.post('/research')
 def research_endpoint(req: ResearchRequest):
     summary, filepath = research(req.query)
     return {'summary': summary, 'filepath': filepath}
+
+
+# ── API: todos ────────────────────────────────────────────────────────────────
+
+@api.get('/todos/next-id')
+def todos_next_id():
+    """Proxy to todos-indexer on CT 122, return the next available todo ID."""
+    try:
+        resp = http_requests.get(f'{_TODOS_INDEXER}/todos', timeout=5)
+        resp.raise_for_status()
+        todos = resp.json()
+        if not todos:
+            return {'next_id': 1}
+        max_id = max((t.get('id', 0) for t in todos if isinstance(t.get('id'), int)), default=0)
+        return {'next_id': max_id + 1}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f'Todos indexer unavailable: {e}')
+
+@api.get('/todos/pending-count')
+def todos_pending_count():
+    """Return count of pending todos for dashboard stats."""
+    try:
+        resp = http_requests.get(f'{_TODOS_INDEXER}/todos?status=pending', timeout=5)
+        resp.raise_for_status()
+        todos = resp.json()
+        return {'count': len(todos)}
+    except Exception as e:
+        return {'count': None, 'error': str(e)}
+
+@api.post('/todos/create')
+def todos_create(req: TodoCreateRequest):
+    """Create a new todo markdown file in /mnt/Claude/todos/."""
+    try:
+        resp = http_requests.get(f'{_TODOS_INDEXER}/todos', timeout=5)
+        resp.raise_for_status()
+        existing = resp.json()
+        max_id = max((t.get('id', 0) for t in existing if isinstance(t.get('id'), int)), default=0)
+        todo_id = max_id + 1
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f'Could not determine next ID: {e}')
+
+    slug = re.sub(r'[^a-z0-9-]', '-', req.title.lower().strip())
+    slug = re.sub(r'-+', '-', slug).strip('-')[:60]
+    filename = f'{todo_id:03d}-{slug}.md'
+    path = _todos_dir / filename
+    today = date.today().isoformat()
+
+    assignee_line = f'assignee: {req.assignee}\n' if req.assignee else ''
+    content = (
+        f'---\n'
+        f'id: {todo_id}\n'
+        f'title: "{req.title}"\n'
+        f'status: pending\n'
+        f'priority: {req.priority}\n'
+        f'created: {today}\n'
+        f'swimlane: {req.swimlane}\n'
+        f'{assignee_line}'
+        f'---\n'
+    )
+    if req.description:
+        content += f'\n{req.description}\n'
+
+    _todos_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding='utf-8')
+    return {'created': filename, 'id': todo_id, 'path': str(path)}
+
+@api.post('/notes/create')
+def notes_create(req: NoteCreateRequest):
+    """Create a new note in /mnt/Obsidian/Notes/ with standard frontmatter.
+
+    Saves directly to Notes/ so the watcher picks it up for indexing and
+    inject_frontmatter runs on it (date_created, reviewed, tags fields).
+    Frontmatter is pre-populated here to match the watcher's injected format.
+    """
+    slug = re.sub(r'[^a-z0-9-]', '-', req.title.lower().strip())
+    slug = re.sub(r'-+', '-', slug).strip('-')[:80]
+    filename = f'{slug}.md'
+    path = Path('/mnt/Obsidian/Notes') / filename
+    today = date.today().isoformat()
+
+    content = (
+        f'---\n'
+        f'title: "{req.title}"\n'
+        f'date_created: {today}\n'
+        f'reviewed: unreviewed\n'
+        f'tags: []\n'
+        f'---\n'
+    )
+    if req.description:
+        content += f'\n{req.description}\n'
+
+    path.write_text(content, encoding='utf-8')
+    return {'created': filename, 'path': str(path)}
+
+
+# ── API: review ───────────────────────────────────────────────────────────────
 
 import json
 from review import (
@@ -233,34 +341,23 @@ from review import (
 )
 
 _session_mgr = SessionManager()
-_notes_dir = '/mnt/Obsidian/Notes'
+_review_notes_dir = '/mnt/Obsidian/Notes'
 
 
 class ReviewStartRequest(BaseModel):
-    note_ids: list[str]  # filenames e.g. ["Wedding notes.md"]
+    note_ids: list[str]
 
 
 class ReviewReplyRequest(BaseModel):
     answer: str
-    question: str = ''  # question this answer is for
+    question: str = ''
 
 
-# ---------------------------------------------------------------------------
-# Review routes
-# ---------------------------------------------------------------------------
-
-@app.get('/review')
-def review_page():
-    return FileResponse(os.path.join(_ui_dir, 'review.html'))
-
-
-@app.get('/review/queue')
+@api.get('/review/queue')
 def review_queue():
-    """Scan for unreviewed notes, group by similarity, return triage queue."""
-    notes = scan_unreviewed(_notes_dir)
+    notes = scan_unreviewed(_review_notes_dir)
     if not notes:
         return {'notes': [], 'groups': []}
-
     similarity = {}
     if len(notes) > 1:
         for i, a in enumerate(notes):
@@ -275,27 +372,22 @@ def review_queue():
                     similarity[(a['filename'], b['filename'])] = b_score
                 except Exception:
                     similarity[(a['filename'], b['filename'])] = 0.0
-
     groups = group_notes(notes, similarity, threshold=0.4)
     return {'notes': notes, 'groups': groups}
 
-@app.post('/review/start')
+@api.post('/review/start')
 async def review_start(req: ReviewStartRequest):
-    """Start a review session -- validates notes, loads content, gets RAG context, streams first question."""
     notes_data = []
     for fname in req.note_ids:
-        path = os.path.join(_notes_dir, fname)
+        path = os.path.join(_review_notes_dir, fname)
         if not os.path.exists(path):
             raise HTTPException(status_code=404, detail=f'Note not found: {fname}')
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
         fm, body = parse_frontmatter(content)
-
-        # Extract Q&A from previous ## Review N sections for re-reviews
         previous_reviews = []
         for m in re.finditer(r'\*\*(.+?)\*\*\s+(.+)', body):
             previous_reviews.append({'q': m.group(1), 'a': m.group(2)})
-
         notes_data.append({
             'filename': fname,
             'path': path,
@@ -303,21 +395,15 @@ async def review_start(req: ReviewStartRequest):
             'review_count': fm.get('review_count', 0),
             'previous_reviews': previous_reviews,
         })
-
-    # RAG context for all notes combined
     combined_text = ' '.join(n['body'][:200] for n in notes_data)
     rag_context = ''
     try:
         _, _, chunks = search(combined_text)
-        rag_context = '\n'.join(
-            f"[{c['source']}] {c['content'][:200]}" for c in chunks[:3]
-        )
+        rag_context = '\n'.join(f"[{c['source']}] {c['content'][:200]}" for c in chunks[:3])
     except Exception:
         pass
-
     session = _session_mgr.create(req.note_ids, notes_data)
     session['rag_context'] = rag_context
-
     all_previous = []
     for n in notes_data:
         all_previous.extend(n.get('previous_reviews', []))
@@ -331,29 +417,21 @@ async def review_start(req: ReviewStartRequest):
         session['pending_question'] = question_text
         yield f"data: {json.dumps({'type': 'question_done', 'full_question': question_text})}\n\n"
 
-    return StreamingResponse(
-        stream(),
-        media_type='text/event-stream',
-        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
-    )
+    return StreamingResponse(stream(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
-
-@app.post('/review/{session_id}/reply')
+@api.post('/review/{session_id}/reply')
 async def review_reply(session_id: str, req: ReviewReplyRequest):
-    """Process an interview answer and stream the next question (or signal done)."""
     session = _session_mgr.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail='Session not found')
-
     question = req.question or session.get('pending_question', '')
     _session_mgr.add_qa(session_id, question, req.answer)
-
     if session['question_count'] >= 3:
         async def stream_done():
             yield f"data: {json.dumps({'type': 'interview_done'})}\n\n"
         return StreamingResponse(stream_done(), media_type='text/event-stream',
                                  headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
-
     all_previous = []
     for n in session['notes']:
         all_previous.extend(n.get('previous_reviews', []))
@@ -372,14 +450,11 @@ async def review_reply(session_id: str, req: ReviewReplyRequest):
     return StreamingResponse(stream(), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
-
-@app.post('/review/{session_id}/complete')
+@api.post('/review/{session_id}/complete')
 async def review_complete(session_id: str):
-    """Complete interview -- infer tags, append review section, update frontmatter, verify write."""
     session = _session_mgr.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail='Session not found')
-
     results = []
     for note in session['notes']:
         path = note['path']
@@ -389,26 +464,21 @@ async def review_complete(session_id: str):
         except OSError as e:
             results.append({'filename': note['filename'], 'success': False, 'error': str(e)})
             continue
-
         fm, body = parse_frontmatter(content)
         review_num = fm.get('review_count', 0) + 1
         tags = await infer_tags([note], session.get('rag_context', ''), session['qa'])
         review_content = build_review_content(session['qa'])
         new_content = write_frontmatter(fm, body, tags, review_num, review_content)
-
         try:
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
         except OSError as e:
             results.append({'filename': note['filename'], 'success': False, 'error': str(e)})
             continue
-
-        # Verify write
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 verify_fm, _ = parse_frontmatter(f.read())
             if verify_fm.get('reviewed') is not True:
-                # Retry once
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(new_content)
                 with open(path, 'r', encoding='utf-8') as f:
@@ -420,48 +490,84 @@ async def review_complete(session_id: str):
         except OSError as e:
             results.append({'filename': note['filename'], 'success': False, 'error': str(e)})
             continue
-
         results.append({'filename': note['filename'], 'success': True,
                         'tags': tags, 'review_num': review_num})
-
     _session_mgr.remove(session_id)
     return {'results': results}
 
-
-@app.post('/review/{note_id:path}/skip')
+@api.post('/review/{note_id:path}/skip')
 def review_skip(note_id: str):
     return {'skipped': note_id}
 
-
-@app.post('/review/{note_id:path}/auto-tag')
+@api.post('/review/{note_id:path}/auto-tag')
 async def review_auto_tag(note_id: str):
-    """Auto-tag without interview -- infer tags from content and RAG context."""
-    path = os.path.join(_notes_dir, note_id)
+    path = os.path.join(_review_notes_dir, note_id)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail=f'Note not found: {note_id}')
-
     with open(path, 'r', encoding='utf-8') as f:
         content = f.read()
     fm, body = parse_frontmatter(content)
     review_num = fm.get('review_count', 0) + 1
-
     rag_context = ''
     try:
         _, _, chunks = search(body[:200])
         rag_context = '\n'.join(f"[{c['source']}] {c['content'][:200]}" for c in chunks[:3])
     except Exception:
         pass
-
     tags = await infer_tags([{'filename': note_id, 'body': body}], rag_context, [])
     review_content = build_review_content([])
     new_content = write_frontmatter(fm, body, tags, review_num, review_content)
-
     with open(path, 'w', encoding='utf-8') as f:
         f.write(new_content)
-
     with open(path, 'r', encoding='utf-8') as f:
         verify_fm, _ = parse_frontmatter(f.read())
     if verify_fm.get('reviewed') is not True:
         return {'success': False, 'error': 'Write verification failed'}
-
     return {'success': True, 'tags': tags, 'filename': note_id, 'review_num': review_num}
+
+
+# ── API: services health ──────────────────────────────────────────────────────
+
+_SERVICES = [
+    {'id': 'notes',    'label': 'Notes RAG',  'url': 'http://192.168.88.71:8080/api/health'},
+    {'id': 'kanban',   'label': 'Kanban',      'url': 'http://192.168.88.78:3000'},
+    {'id': 'reports',  'label': 'Reports',     'url': 'http://192.168.88.55:80'},
+    {'id': 'grafana',  'label': 'Grafana',     'url': 'http://192.168.88.73:3000'},
+    {'id': 'dashboard','label': 'Dashboard',   'url': 'http://192.168.88.127:8080'},
+]
+
+@api.get('/services/health')
+def services_health():
+    """Server-side health check for all linked services."""
+    results = {}
+    for svc in _SERVICES:
+        try:
+            r = http_requests.get(svc['url'], timeout=2)
+            results[svc['id']] = 'up' if r.status_code < 500 else 'down'
+        except Exception:
+            results[svc['id']] = 'down'
+    return results
+
+
+# ── Register router + backward-compat aliases ─────────────────────────────────
+app.include_router(api)
+
+# Old paths kept as aliases so external callers (OpenClaw, skills) keep working
+# during the transition — remove once AGENTS.md + SKILL.md are updated and verified.
+app.add_api_route('/health',            health,                 methods=['GET'])
+app.add_api_route('/stats',             stats,                  methods=['GET'])
+app.add_api_route('/search',            search_endpoint,        methods=['POST'])
+app.add_api_route('/search/stream',     search_stream_endpoint, methods=['POST'])
+app.add_api_route('/similar',           similar_endpoint,       methods=['POST'])
+app.add_api_route('/research',          research_endpoint,      methods=['POST'])
+app.add_api_route('/wiki',              wiki_list,              methods=['GET'])
+app.add_api_route('/wiki/save',         wiki_save,              methods=['POST'])
+app.add_api_route('/log/recent',        log_recent,             methods=['GET'])
+app.add_api_route('/entities',          entities_list,          methods=['GET'])
+app.add_api_route('/entities',          entities_upsert,        methods=['POST'])
+app.add_api_route('/review/queue',      review_queue,           methods=['GET'])
+app.add_api_route('/review/start',      review_start,           methods=['POST'])
+app.add_api_route('/review/{session_id}/reply',      review_reply,      methods=['POST'])
+app.add_api_route('/review/{session_id}/complete',   review_complete,   methods=['POST'])
+app.add_api_route('/review/{note_id:path}/skip',     review_skip,       methods=['POST'])
+app.add_api_route('/review/{note_id:path}/auto-tag', review_auto_tag,   methods=['POST'])

@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Notes RAG">
+  <link rel="apple-touch-icon" href="/ui/icon.png">
+  <title>Workspace</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2128;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --text-muted:#8b949e;
+      --accent:    #58a6ff;
+      --green:     #3fb950;
+      --red:       #f85149;
+      --yellow:    #d29922;
+      --tag-bg:    #21262d;
+      --radius:    12px;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── Header ── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+    }
+    .logo {
+      width: 26px; height: 26px;
+      background: var(--surface2);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .logo svg { width: 16px; height: 16px; }
+    header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+    .live-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green); flex-shrink: 0;
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    /* ── Main layout ── */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    /* ── Stats row ── */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--text);
+      line-height: 1;
+    }
+    .stat-value.loading { color: var(--text-muted); font-size: 16px; }
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Section heading ── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 12px;
+    }
+
+    /* ── Tiles grid ── */
+    .tiles {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .tile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-decoration: none;
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+      cursor: pointer;
+      position: relative;
+    }
+    .tile:hover {
+      border-color: var(--accent);
+      background: var(--surface2);
+      transform: translateY(-1px);
+    }
+    .tile:active { transform: translateY(0); }
+
+    .tile-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .tile-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .tile:hover .tile-icon {
+      border-color: var(--accent);
+    }
+    .tile-icon svg { width: 18px; height: 18px; color: var(--accent); }
+
+    .health-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+      margin-top: 2px;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .health-dot.up   { background: var(--green); box-shadow: 0 0 5px var(--green); }
+    .health-dot.down { background: var(--red); }
+
+    .tile-title {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+    }
+    .tile-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    /* New tile — accent border */
+    .tile.primary {
+      border-color: #2d4a6a;
+      background: #0d1b2a;
+    }
+    .tile.primary:hover {
+      border-color: var(--accent);
+      background: #101e2e;
+    }
+    .tile.primary .tile-icon {
+      background: #1d2d3e;
+      border-color: #2d4a6a;
+    }
+
+    @media (max-width: 600px) {
+      .stats-row { flex-direction: column; }
+      .tiles { grid-template-columns: 1fr 1fr; }
+      main { padding: 20px 16px; }
+    }
+    @media (max-width: 380px) {
+      .tiles { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+      <rect x="3" y="1.5" width="10" height="13" rx="1.5"/>
+      <line x1="5.5" y1="5.5" x2="10.5" y2="5.5"/>
+      <line x1="5.5" y1="8" x2="10.5" y2="8"/>
+      <line x1="5.5" y1="10.5" x2="8.5" y2="10.5"/>
+    </svg>
+  </div>
+  <h1>Workspace</h1>
+  <div class="live-dot" title="Notes RAG online"></div>
+</header>
+
+<main>
+  <!-- Stats row -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-value loading" id="stat-chunks">—</div>
+      <div class="stat-label">Indexed Chunks</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value loading" id="stat-unreviewed">—</div>
+      <div class="stat-label">Unreviewed Notes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value loading" id="stat-todos">—</div>
+      <div class="stat-label">Pending Todos</div>
+    </div>
+  </div>
+
+  <!-- Tiles -->
+  <div class="section-label">Services</div>
+  <div class="tiles">
+
+    <a class="tile primary" href="/new">
+      <div class="tile-top">
+        <div class="tile-icon">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="9" y1="3" x2="9" y2="15"/>
+            <line x1="3" y1="9" x2="15" y2="9"/>
+          </svg>
+        </div>
+        <div class="health-dot up" id="health-notes"></div>
+      </div>
+      <div class="tile-title">New</div>
+      <div class="tile-desc">Create a todo or note and save it to the workspace</div>
+    </a>
+
+    <a class="tile" href="/search">
+      <div class="tile-top">
+        <div class="tile-icon">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="7.5" cy="7.5" r="4.5"/>
+            <line x1="11.5" y1="11.5" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <div class="health-dot" id="health-search"></div>
+      </div>
+      <div class="tile-title">Search</div>
+      <div class="tile-desc">Ask your workspace — hybrid BM25 + vector retrieval</div>
+    </a>
+
+    <a class="tile" href="/review">
+      <div class="tile-top">
+        <div class="tile-icon">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l3.5 3.5L15 5"/>
+          </svg>
+        </div>
+        <div class="health-dot" id="health-review"></div>
+      </div>
+      <div class="tile-title">Review</div>
+      <div class="tile-desc">Triage and tag unreviewed Obsidian notes</div>
+    </a>
+
+    <a class="tile" href="https://reports.internal.ahproxmox-claude.cc" target="_blank">
+      <div class="tile-top">
+        <div class="tile-icon">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="2.5" width="13" height="13" rx="1.5"/>
+            <line x1="5.5" y1="7" x2="12.5" y2="7"/>
+            <line x1="5.5" y1="10" x2="10" y2="10"/>
+            <line x1="5.5" y1="13" x2="8" y2="13"/>
+          </svg>
+        </div>
+        <div class="health-dot" id="health-reports"></div>
+      </div>
+      <div class="tile-title">Reports</div>
+      <div class="tile-desc">Research reports and workspace summaries</div>
+    </a>
+
+    <a class="tile" href="https://kanban.internal.ahproxmox-claude.cc" target="_blank">
+      <div class="tile-top">
+        <div class="tile-icon">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="3" width="3.5" height="12" rx="1"/>
+            <rect x="7.25" y="3" width="3.5" height="8" rx="1"/>
+            <rect x="12" y="3" width="3.5" height="10" rx="1"/>
+          </svg>
+        </div>
+        <div class="health-dot" id="health-kanban"></div>
+      </div>
+      <div class="tile-title">Kanban</div>
+      <div class="tile-desc">Project board and task tracking</div>
+    </a>
+
+    <a class="tile" href="https://grafana.internal.ahproxmox-claude.cc" target="_blank">
+      <div class="tile-top">
+        <div class="tile-icon">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="2,13 6,8 9,11 13,5 16,7"/>
+            <line x1="2" y1="15.5" x2="16" y2="15.5"/>
+          </svg>
+        </div>
+        <div class="health-dot" id="health-grafana"></div>
+      </div>
+      <div class="tile-title">Grafana</div>
+      <div class="tile-desc">Metrics, dashboards, and token cost monitoring</div>
+    </a>
+
+  </div>
+</main>
+
+<script>
+  // ── Stats ────────────────────────────────────────────────────────────────────
+  async function loadStats() {
+    // Indexed chunk count
+    fetch('/api/stats')
+      .then(r => r.json())
+      .then(d => {
+        const el = document.getElementById('stat-chunks');
+        el.textContent = d.total_chunks != null ? d.total_chunks.toLocaleString() : '—';
+        el.classList.remove('loading');
+      })
+      .catch(() => { document.getElementById('stat-chunks').textContent = '—'; });
+
+    // Unreviewed notes
+    fetch('/api/review/queue')
+      .then(r => r.json())
+      .then(d => {
+        const el = document.getElementById('stat-unreviewed');
+        el.textContent = (d.notes || []).length;
+        el.classList.remove('loading');
+      })
+      .catch(() => { document.getElementById('stat-unreviewed').textContent = '—'; });
+
+    // Pending todos
+    fetch('/api/todos/pending-count')
+      .then(r => r.json())
+      .then(d => {
+        const el = document.getElementById('stat-todos');
+        el.textContent = d.count != null ? d.count : '—';
+        el.classList.remove('loading');
+      })
+      .catch(() => { document.getElementById('stat-todos').textContent = '—'; });
+  }
+
+  // ── Health dots ───────────────────────────────────────────────────────────────
+  async function loadHealth() {
+    try {
+      const res = await fetch('/api/services/health');
+      const data = await res.json();
+
+      // Notes RAG is always up if we got here — mark search + review + new
+      const notesUp = data.notes === 'up';
+      ['health-notes', 'health-search', 'health-review'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.className = 'health-dot ' + (notesUp ? 'up' : 'down');
+      });
+
+      const map = { reports: 'health-reports', kanban: 'health-kanban', grafana: 'health-grafana' };
+      for (const [svc, id] of Object.entries(map)) {
+        const el = document.getElementById(id);
+        if (el) el.className = 'health-dot ' + (data[svc] === 'up' ? 'up' : 'down');
+      }
+    } catch {
+      // Leave dots grey on failure
+    }
+  }
+
+  loadStats();
+  loadHealth();
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
+</script>
+</body>
+</html>
