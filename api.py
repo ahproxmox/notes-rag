@@ -341,6 +341,128 @@ def notes_create(req: NoteCreateRequest):
     return {'created': filename, 'path': str(path)}
 
 
+# ── API: research queue ───────────────────────────────────────────────────────
+
+_queue_dir = Path('/mnt/Claude/research-queue')
+_inbox_dir_path = Path('/mnt/Obsidian/Inbox')
+
+
+class StashCreateRequest(BaseModel):
+    url: str
+    description: str = ''
+
+
+class ResearchCreateRequest(BaseModel):
+    prompt: str
+
+
+class ForecastCreateRequest(BaseModel):
+    prompt: str
+
+
+def _queue_slug(text: str, max_len: int = 50) -> str:
+    slug = re.sub(r'https?://(www\.)?', '', text.lower())
+    slug = re.sub(r'[^a-z0-9-]', '-', slug)
+    slug = re.sub(r'-+', '-', slug).strip('-')
+    return slug[:max_len]
+
+
+@api.post('/queue/stash')
+def queue_stash(req: StashCreateRequest):
+    """Write a stash queue file to /mnt/Claude/research-queue/."""
+    from datetime import datetime, timezone
+    slug = _queue_slug(req.url)
+    filename = f'stash-{slug}.md'
+    path = _queue_dir / filename
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M+00:00')
+    content = (
+        f'---\n'
+        f'type: stash\n'
+        f'url: {req.url}\n'
+        f'requested_by: Angelo\n'
+        f'requested_at: {now}\n'
+        f'---\n'
+    )
+    if req.description:
+        content += f'\n{req.description}\n'
+    _queue_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding='utf-8')
+    return {'created': filename}
+
+
+@api.post('/queue/research')
+def queue_research(req: ResearchCreateRequest):
+    """Write a research queue file to /mnt/Claude/research-queue/."""
+    from datetime import datetime, timezone
+    slug = _queue_slug(req.prompt)
+    ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+    filename = f'research-{ts}-{slug}.md'
+    path = _queue_dir / filename
+    content = (
+        f'---\n'
+        f'type: research\n'
+        f'topic: {req.prompt}\n'
+        f'---\n'
+    )
+    _queue_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding='utf-8')
+    return {'created': filename}
+
+
+@api.post('/queue/forecast')
+def queue_forecast(req: ForecastCreateRequest):
+    """Write a forecast queue file to /mnt/Claude/research-queue/."""
+    from datetime import datetime, timezone
+    slug = _queue_slug(req.prompt)
+    ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+    filename = f'forecast-{ts}-{slug}.md'
+    path = _queue_dir / filename
+    content = (
+        f'---\n'
+        f'type: forecast\n'
+        f'topic: {req.prompt}\n'
+        f'---\n'
+    )
+    _queue_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding='utf-8')
+    return {'created': filename}
+
+
+@api.get('/queue/stash')
+def queue_stash_list():
+    """List pending stash queue files (unprocessed URLs)."""
+    if not _queue_dir.exists():
+        return {'items': []}
+    items = []
+    for p in sorted(_queue_dir.glob('stash-*.md')):
+        text = p.read_text(encoding='utf-8', errors='replace')
+        url = ''
+        requested_at = ''
+        if text.startswith('---'):
+            end = text.find('---', 3)
+            if end != -1:
+                for line in text[3:end].splitlines():
+                    if line.startswith('url:'):
+                        url = line.partition(':')[2].strip()
+                    elif line.startswith('requested_at:'):
+                        requested_at = line.partition(':')[2].strip()
+        items.append({'filename': p.name, 'url': url, 'requested_at': requested_at})
+    return {'items': items}
+
+
+@api.get('/queue/status/{filename}')
+def queue_status(filename: str):
+    """
+    Check the status of a queued job by filename.
+    - queued: file still exists in research-queue/
+    - done: file is gone (picked up by Hermes)
+    """
+    path = _queue_dir / filename
+    if path.exists():
+        return {'status': 'queued', 'filename': filename}
+    return {'status': 'done', 'filename': filename}
+
+
 # ── API: review ───────────────────────────────────────────────────────────────
 
 import json

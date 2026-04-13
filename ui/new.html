@@ -24,6 +24,7 @@
       --accent:    #58a6ff;
       --green:     #3fb950;
       --red:       #f85149;
+      --yellow:    #d29922;
       --tag-bg:    #21262d;
       --radius:    8px;
     }
@@ -62,33 +63,32 @@
       padding: 28px 24px 48px;
     }
 
-    /* ── Type toggle ── */
-    .type-toggle {
-      display: flex;
-      gap: 0;
+    /* ── Type select ── */
+    .type-select-wrap {
+      margin-bottom: 16px;
+    }
+    .type-select-wrap select {
+      width: auto;
+      min-width: 180px;
+      font-weight: 600;
+      font-size: 14px;
+      padding: 9px 32px 9px 14px;
+    }
+
+    /* ── Type description blurb ── */
+    .type-blurb {
+      display: none;
+      background: var(--surface2);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      overflow: hidden;
+      padding: 12px 16px;
       margin-bottom: 24px;
-      width: fit-content;
-    }
-    .type-btn {
-      padding: 8px 20px;
-      background: var(--surface);
-      border: none;
+      font-size: 12.5px;
       color: var(--text-muted);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-      font-family: inherit;
+      line-height: 1.6;
     }
-    .type-btn:first-child { border-right: 1px solid var(--border); }
-    .type-btn.active {
-      background: var(--accent);
-      color: #0d1117;
-      font-weight: 600;
-    }
+    .type-blurb.visible { display: block; }
+    .type-blurb strong { color: var(--text); font-weight: 600; }
 
     /* ── Form ── */
     .form-group {
@@ -123,7 +123,7 @@
       color: var(--text-muted);
     }
 
-    input[type="text"], select {
+    input[type="text"], input[type="url"], select {
       width: 100%;
       background: var(--surface);
       border: 1px solid var(--border);
@@ -135,9 +135,10 @@
       outline: none;
       transition: border-color 0.15s;
     }
-    input[type="text"]:focus, select:focus,
+    input[type="text"]:focus, input[type="url"]:focus, select:focus,
     .editor-wrap:focus-within { border-color: var(--accent); }
-    input[type="text"]::placeholder { color: var(--text-muted); }
+    input[type="text"]::placeholder,
+    input[type="url"]::placeholder { color: var(--text-muted); }
     select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b949e' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
 
     /* ── Markdown editor ── */
@@ -179,7 +180,7 @@
       margin: 3px 4px;
       align-self: stretch;
     }
-    textarea#description {
+    textarea {
       width: 100%;
       background: var(--surface);
       border: none;
@@ -189,18 +190,94 @@
       line-height: 1.7;
       padding: 12px 14px;
       resize: vertical;
-      min-height: 200px;
       outline: none;
     }
-    textarea#description::placeholder { color: var(--text-muted); }
+    textarea::placeholder { color: var(--text-muted); }
+    textarea.main-desc { min-height: 200px; }
+    textarea.prompt-field { min-height: 100px; border: 1px solid var(--border); border-radius: var(--radius); }
+    textarea.prompt-field:focus { border-color: var(--accent); }
+    textarea.stash-desc { min-height: 72px; border: 1px solid var(--border); border-radius: var(--radius); }
+    textarea.stash-desc:focus { border-color: var(--accent); }
+
+    /* ── Section visibility ── */
+    .section { display: none; }
+    .section.visible { display: block; }
 
     /* ── Todo fields ── */
-    .todo-fields { display: none; }
-    .todo-fields.visible { display: block; }
     .field-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
+    }
+
+    /* ── Status badge (research/forecast) ── */
+    .status-badge {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      margin-top: 18px;
+      font-size: 13px;
+    }
+    .status-badge.visible { display: flex; }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--text-muted);
+    }
+    .status-dot.queued  { background: var(--yellow); }
+    .status-dot.done    { background: var(--green); }
+    .status-text { flex: 1; color: var(--text-muted); }
+    .status-text strong { color: var(--text); }
+
+    /* ── Stash queue list ── */
+    .stash-queue {
+      margin-top: 28px;
+    }
+    .stash-queue-header {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 10px;
+    }
+    .stash-queue-empty {
+      font-size: 13px;
+      color: var(--text-muted);
+      padding: 10px 0;
+    }
+    .stash-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 0;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .stash-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--yellow);
+      flex-shrink: 0;
+    }
+    .stash-url {
+      flex: 1;
+      color: var(--accent);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: 'SF Mono', monospace;
+      font-size: 12px;
+    }
+    .stash-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
     }
 
     /* ── Actions ── */
@@ -267,47 +344,58 @@
 
 <main>
 
-  <!-- Type toggle -->
-  <div class="type-toggle">
-    <button class="type-btn active" id="btn-todo" onclick="setType('todo')">Todo</button>
-    <button class="type-btn"        id="btn-note" onclick="setType('note')">Note</button>
+  <!-- Type select -->
+  <div class="type-select-wrap form-group">
+    <label for="type-select">Type</label>
+    <select id="type-select" onchange="setType(this.value)">
+      <option value="todo">Todo</option>
+      <option value="note">Note</option>
+      <option value="stash">Stash</option>
+      <option value="research">Research</option>
+      <option value="forecast">Forecast</option>
+    </select>
   </div>
 
-  <!-- Todo ID badge -->
-  <div class="todo-id-row" id="todo-id-row">
-    <span class="todo-id-badge" id="todo-id-badge">#—</span>
-    <span class="todo-id-label">Next todo ID</span>
+  <!-- Type blurbs -->
+  <div class="type-blurb" id="blurb-stash">
+    <strong>Stash a link for later.</strong> Claude Code will fetch, summarise, and cross-reference it with your workspace when you next open a session. Add a description to give context for why you're saving it.
+  </div>
+  <div class="type-blurb" id="blurb-research">
+    <strong>Deep research report.</strong> Queued for Hermes — multi-source synthesis with citation tracking. Report is saved to Obsidian Inbox. Processing typically takes 5–15 minutes.
+  </div>
+  <div class="type-blurb" id="blurb-forecast">
+    <strong>Full forecast pipeline.</strong> Deep research → MiroFish multi-agent simulation → four Claude analytical framings → swarm synthesis. Report saved to Obsidian Inbox. Expect 15–30 minutes.
   </div>
 
-  <!-- Title -->
-  <div class="form-group">
-    <label for="title">Title</label>
-    <input type="text" id="title" placeholder="What needs doing?" autocomplete="off">
-  </div>
-
-  <!-- Description / markdown body -->
-  <div class="form-group">
-    <label>Description</label>
-    <div class="editor-wrap">
-      <div class="toolbar">
-        <button class="tb-btn" onclick="insert('# ', '')"    title="Heading 1">H1</button>
-        <button class="tb-btn" onclick="insert('## ', '')"   title="Heading 2">H2</button>
-        <button class="tb-btn" onclick="insert('### ', '')"  title="Heading 3">H3</button>
-        <div class="tb-sep"></div>
-        <button class="tb-btn" onclick="wrap('**', '**')"    title="Bold"><b>B</b></button>
-        <button class="tb-btn" onclick="wrap('*', '*')"      title="Italic"><em>I</em></button>
-        <div class="tb-sep"></div>
-        <button class="tb-btn" onclick="insertList('- ')"    title="Bullet list">• List</button>
-        <button class="tb-btn" onclick="insertList('1. ')"   title="Numbered list">1. List</button>
-        <div class="tb-sep"></div>
-        <button class="tb-btn" onclick="insert('`', '`')"    title="Inline code">&#96;code&#96;</button>
-      </div>
-      <textarea id="description" placeholder="Add details (markdown supported)…" rows="8"></textarea>
+  <!-- ── TODO section ── -->
+  <div class="section visible" id="section-todo">
+    <div class="todo-id-row">
+      <span class="todo-id-badge" id="todo-id-badge">#—</span>
+      <span class="todo-id-label">Next todo ID</span>
     </div>
-  </div>
-
-  <!-- Todo-only fields -->
-  <div class="todo-fields visible" id="todo-fields">
+    <div class="form-group">
+      <label for="todo-title">Title</label>
+      <input type="text" id="todo-title" placeholder="What needs doing?" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <div class="editor-wrap">
+        <div class="toolbar">
+          <button class="tb-btn" onclick="insert('# ', '')"    title="Heading 1">H1</button>
+          <button class="tb-btn" onclick="insert('## ', '')"   title="Heading 2">H2</button>
+          <button class="tb-btn" onclick="insert('### ', '')"  title="Heading 3">H3</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" onclick="wrap('**', '**')"    title="Bold"><b>B</b></button>
+          <button class="tb-btn" onclick="wrap('*', '*')"      title="Italic"><em>I</em></button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" onclick="insertList('- ')"    title="Bullet list">• List</button>
+          <button class="tb-btn" onclick="insertList('1. ')"   title="Numbered list">1. List</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" onclick="insert('`', '`')"    title="Inline code">&#96;code&#96;</button>
+        </div>
+        <textarea id="description" class="main-desc" placeholder="Add details (markdown supported)…" rows="8"></textarea>
+      </div>
+    </div>
     <div class="field-row">
       <div class="form-group">
         <label for="priority">Priority</label>
@@ -333,6 +421,75 @@
     </div>
   </div>
 
+  <!-- ── NOTE section ── -->
+  <div class="section" id="section-note">
+    <div class="form-group">
+      <label for="note-title">Title</label>
+      <input type="text" id="note-title" placeholder="Note title…" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Body</label>
+      <div class="editor-wrap">
+        <div class="toolbar">
+          <button class="tb-btn" onclick="insert('# ', '')"    title="Heading 1">H1</button>
+          <button class="tb-btn" onclick="insert('## ', '')"   title="Heading 2">H2</button>
+          <button class="tb-btn" onclick="insert('### ', '')"  title="Heading 3">H3</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" onclick="wrap('**', '**')"    title="Bold"><b>B</b></button>
+          <button class="tb-btn" onclick="wrap('*', '*')"      title="Italic"><em>I</em></button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" onclick="insertList('- ')"    title="Bullet list">• List</button>
+          <button class="tb-btn" onclick="insertList('1. ')"   title="Numbered list">1. List</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" onclick="insert('`', '`')"    title="Inline code">&#96;code&#96;</button>
+        </div>
+        <textarea id="note-description" class="main-desc" placeholder="Add details (markdown supported)…" rows="8"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STASH section ── -->
+  <div class="section" id="section-stash">
+    <div class="form-group">
+      <label for="stash-url">Link</label>
+      <input type="url" id="stash-url" placeholder="https://…" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="stash-desc">Description <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+      <textarea id="stash-desc" class="stash-desc" placeholder="Why are you saving this? What should Claude focus on?"></textarea>
+    </div>
+
+    <!-- Pending stash queue -->
+    <div class="stash-queue" id="stash-queue">
+      <div class="stash-queue-header">Pending queue</div>
+      <div id="stash-queue-items"><div class="stash-queue-empty">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- ── RESEARCH section ── -->
+  <div class="section" id="section-research">
+    <div class="form-group">
+      <label for="research-prompt">Prompt</label>
+      <textarea id="research-prompt" class="prompt-field" placeholder="What do you want researched?"></textarea>
+    </div>
+    <div class="status-badge" id="research-status">
+      <div class="status-dot queued" id="research-dot"></div>
+      <div class="status-text" id="research-status-text"><strong>Queued</strong> — waiting for Hermes to pick up</div>
+    </div>
+  </div>
+
+  <!-- ── FORECAST section ── -->
+  <div class="section" id="section-forecast">
+    <div class="form-group">
+      <label for="forecast-prompt">Prompt</label>
+      <textarea id="forecast-prompt" class="prompt-field" placeholder="What do you want a forecast on?"></textarea>
+    </div>
+    <div class="status-badge" id="forecast-status">
+      <div class="status-dot queued" id="forecast-dot"></div>
+      <div class="status-text" id="forecast-status-text"><strong>Queued</strong> — waiting for Hermes to pick up</div>
+    </div>
+  </div>
+
   <!-- Actions -->
   <div class="form-actions">
     <button class="btn-save" id="save-btn" onclick="save()">Save</button>
@@ -345,6 +502,12 @@
 
 <script>
   let currentType = 'todo';
+  let statusPollers = {};   // { research: intervalId, forecast: intervalId }
+  let pendingFilenames = {}; // { research: 'filename.md', forecast: 'filename.md' }
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  fetchNextId();
+  setType('todo');
 
   // ── Fetch next todo ID ────────────────────────────────────────────────────────
   async function fetchNextId() {
@@ -356,23 +519,101 @@
       document.getElementById('todo-id-badge').textContent = '#?';
     }
   }
-  fetchNextId();
 
-  // ── Type toggle ───────────────────────────────────────────────────────────────
+  // ── Type select ───────────────────────────────────────────────────────────────
+  const BLURB_TYPES = ['stash', 'research', 'forecast'];
+  const ALL_TYPES   = ['todo', 'note', 'stash', 'research', 'forecast'];
+
   function setType(type) {
     currentType = type;
-    document.getElementById('btn-todo').classList.toggle('active', type === 'todo');
-    document.getElementById('btn-note').classList.toggle('active', type === 'note');
-    document.getElementById('todo-id-row').style.display   = type === 'todo' ? '' : 'none';
-    document.getElementById('todo-fields').classList.toggle('visible', type === 'todo');
-    document.getElementById('title').placeholder = type === 'todo' ? 'What needs doing?' : 'Note title…';
+
+    ALL_TYPES.forEach(t => {
+      document.getElementById('section-' + t).classList.toggle('visible', t === type);
+    });
+    BLURB_TYPES.forEach(t => {
+      const el = document.getElementById('blurb-' + t);
+      if (el) el.classList.toggle('visible', t === type);
+    });
+
+    if (type === 'stash') loadStashQueue();
+
+    // Reset status indicators when switching away
+    if (type !== 'research') clearStatus('research');
+    if (type !== 'forecast') clearStatus('forecast');
+  }
+
+  // ── Stash queue ───────────────────────────────────────────────────────────────
+  async function loadStashQueue() {
+    const container = document.getElementById('stash-queue-items');
+    try {
+      const res = await fetch('/api/queue/stash');
+      const data = await res.json();
+      if (!data.items || data.items.length === 0) {
+        container.innerHTML = '<div class="stash-queue-empty">No pending stash items.</div>';
+        return;
+      }
+      container.innerHTML = data.items.map(item => {
+        const time = item.requested_at ? item.requested_at.replace('T', ' ').replace('+00:00', ' UTC') : '';
+        return '<div class="stash-item">' +
+          '<div class="stash-dot"></div>' +
+          '<div class="stash-url" title="' + escHtml(item.url) + '">' + escHtml(item.url) + '</div>' +
+          (time ? '<div class="stash-time">' + escHtml(time) + '</div>' : '') +
+          '</div>';
+      }).join('');
+    } catch {
+      container.innerHTML = '<div class="stash-queue-empty">Failed to load queue.</div>';
+    }
+  }
+
+  // ── Status polling (research / forecast) ──────────────────────────────────────
+  function startStatusPolling(type, filename) {
+    pendingFilenames[type] = filename;
+    setStatusVisible(type, true);
+    updateStatusDisplay(type, 'queued');
+
+    if (statusPollers[type]) clearInterval(statusPollers[type]);
+    statusPollers[type] = setInterval(async () => {
+      try {
+        const res = await fetch('/api/queue/status/' + encodeURIComponent(filename));
+        const data = await res.json();
+        if (data.status === 'done') {
+          clearInterval(statusPollers[type]);
+          delete statusPollers[type];
+          updateStatusDisplay(type, 'done');
+        }
+      } catch { /* keep polling */ }
+    }, 30000);
+  }
+
+  function setStatusVisible(type, visible) {
+    document.getElementById(type + '-status').classList.toggle('visible', visible);
+  }
+
+  function updateStatusDisplay(type, status) {
+    const dot  = document.getElementById(type + '-dot');
+    const text = document.getElementById(type + '-status-text');
+    dot.className = 'status-dot ' + status;
+    if (status === 'queued') {
+      text.innerHTML = '<strong>Queued</strong> — waiting for Hermes to pick up';
+    } else {
+      text.innerHTML = '<strong>Done</strong> — report saved to Obsidian Inbox';
+    }
+  }
+
+  function clearStatus(type) {
+    if (statusPollers[type]) { clearInterval(statusPollers[type]); delete statusPollers[type]; }
+    setStatusVisible(type, false);
   }
 
   // ── Markdown toolbar helpers ──────────────────────────────────────────────────
-  function getTA() { return document.getElementById('description'); }
+  function getTA() {
+    if (currentType === 'todo') return document.getElementById('description');
+    if (currentType === 'note') return document.getElementById('note-description');
+    return null;
+  }
 
   function insert(prefix, suffix) {
-    const ta = getTA();
+    const ta = getTA(); if (!ta) return;
     const start = ta.selectionStart;
     const lineStart = ta.value.lastIndexOf('\n', start - 1) + 1;
     const before = ta.value.slice(0, lineStart);
@@ -384,7 +625,7 @@
   }
 
   function wrap(open, close) {
-    const ta = getTA();
+    const ta = getTA(); if (!ta) return;
     const start = ta.selectionStart;
     const end   = ta.selectionEnd;
     const sel   = ta.value.slice(start, end) || 'text';
@@ -394,9 +635,8 @@
   }
 
   function insertList(marker) {
-    const ta = getTA();
+    const ta = getTA(); if (!ta) return;
     const start = ta.selectionStart;
-    // Check if we're at the start of a line already
     const before = ta.value.slice(0, start);
     const atLineStart = before.length === 0 || before.endsWith('\n');
     const prefix = atLineStart ? marker : '\n' + marker;
@@ -408,58 +648,16 @@
 
   // ── Save ──────────────────────────────────────────────────────────────────────
   async function save() {
-    const title = document.getElementById('title').value.trim();
-    if (!title) { showToast('Title is required', 'error'); return; }
-
-    const description = document.getElementById('description').value.trim();
     const btn = document.getElementById('save-btn');
     btn.disabled = true;
     btn.textContent = 'Saving…';
 
     try {
-      let url, body;
-      if (currentType === 'todo') {
-        url = '/api/todos/create';
-        body = {
-          title,
-          description,
-          priority:  document.getElementById('priority').value,
-          swimlane:  document.getElementById('swimlane').value,
-          assignee:  document.getElementById('assignee').value.trim(),
-        };
-      } else {
-        url = '/api/notes/create';
-        body = { title, description };
-      }
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      showToast(
-        currentType === 'todo'
-          ? `Todo #${data.id} created — ${data.created}`
-          : `Note saved — ${data.created}`,
-        'success'
-      );
-
-      // Reset form
-      document.getElementById('title').value = '';
-      document.getElementById('description').value = '';
-      if (currentType === 'todo') {
-        document.getElementById('assignee').value = '';
-        document.getElementById('priority').value = 'medium';
-        document.getElementById('swimlane').value = 'Dev';
-        fetchNextId(); // refresh next ID
-      }
+      if (currentType === 'todo')     await saveTodo();
+      else if (currentType === 'note')     await saveNote();
+      else if (currentType === 'stash')    await saveStash();
+      else if (currentType === 'research') await saveQueued('research');
+      else if (currentType === 'forecast') await saveQueued('forecast');
     } catch (err) {
       showToast('Error: ' + err.message, 'error');
     } finally {
@@ -468,7 +666,91 @@
     }
   }
 
-  function showToast(msg, type = '') {
+  async function saveTodo() {
+    const title = document.getElementById('todo-title').value.trim();
+    if (!title) { showToast('Title is required', 'error'); return; }
+    const res = await fetch('/api/todos/create', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        title,
+        description: document.getElementById('description').value.trim(),
+        priority:    document.getElementById('priority').value,
+        swimlane:    document.getElementById('swimlane').value,
+        assignee:    document.getElementById('assignee').value.trim(),
+      }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'HTTP ' + res.status); }
+    const data = await res.json();
+    showToast('Todo #' + data.id + ' created — ' + data.created, 'success');
+    document.getElementById('todo-title').value = '';
+    document.getElementById('description').value = '';
+    document.getElementById('assignee').value = '';
+    document.getElementById('priority').value = 'medium';
+    document.getElementById('swimlane').value = 'Dev';
+    fetchNextId();
+  }
+
+  async function saveNote() {
+    const title = document.getElementById('note-title').value.trim();
+    if (!title) { showToast('Title is required', 'error'); return; }
+    const res = await fetch('/api/notes/create', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        title,
+        description: document.getElementById('note-description').value.trim(),
+      }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'HTTP ' + res.status); }
+    const data = await res.json();
+    showToast('Note saved — ' + data.created, 'success');
+    document.getElementById('note-title').value = '';
+    document.getElementById('note-description').value = '';
+  }
+
+  async function saveStash() {
+    const url = document.getElementById('stash-url').value.trim();
+    if (!url) { showToast('Link is required', 'error'); return; }
+    const res = await fetch('/api/queue/stash', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        url,
+        description: document.getElementById('stash-desc').value.trim(),
+      }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'HTTP ' + res.status); }
+    showToast('Stash queued', 'success');
+    document.getElementById('stash-url').value = '';
+    document.getElementById('stash-desc').value = '';
+    loadStashQueue();
+  }
+
+  async function saveQueued(type) {
+    const prompt = document.getElementById(type + '-prompt').value.trim();
+    if (!prompt) { showToast('Prompt is required', 'error'); return; }
+    const res = await fetch('/api/queue/' + type, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ prompt }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'HTTP ' + res.status); }
+    const data = await res.json();
+    showToast('Queued — Hermes will pick it up shortly', 'success');
+    startStatusPolling(type, data.created);
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function showToast(msg, type) {
     const el = document.getElementById('toast');
     el.textContent = msg;
     el.className = 'toast show' + (type ? ' ' + type : '');
