@@ -505,10 +505,6 @@
   let statusPollers = {};   // { research: intervalId, forecast: intervalId }
   let pendingFilenames = {}; // { research: 'filename.md', forecast: 'filename.md' }
 
-  // ── Init ──────────────────────────────────────────────────────────────────────
-  fetchNextId();
-  setType('todo');
-
   // ── Fetch next todo ID ────────────────────────────────────────────────────────
   async function fetchNextId() {
     try {
@@ -523,6 +519,10 @@
   // ── Type select ───────────────────────────────────────────────────────────────
   const BLURB_TYPES = ['stash', 'research', 'forecast'];
   const ALL_TYPES   = ['todo', 'note', 'stash', 'research', 'forecast'];
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  fetchNextId();
+  setType('todo');
 
   function setType(type) {
     currentType = type;
