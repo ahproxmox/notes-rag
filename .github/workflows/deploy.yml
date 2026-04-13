@@ -11,4 +11,4 @@ jobs:
       - name: Deploy to CT 111
         run: |
           ssh -o StrictHostKeyChecking=no root@192.168.88.71 \
-            "cd /opt/rag && git stash && git pull && systemctl restart rag"
+            "cd /opt/rag && git stash && git pull && bash scripts/deploy.sh"
