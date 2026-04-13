@@ -10,6 +10,8 @@ import re
 import requests as http_requests
 from datetime import date
 from pathlib import Path
+import threading
+import time
 
 app = FastAPI()
 api = APIRouter(prefix='/api')
@@ -341,6 +343,29 @@ def notes_create(req: NoteCreateRequest):
     return {'created': filename, 'path': str(path)}
 
 
+
+# ── Discord notifications ─────────────────────────────────────────────────────
+
+def _discord_notify(message: str):
+    url = os.environ.get('DISCORD_WEBHOOK_URL', '')
+    if not url:
+        return
+    try:
+        http_requests.post(url, json={'content': message}, timeout=5)
+    except Exception as e:
+        print(f'[discord] notify failed: {e}', flush=True)
+
+
+def _watch_queue_completion(filepath, label: str, topic: str, poll_interval: int = 15, timeout: int = 3600):
+    """Background thread: poll until queue file is gone, then notify Discord."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        time.sleep(poll_interval)
+        if not filepath.exists():
+            _discord_notify(f'{label} complete: **{topic}**\nReport saved to Obsidian Inbox.')
+            return
+    print(f'[discord] watcher timed out for {filepath.name}', flush=True)
+
 # ── API: research queue ───────────────────────────────────────────────────────
 
 _queue_dir = Path('/mnt/Claude/research-queue')
@@ -406,6 +431,7 @@ def queue_research(req: ResearchCreateRequest):
     )
     _queue_dir.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding='utf-8')
+    threading.Thread(target=_watch_queue_completion, args=(path, 'Research', req.prompt), daemon=True).start()
     return {'created': filename}
 
 
@@ -425,6 +451,7 @@ def queue_forecast(req: ForecastCreateRequest):
     )
     _queue_dir.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding='utf-8')
+    threading.Thread(target=_watch_queue_completion, args=(path, 'Forecast', req.prompt), daemon=True).start()
     return {'created': filename}
 
 
