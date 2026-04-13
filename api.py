@@ -327,7 +327,17 @@ def notes_create(req: NoteCreateRequest):
     if req.description:
         content += f'\n{req.description}\n'
 
-    path.write_text(content, encoding='utf-8')
+    # Atomic write: write to temp file first, then os.replace to final path.
+    # Prevents a race condition where the watcher's inject_frontmatter fires
+    # on the inotify IN_CREATE event before write_text has finished writing,
+    # reads an empty file, and overwrites the path with just default frontmatter.
+    tmp = path.parent / f'.tmp_{os.getpid()}_{filename}'
+    try:
+        tmp.write_text(content, encoding='utf-8')
+        os.replace(str(tmp), str(path))
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
     return {'created': filename, 'path': str(path)}
 
 
