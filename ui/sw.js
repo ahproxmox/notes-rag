@@ -1,5 +1,5 @@
-const CACHE = "notes-rag-1329b13";
-const SHELL = ["/", "/search", "/review", "/new"];
+const CACHE = "notes-rag-38e9be6";
+const SHELL = ["/", "/notes", "/chat", "/review", "/new"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
