@@ -708,6 +708,85 @@ def services_health():
     return results
 
 
+
+# ── API: LLM models ────────────────────────────────────────────────────────────
+
+_models_config_path = Path('/mnt/Claude/config/models.json')
+_model_health_path  = Path('/mnt/Claude/config/model-health.json')
+
+_SIDECAR_URLS = {
+    'hermes':        'http://192.168.88.83:8090/reload',
+    'mirofish':      'http://192.168.88.79:8091/reload',
+    'openclaw':      'http://192.168.88.63:8092/reload',
+    'notes-curator': 'http://192.168.88.63:8092/reload',
+}
+_DISCORD_SERVICES = frozenset({'hermes', 'openclaw', 'notes-curator'})
+_ALL_SERVICES     = ['notes-rag', 'hermes', 'mirofish', 'openclaw', 'notes-curator']
+_SERVICE_LABELS   = {
+    'notes-rag':     'Notes RAG',
+    'hermes':        'Hermes',
+    'mirofish':      'MiroFish',
+    'openclaw':      'OpenClaw',
+    'notes-curator': 'Notes Curator',
+}
+
+
+class ModelUpdateRequest(BaseModel):
+    model: str
+
+
+@api.get('/models')
+def models_list():
+    models = json.loads(_models_config_path.read_text()) if _models_config_path.exists() else {}
+    health = json.loads(_model_health_path.read_text()) if _model_health_path.exists() else {}
+    return {
+        'services': [
+            {
+                'id':              svc,
+                'label':           _SERVICE_LABELS.get(svc, svc),
+                'model':           models.get(svc, ''),
+                'health':          health.get(svc, {'status': 'unknown'}),
+                'discord_warning': svc in _DISCORD_SERVICES,
+            }
+            for svc in _ALL_SERVICES
+        ]
+    }
+
+
+@api.get('/models/validate')
+def models_validate(model: str = Query(...)):
+    model_id = re.sub(r'^openrouter/', '', model.strip())
+    try:
+        r = http_requests.get(
+            'https://openrouter.ai/api/v1/models',
+            headers={'Authorization': f'Bearer {os.environ.get("OPENROUTER_API_KEY", "")}'},
+            timeout=8,
+        )
+        r.raise_for_status()
+        ids = {m['id'] for m in r.json().get('data', [])}
+        return {'valid': model_id in ids, 'model': model_id}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f'OpenRouter unreachable: {e}')
+
+
+@api.post('/models/{service}')
+def models_update(service: str, req: ModelUpdateRequest):
+    if service not in _ALL_SERVICES:
+        raise HTTPException(status_code=400, detail=f'Unknown service: {service}')
+    _models_config_path.parent.mkdir(parents=True, exist_ok=True)
+    models = json.loads(_models_config_path.read_text()) if _models_config_path.exists() else {}
+    models[service] = req.model
+    _models_config_path.write_text(json.dumps(models, indent=2))
+    if service in _SIDECAR_URLS:
+        try:
+            r = http_requests.post(_SIDECAR_URLS[service], json={'service': service}, timeout=30)
+            r.raise_for_status()
+            return {'updated': service, 'model': req.model, 'reloaded': True}
+        except Exception as e:
+            return {'updated': service, 'model': req.model, 'reloaded': False, 'reload_error': str(e)}
+    return {'updated': service, 'model': req.model, 'reloaded': True}
+
+
 # ── Register router + backward-compat aliases ─────────────────────────────────
 app.include_router(api)
 

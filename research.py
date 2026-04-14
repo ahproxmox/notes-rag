@@ -1,12 +1,17 @@
 import os
+import json
 import re
 import datetime
 import requests
+from pathlib import Path
 from bs4 import BeautifulSoup
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 
 BRAVE_SEARCH_URL = 'https://api.search.brave.com/res/v1/web/search'
+_MODELS_CONFIG  = Path('/mnt/Claude/config/models.json')
+_HEALTH_CONFIG  = Path('/mnt/Claude/config/model-health.json')
+_DEFAULT_MODEL  = 'stepfun/step-3.5-flash'
 
 SUMMARISE_PROMPT = PromptTemplate(
     input_variables=['query', 'content'],
@@ -20,11 +25,26 @@ Content:
 Summary:'''
 )
 
-# Models to try in order — first success wins
-MODELS = [
-    'stepfun/step-3.5-flash',
-    'google/gemini-2.5-flash-preview',
-]
+
+def _get_model():
+    try:
+        return json.loads(_MODELS_CONFIG.read_text()).get('notes-rag') or _DEFAULT_MODEL
+    except Exception:
+        return _DEFAULT_MODEL
+
+
+def _write_health(status, error=None):
+    try:
+        _HEALTH_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+        health = json.loads(_HEALTH_CONFIG.read_text()) if _HEALTH_CONFIG.exists() else {}
+        entry = {'status': status, 'last_checked': datetime.datetime.utcnow().isoformat() + 'Z'}
+        if error:
+            entry['error'] = str(error)[:200]
+        health['notes-rag'] = entry
+        _HEALTH_CONFIG.write_text(json.dumps(health, indent=2))
+    except Exception:
+        pass
+
 
 def brave_search(query, count=5):
     headers = {
@@ -35,6 +55,7 @@ def brave_search(query, count=5):
     resp = requests.get(BRAVE_SEARCH_URL, headers=headers, params={'q': query, 'count': count}, timeout=10)
     resp.raise_for_status()
     return resp.json().get('web', {}).get('results', [])
+
 
 def scrape(url, max_chars=3000):
     try:
@@ -47,22 +68,24 @@ def scrape(url, max_chars=3000):
     except Exception as e:
         return f'[scrape failed: {e}]'
 
+
 def summarise(query, content):
-    last_err = None
-    for model in MODELS:
-        try:
-            print(f'[research] trying model: {model}', flush=True)
-            llm = ChatOpenAI(
-                base_url=os.environ.get('LLM_BASE_URL', 'https://openrouter.ai/api/v1'),
-                api_key=os.environ['OPENROUTER_API_KEY'],
-                model=model,
-            )
-            chain = SUMMARISE_PROMPT | llm
-            return chain.invoke({'query': query, 'content': content}).content
-        except Exception as e:
-            print(f'[research] model {model} failed: {e}', flush=True)
-            last_err = e
-    raise RuntimeError(f'All models failed. Last error: {last_err}')
+    model = _get_model()
+    print(f'[research] using model: {model}', flush=True)
+    try:
+        llm = ChatOpenAI(
+            base_url=os.environ.get('LLM_BASE_URL', 'https://openrouter.ai/api/v1'),
+            api_key=os.environ['OPENROUTER_API_KEY'],
+            model=model,
+        )
+        chain = SUMMARISE_PROMPT | llm
+        result = chain.invoke({'query': query, 'content': content}).content
+        _write_health('ok')
+        return result
+    except Exception as e:
+        _write_health('error', error=e)
+        raise RuntimeError(f'Model {model} failed: {e}')
+
 
 def research(query):
     workspace = os.environ.get('RAG_WORKSPACE', '/mnt/Claude')
@@ -73,16 +96,16 @@ def research(query):
 
     combined = ''
     for r in results[:3]:
-        title = r.get('title', '')
-        url = r.get('url', '')
+        title   = r.get('title', '')
+        url     = r.get('url', '')
         snippet = r.get('description', '')
-        body = scrape(url)
+        body    = scrape(url)
         combined += f'\n\n## {title}\nURL: {url}\n{snippet}\n\n{body}'
 
     summary = summarise(query, combined[:8000])
 
-    date = datetime.datetime.now().strftime('%Y-%m-%d-%H%M')
-    slug = re.sub(r'[^a-z0-9]+', '-', query.lower())[:40].strip('-')
+    date     = datetime.datetime.now().strftime('%Y-%m-%d-%H%M')
+    slug     = re.sub(r'[^a-z0-9]+', '-', query.lower())[:40].strip('-')
     filename = f'{date}-research-{slug}.md'
     filepath = os.path.join(workspace, 'inbox', filename)
 
@@ -97,6 +120,7 @@ def research(query):
 
     print(f'[research] written to {filepath}', flush=True)
     return summary, filepath
+
 
 if __name__ == '__main__':
     import sys
