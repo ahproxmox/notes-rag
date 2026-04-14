@@ -330,17 +330,28 @@
       <div class="tile-desc">Create a todo or note and save it to the workspace</div>
     </a>
 
-    <a class="tile" href="/search">
+    <a class="tile" href="/notes">
       <div class="tile-top">
         <div class="tile-icon">
           <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="7.5" cy="7.5" r="4.5"/><line x1="11.5" y1="11.5" x2="15" y2="15"/>
           </svg>
         </div>
-        <div class="health-dot" id="health-search"></div>
       </div>
       <div class="tile-title">Search</div>
-      <div class="tile-desc">Ask your workspace — hybrid BM25 + vector retrieval</div>
+      <div class="tile-desc">Find notes by keyword — deduplicated BM25 + vector results</div>
+    </a>
+    <a class="tile" href="/chat">
+      <div class="tile-top">
+        <div class="tile-icon">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 10.5a1.5 1.5 0 0 1-1.5 1.5h-9L1.5 15V3a1.5 1.5 0 0 1 1.5-1.5h10.5A1.5 1.5 0 0 1 15 3v7.5z"/>
+          </svg>
+        </div>
+        <div class="health-dot" id="health-search"></div>
+      </div>
+      <div class="tile-title">Chat</div>
+      <div class="tile-desc">Ask your workspace — LLM-synthesised answers</div>
     </a>
 
     <a class="tile" href="/review">
