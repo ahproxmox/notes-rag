@@ -24,6 +24,14 @@ _wiki_dir = Path('/mnt/Claude/wiki')
 _todos_dir = Path('/mnt/Claude/todos')
 _inbox_dir = Path('/mnt/Obsidian/Inbox')
 _notes_dir = Path('/mnt/Obsidian/Notes')
+_obsidian_root = Path('/mnt/Obsidian')
+
+def _find_note(filename: str):
+    """Resolve a note filename by searching recursively under the Obsidian vault."""
+    for path in _obsidian_root.rglob(filename):
+        return path
+    return None
+
 _TODOS_INDEXER = 'http://192.168.88.78:3000'
 
 _entities_db = os.environ.get('ENTITIES_DB', os.path.join(os.path.dirname(__file__), 'entities.db'))
@@ -323,12 +331,7 @@ def todos_create(req: TodoCreateRequest):
 
 @api.post('/notes/create')
 def notes_create(req: NoteCreateRequest):
-    """Create a new note in /mnt/Obsidian/Notes/ with standard frontmatter.
-
-    Saves directly to Notes/ so the watcher picks it up for indexing and
-    inject_frontmatter runs on it (date_created, reviewed, tags fields).
-    Frontmatter is pre-populated here to match the watcher's injected format.
-    """
+    """Create a new note in /mnt/Obsidian/Notes/ with standard frontmatter."""
     slug = re.sub(r'[^a-z0-9-]', '-', req.title.lower().strip())
     slug = re.sub(r'-+', '-', slug).strip('-')[:80]
     filename = f'{slug}.md'
@@ -346,10 +349,6 @@ def notes_create(req: NoteCreateRequest):
     if req.description:
         content += f'\n{req.description}\n'
 
-    # Atomic write: write to temp file first, then os.replace to final path.
-    # Prevents a race condition where the watcher's inject_frontmatter fires
-    # on the inotify IN_CREATE event before write_text has finished writing,
-    # reads an empty file, and overwrites the path with just default frontmatter.
     tmp = path.parent / f'.tmp_{os.getpid()}_{filename}'
     try:
         tmp.write_text(content, encoding='utf-8')
@@ -376,8 +375,17 @@ def notes_search(req: NoteSearchRequest):
                 'score': chunk['score'],
             }
     results = sorted(note_map.values(), key=lambda x: x['score'], reverse=True)
+    # Only keep results resolvable under the Obsidian vault
+    resolved = []
     for r in results:
-        path = _notes_dir / r['filename']
+        path = _find_note(r['filename'])
+        if path is None:
+            continue
+        resolved.append(r)
+        r['_path'] = path
+    results = resolved
+    for r in results:
+        path = r.pop('_path')
         title = r['filename'].removesuffix('.md').replace('-', ' ').title()
         if path.exists():
             text = path.read_text(encoding='utf-8', errors='replace')
@@ -398,8 +406,8 @@ def notes_get(filename: str):
     filename = os.path.basename(filename)
     if not filename.endswith('.md'):
         raise HTTPException(status_code=400, detail='Only .md files are supported')
-    path = _notes_dir / filename
-    if not path.exists():
+    path = _find_note(filename)
+    if path is None:
         raise HTTPException(status_code=404, detail=f'Note not found: {filename}')
     content = path.read_text(encoding='utf-8', errors='replace')
     title = filename.removesuffix('.md').replace('-', ' ').title()
@@ -420,8 +428,8 @@ def notes_update(filename: str, req: NoteUpdateRequest):
     filename = os.path.basename(filename)
     if not filename.endswith('.md'):
         raise HTTPException(status_code=400, detail='Only .md files are supported')
-    path = _notes_dir / filename
-    if not path.exists():
+    path = _find_note(filename)
+    if path is None:
         raise HTTPException(status_code=404, detail=f'Note not found: {filename}')
     today = date.today().isoformat()
     content = path.read_text(encoding='utf-8', errors='replace')
