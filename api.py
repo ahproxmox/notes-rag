@@ -23,6 +23,7 @@ _log_path = Path('/mnt/Claude/log.md')
 _wiki_dir = Path('/mnt/Claude/wiki')
 _todos_dir = Path('/mnt/Claude/todos')
 _inbox_dir = Path('/mnt/Obsidian/Inbox')
+_notes_dir = Path('/mnt/Obsidian/Notes')
 _TODOS_INDEXER = 'http://192.168.88.78:3000'
 
 _entities_db = os.environ.get('ENTITIES_DB', os.path.join(os.path.dirname(__file__), 'entities.db'))
@@ -78,6 +79,13 @@ class TodoCreateRequest(BaseModel):
 class NoteCreateRequest(BaseModel):
     title: str
     description: str = ''
+
+
+class NoteSearchRequest(BaseModel):
+    query: str
+
+class NoteUpdateRequest(BaseModel):
+    body: str
 
 
 # ── UI routes ────────────────────────────────────────────────────────────────
@@ -342,6 +350,104 @@ def notes_create(req: NoteCreateRequest):
         raise
     return {'created': filename, 'path': str(path)}
 
+
+# ── API: notes (search, fetch, update) ───────────────────────────────────────
+
+@api.post('/notes/search')
+def notes_search(req: NoteSearchRequest):
+    """Keyword+vector search returning deduplicated note-level results."""
+    _, _, chunks = search(req.query)
+    note_map: dict[str, dict] = {}
+    for chunk in chunks:
+        src = chunk['source']
+        if src not in note_map or chunk['score'] > note_map[src]['score']:
+            note_map[src] = {
+                'filename': src,
+                'snippet': chunk['content'][:200],
+                'score': chunk['score'],
+            }
+    results = sorted(note_map.values(), key=lambda x: x['score'], reverse=True)
+    for r in results:
+        path = _notes_dir / r['filename']
+        title = r['filename'].removesuffix('.md').replace('-', ' ').title()
+        if path.exists():
+            text = path.read_text(encoding='utf-8', errors='replace')
+            if text.startswith('---'):
+                end = text.find('---', 3)
+                if end != -1:
+                    for line in text[3:end].splitlines():
+                        if line.startswith('title:'):
+                            title = line.partition(':')[2].strip().strip('"\'')
+                            break
+        r['title'] = title
+    return {'results': results}
+
+
+@api.get('/notes/{filename:path}')
+def notes_get(filename: str):
+    """Fetch a note's title and body (frontmatter stripped)."""
+    filename = os.path.basename(filename)
+    if not filename.endswith('.md'):
+        raise HTTPException(status_code=400, detail='Only .md files are supported')
+    path = _notes_dir / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f'Note not found: {filename}')
+    content = path.read_text(encoding='utf-8', errors='replace')
+    title = filename.removesuffix('.md').replace('-', ' ').title()
+    body = content
+    if content.startswith('---'):
+        end = content.find('---', 3)
+        if end != -1:
+            for line in content[3:end].splitlines():
+                if line.startswith('title:'):
+                    title = line.partition(':')[2].strip().strip('"\'')
+            body = content[end + 3:].lstrip('\n')
+    return {'filename': filename, 'title': title, 'body': body}
+
+
+@api.patch('/notes/{filename:path}')
+def notes_update(filename: str, req: NoteUpdateRequest):
+    """Save edited note body; sets reviewed: unreviewed and adds/updates updated: date."""
+    filename = os.path.basename(filename)
+    if not filename.endswith('.md'):
+        raise HTTPException(status_code=400, detail='Only .md files are supported')
+    path = _notes_dir / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f'Note not found: {filename}')
+    today = date.today().isoformat()
+    content = path.read_text(encoding='utf-8', errors='replace')
+    if content.startswith('---'):
+        end = content.find('---', 3)
+        if end != -1:
+            fm_lines = content[3:end].splitlines()
+            new_fm: list[str] = []
+            has_reviewed = has_updated = False
+            for line in fm_lines:
+                if line.startswith('reviewed:'):
+                    new_fm.append('reviewed: unreviewed')
+                    has_reviewed = True
+                elif line.startswith('updated:'):
+                    new_fm.append(f'updated: {today}')
+                    has_updated = True
+                else:
+                    new_fm.append(line)
+            if not has_reviewed:
+                new_fm.append('reviewed: unreviewed')
+            if not has_updated:
+                new_fm.append(f'updated: {today}')
+            new_content = '---\n' + '\n'.join(new_fm) + '\n---\n\n' + req.body.strip() + '\n'
+        else:
+            new_content = req.body
+    else:
+        new_content = req.body
+    tmp = path.parent / f'.tmp_{os.getpid()}_{filename}'
+    try:
+        tmp.write_text(new_content, encoding='utf-8')
+        os.replace(str(tmp), str(path))
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    return {'saved': filename, 'updated': today}
 
 
 # ── Discord notifications ─────────────────────────────────────────────────────
