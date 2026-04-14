@@ -70,14 +70,17 @@ def inject_frontmatter(path):
     }
 
     changed = False
+    missing = []
     for k, v in defaults.items():
         if k not in fields:
             fields[k] = v
+            missing.append(k)
             changed = True
 
     if not changed:
         return
 
+    print(f'[watcher] inject_frontmatter: missing={missing} fields={list(fields.keys())} body_len={len(body)} path={path}', flush=True)
     new_text = _serialize_frontmatter(fields, body)
     p = Path(path)
     try:
