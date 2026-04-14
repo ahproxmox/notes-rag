@@ -102,7 +102,10 @@ class Store:
                  meta.get('wing'), meta.get('room')),
             )
             chunk_id = cur.lastrowid
-            cur.execute('INSERT INTO chunks_fts (rowid, content) VALUES (?, ?)', (chunk_id, chunk.page_content))
+            # Prepend filename so filename terms are searchable via BM25.
+            # The chunks table keeps the original page_content unchanged (used for LLM context).
+            fts_text = f"{meta.get('filename', '')} {chunk.page_content}"
+            cur.execute('INSERT INTO chunks_fts (rowid, content) VALUES (?, ?)', (chunk_id, fts_text))
             if embeddings and i < len(embeddings):
                 cur.execute(
                     'INSERT INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)',
