@@ -94,9 +94,18 @@ class NoteUpdateRequest(BaseModel):
 def home():
     return FileResponse(os.path.join(_ui_dir, 'home.html'))
 
+@app.get('/notes')
+def notes_page():
+    return FileResponse(os.path.join(_ui_dir, 'notes.html'))
+
+@app.get('/chat')
+def chat_page():
+    return FileResponse(os.path.join(_ui_dir, 'chat.html'))
+
 @app.get('/search')
-def search_page():
-    return FileResponse(os.path.join(_ui_dir, 'index.html'))
+def search_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url='/chat', status_code=301)
 
 @app.get('/new')
 def new_page():
