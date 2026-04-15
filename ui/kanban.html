@@ -81,30 +81,25 @@
     .sl-col-label { display: flex; align-items: center; gap: 6px; padding: 4px 4px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); cursor: pointer; user-select: none; }
     .sl-col-chevron { font-size: 12px; color: var(--text-dim); line-height: 1; transition: transform 0.2s ease; display: inline-block; margin-left: 2px; }
 
-    #board.hide-inbox       .sl-col[data-status="inbox"],
     #board.hide-pending     .sl-col[data-status="pending"],
     #board.hide-in_progress .sl-col[data-status="in_progress"],
     #board.hide-completed   .sl-col[data-status="completed"],
     #board.hide-wontdo      .sl-col[data-status="wontdo"] { flex: 0 0 28px; min-width: 28px; overflow: hidden; background: var(--surface2); border-radius: 6px; align-self: stretch; }
 
-    #board.hide-inbox       .sl-col[data-status="inbox"]       .cards,
     #board.hide-pending     .sl-col[data-status="pending"]     .cards,
     #board.hide-in_progress .sl-col[data-status="in_progress"] .cards,
     #board.hide-completed   .sl-col[data-status="completed"]   .cards,
     #board.hide-wontdo      .sl-col[data-status="wontdo"]      .cards { display: none; }
 
-    #board.hide-inbox       .sl-col[data-status="inbox"]       .sl-col-label,
     #board.hide-pending     .sl-col[data-status="pending"]     .sl-col-label,
     #board.hide-in_progress .sl-col[data-status="in_progress"] .sl-col-label,
     #board.hide-completed   .sl-col[data-status="completed"]   .sl-col-label,
     #board.hide-wontdo      .sl-col[data-status="wontdo"]      .sl-col-label { writing-mode: vertical-rl; transform: rotate(180deg); padding: 10px 0; flex: 1; justify-content: flex-end; gap: 4px; }
 
-    #board.hide-inbox       .sl-col[data-status="inbox"]       .sl-col-count,
     #board.hide-pending     .sl-col[data-status="pending"]     .sl-col-count,
     #board.hide-in_progress .sl-col[data-status="in_progress"] .sl-col-count,
     #board.hide-completed   .sl-col[data-status="completed"]   .sl-col-count,
     #board.hide-wontdo      .sl-col[data-status="wontdo"]      .sl-col-count,
-    #board.hide-inbox       .sl-col[data-status="inbox"]       .sl-col-chevron,
     #board.hide-pending     .sl-col[data-status="pending"]     .sl-col-chevron,
     #board.hide-in_progress .sl-col[data-status="in_progress"] .sl-col-chevron,
     #board.hide-completed   .sl-col[data-status="completed"]   .sl-col-chevron,
@@ -112,12 +107,13 @@
     .sl-col-count { background: var(--border); color: var(--text-muted); font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 8px; margin-left: auto; }
 
     .col-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-    .col-dot.inbox       { background: var(--purple); }
     .col-dot.pending     { background: var(--accent); }
     .col-dot.in_progress { background: var(--yellow-light); }
     .col-dot.completed   { background: var(--green); }
     .col-dot.wontdo      { background: var(--text-dim); }
 
+
+    .project-tag { display: inline-flex; align-items: center; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; border: 1px solid; letter-spacing: 0.02em; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .cards { padding: 0 2px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 7px; min-height: 32px; align-content: start; }
 
     /* ── Cards ── */
@@ -293,7 +289,6 @@
   <div class="header-right">
     <span class="meta" id="last-updated"></span>
     <button class="settings-btn" onclick="openSettingsPanel()">&#9881; Settings</button>
-    <button class="enrich-btn" id="enrich-btn" onclick="enrichInbox()">✨ Enrich Inbox</button>
     <button class="new-btn" onclick="openCreatePanel()">➕ New</button>
     <button class="refresh-btn" onclick="load()">↻ Refresh</button>
   </div>
@@ -328,7 +323,6 @@
         <div class="form-group">
           <label class="edit-form-label">Status</label>
           <select class="form-select" id="edit-status">
-            <option value="inbox">Inbox</option>
             <option value="pending">Pending</option>
             <option value="in_progress">In Progress</option>
             <option value="completed">Completed</option>
@@ -424,7 +418,7 @@
         <label class="form-label">Description <span class="form-optional">(optional)</span></label>
         <textarea class="form-textarea" id="cf-desc" placeholder="Any details..." rows="4"></textarea>
       </div>
-      <p class="form-hint">Todo will land in Inbox — OpenClaw will enrich it with context before it enters the active queue.</p>
+      <p class="form-hint">Todo will be created as Pending.</p>
       <div class="form-actions">
         <button type="button" class="form-cancel" onclick="closeCreatePanel()">Cancel</button>
         <button type="submit" class="form-submit" id="cf-submit">Create Todo</button>
@@ -494,12 +488,20 @@
   const LANE_COLORS = ['#3b82f6','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316','#84cc16'];
 
   const STATUSES = [
-    { id: 'inbox',       label: 'Inbox',       dot: 'inbox'       },
     { id: 'pending',     label: 'Pending',     dot: 'pending'     },
     { id: 'in_progress', label: 'In Progress', dot: 'in_progress' },
     { id: 'completed',   label: 'Completed',   dot: 'completed'   },
     { id: 'wontdo',      label: "Won't Do",    dot: 'wontdo'      },
   ];
+
+
+  const _PROJECT_COLORS = ['#3b82f6','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316','#84cc16'];
+  function projectColor(slug) {
+    if (!slug) return '#475569';
+    let h = 0;
+    for (let i = 0; i < slug.length; i++) h = ((h << 5) - h) + slug.charCodeAt(i);
+    return _PROJECT_COLORS[Math.abs(h) % _PROJECT_COLORS.length];
+  }
 
   function laneId(name) {
     return name.toLowerCase().replace(/[^a-z0-9]/g, '-');
@@ -621,6 +623,11 @@
     const prereqText = todo.prereqIds && todo.prereqIds.length
       ? '<span class="card-prereqs">→ ' + todo.prereqIds.join(', ') + '</span>' : '';
 
+    const proj = todo.project;
+    const projTag = proj
+      ? '<span class="project-tag" style="color:' + projectColor(proj) + ';background:' + projectColor(proj) + '22;border-color:' + projectColor(proj) + '44">' + esc(proj) + '</span>'
+      : '';
+
     div.innerHTML =
       '<div class="card-top">' +
         '<span class="card-title">' + esc(todo.title) + '</span>' +
@@ -628,6 +635,7 @@
       '</div>' +
       '<div class="card-footer">' +
         '<span class="priority-badge ' + (todo.priority || 'medium') + '">' + (todo.priority || 'medium') + '</span>' +
+        projTag +
         prereqText +
       '</div>';
 
@@ -853,7 +861,7 @@
       const todo = await res.json();
       closeCreatePanel();
       await load();
-      showToast('#' + pad(todo.id) + ' created → Inbox');
+      showToast('#' + pad(todo.id) + ' created');
     } catch (err) {
       showToast('Failed to create todo');
     }
