@@ -207,6 +207,15 @@
     .save-btn.dirty { background: var(--accent); border-color: var(--accent); color: #0d1117; }
     .save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
     @media (max-width: 768px) {
       .drawer { width: 100%; border-left: none; }
       .results-area { padding: 12px 16px; }
@@ -228,7 +237,7 @@
 </div>
 
 <div class="results-area" id="results">
-  <div class="empty-state">
+  <div class="empty-state" id="empty-state">
     <h2>Search your workspace</h2>
     <p>Type a keyword and hit Search to find relevant notes.</p>
   </div>
@@ -265,6 +274,9 @@
 
   searchBtn.addEventListener('click', doSearch);
   queryEl.addEventListener('keydown', function(e) { if (e.key === 'Enter') doSearch(); });
+  queryEl.addEventListener('input', function() {
+    if (!queryEl.value.trim()) loadRecent();
+  });
   closeBtn.addEventListener('click', closeDrawer);
   overlay.addEventListener('click', closeDrawer);
   saveBtn.addEventListener('click', saveNote);
@@ -273,6 +285,19 @@
     saveBtn.classList.toggle('dirty', dirty);
     saveStatus.textContent = dirty ? 'Unsaved changes' : '';
   });
+
+  function loadRecent() {
+    resultsEl.innerHTML = '<div class="msg">Loading\u2026</div>';
+    fetch('/api/notes/recent?n=10')
+    .then(function(resp) {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.json();
+    })
+    .then(function(data) { renderResults(data.results, true); })
+    .catch(function() {
+      resultsEl.innerHTML = '<div class="empty-state" id="empty-state"><h2>Search your workspace</h2><p>Type a keyword and hit Search to find relevant notes.</p></div>';
+    });
+  }
 
   function doSearch() {
     var query = queryEl.value.trim();
@@ -288,28 +313,37 @@
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       return resp.json();
     })
-    .then(function(data) { renderResults(data.results); })
+    .then(function(data) { renderResults(data.results, false); })
     .catch(function(err) {
       resultsEl.innerHTML = '<div class="msg error">Error: ' + escHtml(err.message) + '</div>';
     })
     .finally(function() { searchBtn.disabled = false; });
   }
 
-  function renderResults(results) {
+  loadRecent();
+
+  function renderResults(results, isRecent) {
     if (!results || results.length === 0) {
-      resultsEl.innerHTML = '<div class="msg">No notes found.</div>';
+      resultsEl.innerHTML = '<div class="msg">' + (isRecent ? 'No notes yet.' : 'No notes found.') + '</div>';
       return;
     }
-    var maxScore = Math.max.apply(null, results.map(function(r) { return r.score; }).concat([0.001]));
     resultsEl.innerHTML = '';
+    if (isRecent) {
+      var label = document.createElement('div');
+      label.className = 'section-label';
+      label.textContent = 'Recently modified';
+      resultsEl.appendChild(label);
+    }
+    var maxScore = isRecent ? 1 : Math.max.apply(null, results.map(function(r) { return r.score || 0; }).concat([0.001]));
     results.forEach(function(r) {
-      var pct = Math.round((r.score / maxScore) * 100);
       var card = document.createElement('div');
       card.className = 'result-card';
+      var scoreBar = isRecent ? '' :
+        '<div class="score-bar"><div class="score-bar-fill" style="width:' + Math.round(((r.score || 0) / maxScore) * 100) + '%"></div></div>';
       card.innerHTML =
         '<div class="result-top">' +
           '<span class="result-title">' + escHtml(r.title) + '</span>' +
-          '<div class="score-bar"><div class="score-bar-fill" style="width:' + pct + '%"></div></div>' +
+          scoreBar +
         '</div>' +
         '<div class="result-filename">' + escHtml(r.filename) + '</div>' +
         '<div class="result-snippet">' + escHtml(r.snippet) + '</div>';

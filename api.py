@@ -474,6 +474,41 @@ def notes_search(req: NoteSearchRequest):
     return {'results': results}
 
 
+@api.get('/notes/recent')
+def notes_recent(n: int = Query(default=10, ge=1, le=50)):
+    """Return the n most recently modified notes from the Obsidian vault."""
+    notes_dir = Path('/mnt/Obsidian/Notes')
+    results = []
+    if notes_dir.is_dir():
+        for p in notes_dir.glob('*.md'):
+            try:
+                mtime = p.stat().st_mtime
+                content = p.read_text(encoding='utf-8', errors='replace')
+                title = p.stem.replace('-', ' ').title()
+                snippet = ''
+                if content.startswith('---'):
+                    end = content.find('---', 3)
+                    if end != -1:
+                        for line in content[3:end].splitlines():
+                            if line.startswith('title:'):
+                                title = line.partition(':')[2].strip().strip('"\'')
+                        body = content[end + 3:].lstrip('\n')
+                        body_lines = [l.strip() for l in body.splitlines()
+                                      if l.strip() and not l.strip().startswith('#')]
+                        snippet = ' '.join(body_lines[:3])[:200]
+                else:
+                    body_lines = [l.strip() for l in content.splitlines()
+                                  if l.strip() and not l.strip().startswith('#')]
+                    snippet = ' '.join(body_lines[:3])[:200]
+                results.append({'filename': p.name, 'title': title, 'snippet': snippet, 'mtime': mtime})
+            except OSError:
+                continue
+    results.sort(key=lambda r: r['mtime'], reverse=True)
+    for r in results:
+        del r['mtime']
+    return {'results': results[:n]}
+
+
 @api.get('/notes/{filename:path}')
 def notes_get(filename: str):
     """Fetch a note's title and body (frontmatter stripped)."""
