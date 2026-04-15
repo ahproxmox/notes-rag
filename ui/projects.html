@@ -385,7 +385,7 @@
     }
 
     grid.innerHTML = filtered.map(p => `
-      <div class="project-card" onclick="showDetail(${JSON.stringify(esc(p.slug))})">
+      <div class="project-card" data-slug="${esc(p.slug)}" onclick="showDetail(this.dataset.slug)">
         <div class="card-top">
           <span class="card-title">${esc(p.title)}</span>
           <span class="status-dot ${esc(p.status)}" title="${esc(p.status)}"></span>
