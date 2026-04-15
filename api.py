@@ -941,70 +941,260 @@ async def review_auto_tag(note_id: str):
 
 
 
-# ── API: kanban proxy ─────────────────────────────────────────────────────────
-# The kanban UI is served at /kanban from CT 111. Its API calls are proxied
-# here to the todos-indexer on CT 122 (:3000) which owns the todo files.
+# ── API: kanban (native) ──────────────────────────────────────────────────────
+# Hot-path todo CRUD and swimlanes are served natively from CT 111.
+# Enrich, agent/turn, and settings remain proxied to CT 122 (:3000).
 
-def _kanban_fwd(method: str, path: str, body: bytes = b'', qs: str = ''):
+_SWIMLANES_FILE = Path('/mnt/Claude/context/swimlanes.json')
+_DEFAULT_SWIMLANES = ['Dev', 'Infra', 'Personal']
+_PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
+_STATUS_MAP = {
+    'inbox': 'inbox', 'pending': 'pending',
+    'in-progress': 'in_progress', 'in_progress': 'in_progress',
+    'completed': 'completed', 'wontdo': 'wontdo', 'partial': 'partial',
+}
+
+
+def _get_fm_field(content: str, patterns: list, default=None):
+    for pat in patterns:
+        m = re.search(pat, content, re.IGNORECASE | re.MULTILINE)
+        if m:
+            return m.group(1).strip().strip('"')
+    return default
+
+
+def _parse_todo_file(filename: str, filepath: Path) -> dict | None:
+    try:
+        content = filepath.read_text(encoding='utf-8', errors='replace')
+        id_m = re.match(r'^(\d+)', filename)
+        todo_id = int(id_m.group(1)) if id_m else None
+
+        title = (_get_fm_field(content, [
+            r'^title:\s*"?([^"\n]+)"?\s*$',
+            r'^#\s+(.+)',
+        ]) or filename.replace('.md', '').lstrip('0123456789-'))
+
+        status    = _get_fm_field(content, [r'^status:\s*([a-zA-Z0-9_-]+)\s*$']) or 'pending'
+        priority  = _get_fm_field(content, [r'^priority:\s*(high|medium|low)\s*$']) or 'medium'
+        created   = _get_fm_field(content, [r'^created:\s*([\d-]+)\s*$']) or ''
+        completed = _get_fm_field(content, [r'^completed:\s*([\d-]+)\s*$'])
+        swimlane  = _get_fm_field(content, [r'^swimlane:\s*"?([^"\n]+)"?\s*$'])
+        assignee  = _get_fm_field(content, [r'^assignee:\s*([^\n]+)\s*$'])
+        project   = _get_fm_field(content, [r'^project:\s*([^\n]+)\s*$'])
+
+        prereq_ids: list[str] = []
+        ym = re.search(r'^(?:prereqs|prereqIds):\s*\[([^\]]*)\]\s*$', content,
+                       re.IGNORECASE | re.MULTILINE)
+        if ym:
+            prereq_ids = [s.strip().strip('"\'') for s in ym.group(1).split(',') if s.strip()]
+
+        return {
+            'id': todo_id, 'title': title, 'status': status, 'priority': priority,
+            'created': created, 'completed': completed, 'prereqIds': prereq_ids,
+            'swimlane': swimlane, 'assignee': assignee, 'project': project,
+        }
+    except Exception:
+        return None
+
+
+def _find_todo_path(todo_id: int) -> Path | None:
+    for p in _todos_dir.glob('*.md'):
+        m = re.match(r'^(\d+)', p.name)
+        if m and int(m.group(1)) == todo_id:
+            return p
+    return None
+
+
+def _set_fm_field(content: str, field: str, value: str) -> str:
+    pattern = re.compile(rf'^({re.escape(field)}:\s*).*$', re.IGNORECASE | re.MULTILINE)
+    if pattern.search(content):
+        return pattern.sub(f'{field}: {value}', content, count=1)
+    return content.replace('---\n', f'---\n{field}: {value}\n', 1)
+
+
+def _load_swimlanes() -> list[str]:
+    try:
+        if _SWIMLANES_FILE.exists():
+            return json.loads(_SWIMLANES_FILE.read_text())
+    except Exception:
+        pass
+    return list(_DEFAULT_SWIMLANES)
+
+
+def _save_swimlanes(lanes: list[str]):
+    _SWIMLANES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _SWIMLANES_FILE.write_text(json.dumps(lanes, indent=2))
+
+
+# ── kanban todo routes ────────────────────────────────────────────────────────
+
+@api.get('/kanban/todos')
+def kanban_todos_list(
+    status: str | None = None,
+    priority: str | None = None,
+    assignee: str | None = None,
+    swimlane: str | None = None,
+    sort: str = 'priority',
+):
+    todos = []
+    for p in sorted(_todos_dir.glob('*.md')):
+        t = _parse_todo_file(p.name, p)
+        if t:
+            todos.append(t)
+
+    if status:
+        norm = _STATUS_MAP.get(status, status)
+        todos = [t for t in todos if t['status'] == norm]
+    if priority:
+        todos = [t for t in todos if t['priority'] == priority]
+    if assignee:
+        todos = [t for t in todos if t['assignee'] == assignee]
+    if swimlane:
+        todos = [t for t in todos if t['swimlane'] == swimlane]
+
+    if sort == 'priority':
+        todos.sort(key=lambda t: (_PRIORITY_ORDER.get(t['priority'], 999), t['id'] or 0))
+    elif sort == 'id':
+        todos.sort(key=lambda t: t['id'] or 0)
+
+    return todos
+
+
+@api.post('/kanban/todos')
+async def kanban_todos_create_native(request: Request):
+    data = json.loads(await request.body())
+    req = TodoCreateRequest(
+        title=data.get('title', ''),
+        description=data.get('description', ''),
+        priority=data.get('priority', 'medium'),
+        swimlane=data.get('swimlane', 'Dev'),
+        assignee=data.get('assignee', ''),
+        project=data.get('project', ''),
+    )
+    return todos_create(req)
+
+
+@api.patch('/kanban/todos/{todo_id}')
+async def kanban_todos_patch(todo_id: int, request: Request):
+    updates = json.loads(await request.body())
+
+    if 'status' in updates and updates['status'] not in \
+            {'inbox', 'pending', 'in_progress', 'completed', 'wontdo', 'partial'}:
+        raise HTTPException(status_code=400, detail=f'Invalid status: {updates["status"]}')
+    if 'priority' in updates and updates['priority'] not in {'high', 'medium', 'low'}:
+        raise HTTPException(status_code=400, detail=f'Invalid priority: {updates["priority"]}')
+
+    filepath = _find_todo_path(todo_id)
+    if not filepath:
+        raise HTTPException(status_code=404, detail=f'Todo not found: {todo_id}')
+
+    content = filepath.read_text(encoding='utf-8')
+
+    if 'status' in updates:
+        content = _set_fm_field(content, 'status', updates['status'])
+        if updates['status'] == 'completed':
+            content = _set_fm_field(content, 'completed', date.today().isoformat())
+    if 'priority' in updates:
+        content = _set_fm_field(content, 'priority', updates['priority'])
+    if 'swimlane' in updates:
+        content = _set_fm_field(content, 'swimlane', str(updates.get('swimlane') or '').strip())
+    if 'title' in updates:
+        safe = str(updates['title']).strip().replace('"', '\\"')
+        content = _set_fm_field(content, 'title', f'"{safe}"')
+    if 'project' in updates:
+        content = _set_fm_field(content, 'project', str(updates.get('project') or '').strip())
+    if 'assignee' in updates:
+        content = _set_fm_field(content, 'assignee', str(updates.get('assignee') or '').strip())
+    if 'body' in updates and isinstance(updates['body'], str):
+        fm_end = content.find('---', 3)
+        if fm_end != -1:
+            content = content[:fm_end + 3] + '\n\n' + updates['body'].strip() + '\n'
+        else:
+            content = updates['body'].strip() + '\n'
+
+    filepath.write_text(content, encoding='utf-8')
+    return _parse_todo_file(filepath.name, filepath)
+
+
+@api.get('/kanban/todos/{todo_id}/raw')
+def kanban_todos_raw(todo_id: int):
+    filepath = _find_todo_path(todo_id)
+    if not filepath:
+        raise HTTPException(status_code=404, detail=f'Todo not found: {todo_id}')
+    content = filepath.read_text(encoding='utf-8')
+    body = re.sub(r'^---[\s\S]*?---\n?', '', content, count=1).strip()
+    return {'body': body}
+
+
+@api.get('/kanban/refresh')
+def kanban_refresh():
+    count = sum(1 for _ in _todos_dir.glob('*.md'))
+    return {'ok': True, 'count': count}
+
+
+# ── kanban swimlane routes ────────────────────────────────────────────────────
+
+@api.get('/kanban/swimlanes')
+def kanban_swimlanes_list():
+    return _load_swimlanes()
+
+
+@api.post('/kanban/swimlanes')
+async def kanban_swimlanes_add(request: Request):
+    data = json.loads(await request.body())
+    name = str(data.get('name', '')).strip()
+    if not name:
+        raise HTTPException(status_code=400, detail='name is required')
+    lanes = _load_swimlanes()
+    normalized = name.title()
+    if normalized not in lanes:
+        lanes.append(normalized)
+        _save_swimlanes(lanes)
+    return lanes
+
+
+@api.delete('/kanban/swimlanes/{name}')
+def kanban_swimlanes_delete(name: str):
+    lanes = _load_swimlanes()
+    lanes = [l for l in lanes if l.lower() != name.lower()]
+    _save_swimlanes(lanes)
+    return lanes
+
+
+# ── enrich / agent / settings: still proxy to CT 122 ────────────────────────
+
+def _kanban_proxy(method: str, path: str, body: bytes = b'', qs: str = ''):
     url = f'{_TODOS_INDEXER}{path}'
     if qs:
         url += f'?{qs}'
     hdrs = {'Content-Type': 'application/json'} if body else {}
     try:
-        r = getattr(http_requests, method)(url, data=body or None, headers=hdrs, timeout=15)
+        r = getattr(http_requests, method)(url, data=body or None, headers=hdrs, timeout=30)
         return Response(content=r.content, status_code=r.status_code,
                         media_type=r.headers.get('Content-Type', 'application/json'))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f'Kanban indexer unavailable: {e}')
+        raise HTTPException(status_code=502, detail=f'Kanban proxy unavailable: {e}')
 
-
-@api.get('/kanban/todos')
-async def kanban_todos_list(request: Request):
-    return _kanban_fwd('get', '/todos', qs=str(request.query_params))
-
-@api.post('/kanban/todos')
-async def kanban_todos_create(request: Request):
-    return _kanban_fwd('post', '/todos', body=await request.body())
-
-@api.patch('/kanban/todos/{todo_id}')
-async def kanban_todos_patch(todo_id: int, request: Request):
-    return _kanban_fwd('patch', f'/todos/{todo_id}', body=await request.body())
-
-@api.get('/kanban/todos/{todo_id}/raw')
-def kanban_todos_raw(todo_id: int):
-    return _kanban_fwd('get', f'/todos/{todo_id}/raw')
-
-@api.get('/kanban/refresh')
-def kanban_refresh():
-    return _kanban_fwd('get', '/refresh')
-
-@api.get('/kanban/swimlanes')
-def kanban_swimlanes_list():
-    return _kanban_fwd('get', '/swimlanes')
-
-@api.post('/kanban/swimlanes')
-async def kanban_swimlanes_create(request: Request):
-    return _kanban_fwd('post', '/swimlanes', body=await request.body())
-
-@api.delete('/kanban/swimlanes/{name}')
-def kanban_swimlanes_delete(name: str):
-    return _kanban_fwd('delete', f'/swimlanes/{name}')
 
 @api.post('/kanban/enrich')
 async def kanban_enrich(request: Request):
-    return _kanban_fwd('post', '/enrich', body=await request.body())
+    return _kanban_proxy('post', '/enrich', body=await request.body())
+
 
 @api.post('/kanban/agent/turn')
 async def kanban_agent_turn(request: Request):
-    return _kanban_fwd('post', '/agent/turn', body=await request.body())
+    return _kanban_proxy('post', '/agent/turn', body=await request.body())
+
 
 @api.get('/kanban/settings')
 def kanban_settings_get():
-    return _kanban_fwd('get', '/settings')
+    return _kanban_proxy('get', '/settings')
+
 
 @api.patch('/kanban/settings')
 async def kanban_settings_patch(request: Request):
-    return _kanban_fwd('patch', '/settings', body=await request.body())
+    return _kanban_proxy('patch', '/settings', body=await request.body())
+
 
 # ── API: services health ──────────────────────────────────────────────────────
 
