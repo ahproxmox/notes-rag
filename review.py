@@ -238,9 +238,73 @@ def _detect_note_style(body: str) -> str:
     return 'normal'
 
 
+def _detect_note_intent(filename: str, body: str) -> str:
+    """Classify a note's intent to drive smarter question selection.
+
+    Returns one of: decision, idea, task, reference, journal, list
+    """
+    fname = filename.lower().replace('-', ' ').replace('_', ' ')
+    text = (fname + ' ' + body[:400]).lower()
+
+    decision_signals = ['decided', 'decision', 'chose', 'going with', 'will use', 'switching to',
+                        'vs ', ' or ', 'trade-off', 'tradeoff', 'pros', 'cons', 'alternative']
+    task_signals = ['todo', 'task', 'action', 'need to', 'should ', 'must ', 'deploy', 'install',
+                    'set up', 'fix ', 'update ', 'migrate', 'implement', 'create', 'build']
+    idea_signals = ['idea', 'concept', 'thinking about', 'what if', 'could ', 'might ', 'explore',
+                    'consider', 'brainstorm', 'proposal', 'draft', 'experiment']
+    reference_signals = ['docs', 'documentation', 'reference', 'config', 'credentials', 'setup',
+                         'how to', 'howto', 'guide', 'cheatsheet', 'notes on', 'overview']
+    journal_signals = ['today', 'yesterday', 'this week', 'meeting', 'call with', 'talked',
+                       'discussed', 'reflection', 'feeling', 'learned', 'realised', 'realized']
+
+    scores = {
+        'decision': sum(1 for s in decision_signals if s in text),
+        'task': sum(1 for s in task_signals if s in text),
+        'idea': sum(1 for s in idea_signals if s in text),
+        'reference': sum(1 for s in reference_signals if s in text),
+        'journal': sum(1 for s in journal_signals if s in text),
+    }
+
+    lines_ = [l for l in body.strip().split('\n') if l.strip() and not l.strip().startswith('#')]
+    list_lines = [l for l in lines_ if re.match(r'^\s*[-*\d]+[.)]\s', l)]
+    if list_lines and len(list_lines) >= len(lines_) * 0.6 and max(scores.values(), default=0) < 2:
+        return 'list'
+
+    best = max(scores, key=lambda k: scores[k])
+    return best if scores[best] >= 1 else 'reference'
+
+
 # ---------------------------------------------------------------------------
 # Interview engine
 # ---------------------------------------------------------------------------
+
+_INTENT_QUESTION_GUIDE = {
+    'decision': (
+        "Focus on: what alternatives were considered and ruled out, what would change this decision, "
+        "whether it's reversible, and what the first concrete step is."
+    ),
+    'idea': (
+        "Focus on: what triggered this idea, what problem it actually solves, the smallest version "
+        "you could test, and any dependencies or blockers."
+    ),
+    'task': (
+        "Focus on: what success looks like, any blockers or dependencies, priority relative to other "
+        "work, and whether anything could go wrong."
+    ),
+    'reference': (
+        "Focus on: why this was worth capturing, what scenario you'd return to it in, and whether "
+        "anything is missing that would make it more useful."
+    ),
+    'journal': (
+        "Focus on: what action or follow-up this implies, whether it changes anything, and what "
+        "context future-Angelo would need to understand why this mattered."
+    ),
+    'list': (
+        "Focus on: what the list is for and what drives inclusion, what's notably missing, and "
+        "whether items are ranked or prioritised in any way."
+    ),
+}
+
 
 def build_interview_prompt(
     notes: list,
@@ -249,34 +313,60 @@ def build_interview_prompt(
     question_count: int,
 ) -> str:
     grouped = len(notes) > 1
+
+    # Detect intent for each note and build annotated sections
     note_sections = []
+    intents = []
     for n in notes:
+        intent = _detect_note_intent(n['filename'], n['body'])
+        intents.append(intent)
         style = _detect_note_style(n['body'])
         style_hint = ''
         if style == 'sparse':
-            style_hint = ' [SHORT NOTE ask open-ended questions to expand: purpose, timeline, context]'
-        elif style == 'list':
-            style_hint = ' [LIST NOTE ask about the list as a whole: purpose, selection criteria, whats missing]'
-        note_sections.append(f"### {n['filename']}{style_hint}\n{n['body']}")
+            style_hint = ' [SPARSE — expand with open-ended questions]'
+        note_sections.append(f"### {n['filename']} [{intent.upper()}]{style_hint}\n{n['body']}")
     notes_text = '\n\n'.join(note_sections)
+
+    # Dominant intent drives question strategy (use first if grouped)
+    dominant_intent = intents[0] if intents else 'reference'
+    intent_guide = _INTENT_QUESTION_GUIDE.get(dominant_intent, _INTENT_QUESTION_GUIDE['reference'])
+
+    # Question progression guidance based on position
+    progression = {
+        0: "Q1: Understand the core why — motivation, trigger, or context behind this note.",
+        1: "Q2: Explore implications, connections to other work, or what comes next.",
+        2: "Q3: Surface what's missing — gaps, risks, or what future-Angelo would want to know.",
+    }.get(question_count, "Ask a clarifying question about what's most unclear.")
+
     prev_section = ''
     if previous_reviews:
         prev_lines = '\n'.join(f"- {qa['q']}" for qa in previous_reviews)
-        prev_section = f'\nPREVIOUS REVIEW QUESTIONS do not repeat these:\n{prev_lines}\n'
+        prev_section = f'\nDO NOT REPEAT these already-asked questions:\n{prev_lines}\n'
+
     rag_section = ''
     if rag_context:
-        rag_section = f'\nRELATED NOTES FROM KNOWLEDGE BASE:\n{rag_context}\nUse these to ask bridging questions.\n'
+        rag_section = (
+            f'\nRELATED EXISTING NOTES:\n{rag_context}\n'
+            'If relevant, ask how this note relates to, extends, or supersedes those notes. '
+            'Name specific related notes in your question if it adds value.\n'
+        )
+
     grouped_note = ''
     if grouped:
-        grouped_note = f'\nYou are reviewing {len(notes)} related notes together. Ask bridging questions that connect them.\n'
+        grouped_note = (
+            f'\nReviewing {len(notes)} related notes together. '
+            'Ask a question that bridges across all of them, not just one.\n'
+        )
+
     return (
-        "You are a notes interviewer helping Angelo enrich his personal notes.\n"
-        f"Ask ONE contextual question at a time. No preamble, no explanation just the question.{grouped_note}\n"
+        "You are a concise notes interviewer enriching Angelo's personal knowledge base.\n"
+        f"Ask ONE question only. No preamble, no explanation — just the question itself.{grouped_note}\n"
+        f"NOTE TYPE: {dominant_intent} — {intent_guide}\n"
+        f"QUESTION STRATEGY: {progression}\n"
         "RULES:\n"
-        "- Ask about purpose, timeline, constraints, connections, next steps\n"
-        "- NEVER answer, research, or explain the note topic\n"
-        f"- Maximum 3 questions total (this is question {question_count + 1})\n"
-        "- Stop earlier if the conversation reaches a natural conclusion\n"
+        "- NEVER answer, explain, or research the topic\n"
+        "- Keep the question specific to what's actually in the note\n"
+        f"- This is question {question_count + 1} of max 3\n"
         f"{prev_section}{rag_section}\n"
         "NOTES:\n"
         f"{notes_text}"

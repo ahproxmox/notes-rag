@@ -752,10 +752,28 @@ async def review_start(req: ReviewStartRequest):
             'previous_reviews': previous_reviews,
         })
     combined_text = ' '.join(n['body'][:200] for n in notes_data)
+    # Also search by filename slug to surface thematically related notes
+    filename_query = ' '.join(
+        n['filename'].replace('.md', '').replace('-', ' ').replace('_', ' ')
+        for n in notes_data
+    )
     rag_context = ''
     try:
-        _, _, chunks = search(combined_text)
-        rag_context = '\n'.join(f"[{c['source']}] {c['content'][:200]}" for c in chunks[:3])
+        seen_sources: set[str] = set()
+        best_chunks: list[dict] = []
+        for query in [combined_text, filename_query]:
+            _, _, chunks = search(query)
+            for c in chunks:
+                src = c.get('source', '')
+                # Exclude the notes being reviewed from their own RAG context
+                if src not in seen_sources and not any(n['filename'] in src for n in notes_data):
+                    seen_sources.add(src)
+                    best_chunks.append(c)
+                if len(best_chunks) >= 5:
+                    break
+            if len(best_chunks) >= 5:
+                break
+        rag_context = '\n'.join(f"[{c['source']}] {c['content'][:200]}" for c in best_chunks[:5])
     except Exception:
         pass
     session = _session_mgr.create(req.note_ids, notes_data)

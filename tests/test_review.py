@@ -226,7 +226,27 @@ def test_group_notes_by_similarity():
     assert {'recipe.md'} in group_files
 
 
-from review import build_interview_prompt, build_review_content
+from review import build_interview_prompt, build_review_content, _detect_note_intent
+
+
+def test_detect_intent_decision():
+    intent = _detect_note_intent('architecture.md', 'Decided to go with PostgreSQL vs MySQL. Pros: better JSON support.')
+    assert intent == 'decision'
+
+
+def test_detect_intent_idea():
+    intent = _detect_note_intent('idea.md', 'What if we explored using a vector DB for search? Could be interesting.')
+    assert intent == 'idea'
+
+
+def test_detect_intent_task():
+    intent = _detect_note_intent('task.md', 'Need to deploy the new service. Set up monitoring and install dependencies.')
+    assert intent == 'task'
+
+
+def test_detect_intent_list():
+    intent = _detect_note_intent('shopping.md', '# Shopping\n- Milk\n- Eggs\n- Bread\n- Butter\n- Coffee')
+    assert intent == 'list'
 
 
 def test_build_prompt_single_note_contains_content():
@@ -253,6 +273,7 @@ def test_build_prompt_grouped_notes():
     )
     assert 'venues.md' in prompt
     assert 'budget.md' in prompt
+    assert 'related notes together' in prompt.lower() or 'reviewing' in prompt.lower()
 
 
 def test_build_prompt_avoids_previous_questions():
@@ -274,8 +295,7 @@ def test_build_prompt_sparse_note_hint():
         previous_reviews=[],
         question_count=0,
     )
-    # Should hint about sparse/short notes
-    assert 'expand' in prompt.lower() or 'short' in prompt.lower() or 'sparse' in prompt.lower()
+    assert 'sparse' in prompt.lower() or 'expand' in prompt.lower()
 
 
 def test_build_prompt_list_note_hint():
@@ -286,6 +306,43 @@ def test_build_prompt_list_note_hint():
         question_count=0,
     )
     assert 'list' in prompt.lower()
+
+
+def test_build_prompt_includes_intent_guidance():
+    prompt = build_interview_prompt(
+        notes=[{'filename': 'decision-db.md', 'body': 'Decided to go with Postgres vs MySQL. Pros: JSON support.'}],
+        rag_context='',
+        previous_reviews=[],
+        question_count=0,
+    )
+    assert 'DECISION' in prompt or 'decision' in prompt.lower()
+
+
+def test_build_prompt_includes_rag_bridging_guidance():
+    prompt = build_interview_prompt(
+        notes=[{'filename': 'venues.md', 'body': '# Venues\n1) Poets Lane'}],
+        rag_context='[budget.md] Venue budget is $5000',
+        previous_reviews=[],
+        question_count=0,
+    )
+    assert 'budget.md' in prompt
+    assert 'extends' in prompt.lower() or 'supersedes' in prompt.lower() or 'relates' in prompt.lower()
+
+
+def test_build_prompt_question_progression():
+    # Q1 strategy should reference motivation/why
+    prompt_q1 = build_interview_prompt(
+        notes=[{'filename': 'note.md', 'body': 'Some content here'}],
+        rag_context='', previous_reviews=[], question_count=0,
+    )
+    assert 'Q1' in prompt_q1
+
+    # Q3 strategy should reference gaps/missing
+    prompt_q3 = build_interview_prompt(
+        notes=[{'filename': 'note.md', 'body': 'Some content here'}],
+        rag_context='', previous_reviews=[], question_count=2,
+    )
+    assert 'Q3' in prompt_q3
 
 
 def test_build_review_content_with_qa():
