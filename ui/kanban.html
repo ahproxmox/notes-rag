@@ -117,23 +117,32 @@
     .cards { padding: 0 2px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 7px; min-height: 32px; align-content: start; }
 
     /* ── Cards ── */
-    .card { background: var(--bg); border-radius: 7px; border: 1px solid var(--border); border-left: 3px solid transparent; padding: 10px 11px; cursor: grab; transition: box-shadow 0.12s, border-color 0.12s; user-select: none; }
+    .card { background: var(--bg); border-radius: 7px; border: 1px solid var(--border); border-left: none; padding: 10px 11px 10px 14px; cursor: grab; transition: box-shadow 0.12s, border-color 0.12s; user-select: none; position: relative; overflow: hidden; }
     .card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.4); border-color: var(--text-dim); }
     .card.dragging { opacity: 0.45; cursor: grabbing; }
-    .card.priority-high   { border-left-color: var(--red); }
-    .card.priority-medium { border-left-color: var(--yellow); }
-    .card.priority-low    { border-left-color: var(--text-dim); }
+
+    /* Left stripe: top 60% = priority colour, bottom 40% = complexity shade (or solid if no complexity) */
+    .card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+    .card.priority-high::before   { background: #f85149; }
+    .card.priority-medium::before { background: #d29922; }
+    .card.priority-low::before    { background: #484f58; }
+    .card.priority-high.cx-small::before    { background: linear-gradient(to bottom, #f85149 60%, #fca5a5 60%); }
+    .card.priority-high.cx-medium::before   { background: linear-gradient(to bottom, #f85149 60%, #be123c 60%); }
+    .card.priority-high.cx-large::before    { background: linear-gradient(to bottom, #f85149 60%, #7f1d1d 60%); }
+    .card.priority-medium.cx-small::before  { background: linear-gradient(to bottom, #d29922 60%, #fde68a 60%); }
+    .card.priority-medium.cx-medium::before { background: linear-gradient(to bottom, #d29922 60%, #b45309 60%); }
+    .card.priority-medium.cx-large::before  { background: linear-gradient(to bottom, #d29922 60%, #78350f 60%); }
+    .card.priority-low.cx-small::before     { background: linear-gradient(to bottom, #484f58 60%, #94a3b8 60%); }
+    .card.priority-low.cx-medium::before    { background: linear-gradient(to bottom, #484f58 60%, #334155 60%); }
+    .card.priority-low.cx-large::before     { background: linear-gradient(to bottom, #484f58 60%, #1e293b 60%); }
 
     .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
     .card-title { font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--text); }
     .card-id { font-size: 11px; color: var(--text-dim); font-weight: 600; flex-shrink: 0; margin-top: 1px; }
 
     .card-footer { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-    .priority-badge { font-size: 11px; font-weight: 500; padding: 2px 7px; border-radius: 4px; }
-    .priority-badge.high   { background: #3f1212; color: #f87171; }
-    .priority-badge.medium { background: #3f2a0a; color: #fbbf24; }
-    .priority-badge.low    { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); }
     .card-prereqs { font-size: 11px; color: var(--text-dim); }
+    .complexity-hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; min-height: 14px; }
 
     .empty { color: var(--border); font-size: 12px; text-align: center; padding: 16px 0; }
 
@@ -362,6 +371,16 @@
           <option value="">— no project —</option>
         </select>
       </div>
+      <div class="edit-form-group">
+        <label class="edit-form-label">Complexity</label>
+        <select class="form-select" id="edit-complexity" onchange="updateComplexityHint('edit')" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;font-size:13px;padding:7px 10px;border-radius:6px;font-family:inherit;">
+          <option value="">— not set —</option>
+          <option value="small">Small</option>
+          <option value="medium">Medium</option>
+          <option value="large">Large</option>
+        </select>
+        <p class="complexity-hint" id="edit-complexity-hint"></p>
+      </div>
       <div class="edit-form-actions">
         <button class="edit-cancel-btn" onclick="cancelEdit()">Cancel</button>
         <button class="edit-save-btn" id="edit-save-btn" onclick="saveEdit()">Save</button>
@@ -413,6 +432,16 @@
             <option value="">— no project —</option>
           </select>
         </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Complexity <span class="form-optional">(optional)</span></label>
+        <select class="form-select" id="cf-complexity" onchange="updateComplexityHint('cf')">
+          <option value="">— not set —</option>
+          <option value="small">Small</option>
+          <option value="medium">Medium</option>
+          <option value="large">Large</option>
+        </select>
+        <p class="complexity-hint" id="cf-complexity-hint"></p>
       </div>
       <div class="form-group">
         <label class="form-label">Description <span class="form-optional">(optional)</span></label>
@@ -616,7 +645,8 @@
 
   function makeCard(todo) {
     const div = document.createElement('div');
-    div.className = 'card priority-' + (todo.priority || 'medium');
+    const cx = todo.complexity ? ' cx-' + todo.complexity : '';
+    div.className = 'card priority-' + (todo.priority || 'medium') + cx;
     div.draggable = true;
     div.dataset.id = todo.id;
 
@@ -634,7 +664,6 @@
         '<span class="card-id">#' + pad(todo.id) + '</span>' +
       '</div>' +
       '<div class="card-footer">' +
-        '<span class="priority-badge ' + (todo.priority || 'medium') + '">' + (todo.priority || 'medium') + '</span>' +
         projTag +
         prereqText +
       '</div>';
@@ -646,6 +675,17 @@
     div.addEventListener('dragend', () => div.classList.remove('dragging'));
     div.addEventListener('click', () => openModal(todo));
     return div;
+  }
+
+  const COMPLEXITY_HINTS = {
+    small:  'Single-file fix. Claude acts immediately and commits.',
+    medium: 'Multi-file change. Claude may ask 1–2 questions before starting.',
+    large:  'Cross-service or new infra. Claude invokes /plan and asks clarifying questions first.',
+  };
+  function updateComplexityHint(prefix) {
+    const val = document.getElementById(prefix + '-complexity').value;
+    const el = document.getElementById(prefix + '-complexity-hint');
+    if (el) el.textContent = COMPLEXITY_HINTS[val] || '';
   }
 
   function onDragOver(e) {
@@ -766,6 +806,8 @@
     document.getElementById('edit-body').value = '';
     const epSel = document.getElementById('edit-project');
     if (epSel) epSel.value = todo.project || '';
+    const ecSel = document.getElementById('edit-complexity');
+    if (ecSel) { ecSel.value = todo.complexity || ''; updateComplexityHint('edit'); }
     fetch('/api/kanban/todos/' + todo.id + '/raw')
       .then(function(r) { return r.json(); })
       .then(function(data) { document.getElementById('edit-body').value = data.body || ''; });
@@ -798,10 +840,11 @@
       var priority = document.getElementById('edit-priority').value;
       var swimlane = document.getElementById('edit-swimlane').value;
       var assignee = document.getElementById('edit-assignee').value;
+      var complexity = document.getElementById('edit-complexity').value;
       var res = await fetch('/api/kanban/todos/' + editingTodoId, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, body, project: project || null, status, priority, swimlane: swimlane || null, assignee: assignee || null }),
+        body: JSON.stringify({ title, body, project: project || null, status, priority, swimlane: swimlane || null, assignee: assignee || null, complexity: complexity || '' }),
       });
       if (!res.ok) throw new Error('Server error ' + res.status);
       var updated = await res.json();
@@ -855,6 +898,7 @@
           description: document.getElementById('cf-desc').value.trim(),
           assignee: document.getElementById('cf-assignee').value || null,
           project: document.getElementById('cf-project').value || null,
+          complexity: document.getElementById('cf-complexity').value || null,
         }),
       });
       if (!res.ok) throw new Error('Server error ' + res.status);

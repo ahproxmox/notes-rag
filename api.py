@@ -85,6 +85,7 @@ class TodoCreateRequest(BaseModel):
     swimlane: str = 'Dev'
     assignee: str = ''
     project: str = ''
+    complexity: str = ''
 
 
 class NoteCreateRequest(BaseModel):
@@ -583,8 +584,10 @@ def todos_create(req: TodoCreateRequest):
     path = _todos_dir / filename
     today = date.today().isoformat()
 
-    assignee_line = f'assignee: {req.assignee}\n' if req.assignee else ''
-    project_line = f'project: {req.project}\n' if req.project else ''
+    assignee_line   = f'assignee: {req.assignee}\n' if req.assignee else ''
+    project_line    = f'project: {req.project}\n' if req.project else ''
+    valid_complexities = {'small', 'medium', 'large'}
+    complexity_line = f'complexity: {req.complexity}\n' if req.complexity in valid_complexities else ''
     content = (
         f'---\n'
         f'id: {todo_id}\n'
@@ -595,6 +598,7 @@ def todos_create(req: TodoCreateRequest):
         f'swimlane: {req.swimlane}\n'
         f'{assignee_line}'
         f'{project_line}'
+        f'{complexity_line}'
         f'---\n'
     )
     if req.description:
@@ -1172,13 +1176,14 @@ def _parse_todo_file(filename: str, filepath: Path) -> dict | None:
             r'^#\s+(.+)',
         ]) or filename.replace('.md', '').lstrip('0123456789-'))
 
-        status    = _get_fm_field(content, [r'^status:\s*([a-zA-Z0-9_-]+)\s*$']) or 'pending'
-        priority  = _get_fm_field(content, [r'^priority:\s*(high|medium|low)\s*$']) or 'medium'
-        created   = _get_fm_field(content, [r'^created:\s*([\d-]+)\s*$']) or ''
-        completed = _get_fm_field(content, [r'^completed:\s*([\d-]+)\s*$'])
-        swimlane  = _get_fm_field(content, [r'^swimlane:\s*"?([^"\n]+)"?\s*$'])
-        assignee  = _get_fm_field(content, [r'^assignee:\s*([^\n]+)\s*$'])
-        project   = _get_fm_field(content, [r'^project:\s*([^\n]+)\s*$'])
+        status     = _get_fm_field(content, [r'^status:\s*([a-zA-Z0-9_-]+)\s*$']) or 'pending'
+        priority   = _get_fm_field(content, [r'^priority:\s*(high|medium|low)\s*$']) or 'medium'
+        created    = _get_fm_field(content, [r'^created:\s*([\d-]+)\s*$']) or ''
+        completed  = _get_fm_field(content, [r'^completed:\s*([\d-]+)\s*$'])
+        swimlane   = _get_fm_field(content, [r'^swimlane:\s*"?([^"\n]+)"?\s*$'])
+        assignee   = _get_fm_field(content, [r'^assignee:\s*([^\n]+)\s*$'])
+        project    = _get_fm_field(content, [r'^project:\s*([^\n]+)\s*$'])
+        complexity = _get_fm_field(content, [r'^complexity:\s*(small|medium|large)\s*$'])
 
         prereq_ids: list[str] = []
         ym = re.search(r'^(?:prereqs|prereqIds):\s*\[([^\]]*)\]\s*$', content,
@@ -1190,6 +1195,7 @@ def _parse_todo_file(filename: str, filepath: Path) -> dict | None:
             'id': todo_id, 'title': title, 'status': status, 'priority': priority,
             'created': created, 'completed': completed, 'prereqIds': prereq_ids,
             'swimlane': swimlane, 'assignee': assignee, 'project': project,
+            'complexity': complexity,
         }
     except Exception:
         return None
@@ -1268,6 +1274,7 @@ async def kanban_todos_create_native(request: Request):
         swimlane=data.get('swimlane', 'Dev'),
         assignee=data.get('assignee', ''),
         project=data.get('project', ''),
+        complexity=data.get('complexity', ''),
     )
     return todos_create(req)
 
@@ -1303,6 +1310,12 @@ async def kanban_todos_patch(todo_id: int, request: Request):
         content = _set_fm_field(content, 'project', str(updates.get('project') or '').strip())
     if 'assignee' in updates:
         content = _set_fm_field(content, 'assignee', str(updates.get('assignee') or '').strip())
+    if 'complexity' in updates:
+        val = str(updates.get('complexity') or '').strip()
+        if val in {'small', 'medium', 'large'}:
+            content = _set_fm_field(content, 'complexity', val)
+        elif val == '':
+            content = re.sub(r'^complexity:[^\n]*\n?', '', content, flags=re.MULTILINE)
     if 'body' in updates and isinstance(updates['body'], str):
         fm_end = content.find('---', 3)
         if fm_end != -1:
