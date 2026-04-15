@@ -1,4 +1,4 @@
-const CACHE = "notes-rag-kanban1";
+const CACHE = "notes-rag-kanban2";
 const SHELL = ["/", "/notes", "/chat", "/review", "/new", "/projects", "/kanban"];
 
 self.addEventListener("install", e => {
