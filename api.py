@@ -99,6 +99,14 @@ class NoteSearchRequest(BaseModel):
 class NoteUpdateRequest(BaseModel):
     body: str
 
+class ProjectCreateRequest(BaseModel):
+    title: str
+    goal: str = ''
+    status: str = 'active'
+    wing: str = ''
+    tags: list[str] = []
+
+
 
 # ── UI routes ────────────────────────────────────────────────────────────────
 
@@ -243,6 +251,88 @@ def projects_list(status: str | None = None):
         projects.append(proj)
     return {'projects': projects}
 
+
+def _discover_related_docs(slug: str, title: str) -> list[dict]:
+    """Auto-discover sessions, plans, and Obsidian notes related to a project."""
+    import yaml as _yaml
+    related = []
+    slug_words = set(re.split(r'[-_]', slug.lower())) - {'the', 'a', 'an', 'and', 'or'}
+    title_words = set(re.split(r'\W+', title.lower())) - {'the', 'a', 'an', 'and', 'or', ''}
+
+    def _fm(text):
+        m = re.match(r'^---\s*\n(.*?)\n---', text, re.DOTALL)
+        if not m:
+            return {}
+        try:
+            return _yaml.safe_load(m.group(1)) or {}
+        except Exception:
+            return {}
+
+    def _slug_in_filename(stem):
+        # strip date prefix YYYY-MM-DD-HH-
+        topic = re.sub(r'^\d{4}-\d{2}-\d{2}-\d{2}-', '', stem)
+        topic_words = set(re.split(r'[-_]', topic.lower()))
+        return bool(slug_words & topic_words)
+
+    # Sessions
+    sessions_dir = _workspace_root / 'sessions'
+    if sessions_dir.exists():
+        for p in sorted(sessions_dir.glob('*.md'), reverse=True):
+            try:
+                text = p.read_text(encoding='utf-8', errors='replace')
+                fm = _fm(text)
+                # Match by explicit project field or slug words in filename
+                proj_field = str(fm.get('project', '')).lower()
+                if proj_field == slug or _slug_in_filename(p.stem):
+                    related.append({
+                        'label': f'Session: {p.stem}',
+                        'path': f'sessions/{p.name}',
+                        'source': 'session',
+                    })
+            except Exception:
+                pass
+
+    # Plans
+    plans_dir = _workspace_root / 'plans'
+    if plans_dir.exists():
+        for p in sorted(plans_dir.glob('*.md')):
+            try:
+                text = p.read_text(encoding='utf-8', errors='replace')
+                fm = _fm(text)
+                proj_field = str(fm.get('project', '')).lower()
+                preview = text[:400].lower()
+                if proj_field == slug or slug in preview or bool(slug_words & set(re.split(r'\W+', preview))):
+                    label = fm.get('title') or p.stem.replace('-', ' ').title()
+                    related.append({
+                        'label': f'Plan: {label}',
+                        'path': f'plans/{p.name}',
+                        'source': 'plan',
+                    })
+            except Exception:
+                pass
+
+    # Obsidian Notes
+    notes_dir = Path('/mnt/Obsidian/Notes')
+    if notes_dir.exists():
+        for p in sorted(notes_dir.glob('*.md')):
+            try:
+                text = p.read_text(encoding='utf-8', errors='replace')
+                fm = _fm(text)
+                tags = [str(t).lower() for t in (fm.get('tags') or [])]
+                proj_field = str(fm.get('project', '')).lower()
+                tag_words = set(' '.join(tags).replace('-', ' ').split())
+                if proj_field == slug or bool(slug_words & tag_words) or bool(title_words & tag_words):
+                    related.append({
+                        'label': f'Note: {p.stem}',
+                        'path': f'obsidian/Notes/{p.name}',
+                        'source': 'note',
+                    })
+            except Exception:
+                pass
+
+    return related
+
+
 @api.get('/projects/{slug}')
 def project_detail(slug: str):
     if not _projects_dir.exists():
@@ -250,8 +340,104 @@ def project_detail(slug: str):
     for p in _projects_dir.glob('*.md'):
         proj = _parse_project_file(p)
         if proj and proj['slug'] == slug:
+            proj['related_docs'] = _discover_related_docs(slug, proj.get('title', slug))
             return proj
     raise HTTPException(status_code=404, detail=f'Project {slug!r} not found')
+
+
+@api.post('/projects')
+def project_create(req: ProjectCreateRequest):
+    import json as _json, re as _re
+    if not req.title.strip():
+        raise HTTPException(status_code=400, detail='Title is required')
+    if req.status not in {'active', 'paused', 'complete', 'archived'}:
+        raise HTTPException(status_code=400, detail='Invalid status')
+    slug = _re.sub(r'[^a-z0-9]+', '-', req.title.strip().lower()).strip('-')
+    _projects_dir.mkdir(parents=True, exist_ok=True)
+    target = _projects_dir / f'{slug}.md'
+    if target.exists():
+        i = 2
+        while (_projects_dir / f'{slug}-{i}.md').exists():
+            i += 1
+        slug = f'{slug}-{i}'
+        target = _projects_dir / f'{slug}.md'
+    tags_yaml = _json.dumps(req.tags)
+    goal_safe = req.goal.strip().replace('"', '\\"')
+    title_safe = req.title.strip().replace('"', '\\"')
+    lines = ['---', f'title: "{title_safe}"', f'slug: {slug}', f'status: {req.status}']
+    if req.wing.strip():
+        lines.append(f'wing: {req.wing.strip()}')
+    lines += [f'goal: "{goal_safe}"', f'tags: {tags_yaml}', f'created: {date.today().isoformat()}', '---', '']
+    target.write_text('\n'.join(lines), encoding='utf-8')
+    return _parse_project_file(target)
+
+
+@api.patch('/projects/{slug}')
+async def project_update(slug: str, request: Request):
+    import json as _json
+    updates = _json.loads(await request.body())
+    if not _projects_dir.exists():
+        raise HTTPException(status_code=404, detail='Projects directory not found')
+    target = None
+    for p in _projects_dir.glob('*.md'):
+        proj = _parse_project_file(p)
+        if proj and proj['slug'] == slug:
+            target = p
+            break
+    if not target:
+        raise HTTPException(status_code=404, detail=f'Project {slug!r} not found')
+    content = target.read_text(encoding='utf-8')
+    if 'status' in updates:
+        if updates['status'] not in {'active', 'paused', 'complete', 'archived'}:
+            raise HTTPException(status_code=400, detail='Invalid status')
+        content = _set_fm_field(content, 'status', updates['status'])
+    if 'title' in updates:
+        safe = str(updates['title']).strip().replace('"', '\\"')
+        content = _set_fm_field(content, 'title', f'"{safe}"')
+    if 'goal' in updates:
+        safe = str(updates['goal']).strip().replace('"', '\\"')
+        content = _set_fm_field(content, 'goal', f'"{safe}"')
+    if 'wing' in updates:
+        content = _set_fm_field(content, 'wing', str(updates['wing']).strip())
+    if 'tags' in updates and isinstance(updates['tags'], list):
+        content = _set_fm_field(content, 'tags', _json.dumps(updates['tags']))
+    if 'summary' in updates and isinstance(updates['summary'], str):
+        fm_end = content.find('---', 3)
+        if fm_end != -1:
+            content = content[:fm_end + 3] + '\n' + updates['summary'].strip() + '\n'
+        else:
+            content = updates['summary'].strip() + '\n'
+    target.write_text(content, encoding='utf-8')
+    return _parse_project_file(target)
+
+
+# ── API: workspace file reader ───────────────────────────────────────────────
+
+_workspace_root = Path('/mnt/Claude')
+_obsidian_notes_root = Path('/mnt/Obsidian')
+
+@api.get('/workspace/{path:path}')
+def workspace_file(path: str):
+    """Serve a read-only file by relative path.
+    Paths starting with 'obsidian/' are resolved under /mnt/Obsidian/,
+    all others under /mnt/Claude/.
+    """
+    try:
+        if path.startswith('obsidian/'):
+            rel = path[len('obsidian/'):]
+            root = _obsidian_notes_root
+            target = (root / rel).resolve()
+            target.relative_to(root.resolve())
+        else:
+            root = _workspace_root
+            target = (root / path).resolve()
+            target.relative_to(root.resolve())
+    except (ValueError, Exception):
+        raise HTTPException(status_code=400, detail='Invalid path')
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail='File not found')
+    return {'path': path, 'content': target.read_text(encoding='utf-8', errors='replace')}
+
 
 
 # ── API: wiki ────────────────────────────────────────────────────────────────
@@ -366,6 +552,18 @@ def todos_pending_count():
         return {'count': len(todos)}
     except Exception as e:
         return {'count': None, 'error': str(e)}
+
+@api.get('/todos/by-project/{slug}')
+def todos_by_project(slug: str):
+    """Return todos tagged with this project slug."""
+    try:
+        resp = http_requests.get(f'{_TODOS_INDEXER}/todos', timeout=5)
+        resp.raise_for_status()
+        todos = resp.json()
+        filtered = [t for t in todos if str(t.get('project', '')).lower() == slug.lower()]
+        return {'todos': filtered}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f'Todos indexer unavailable: {e}')
 
 @api.post('/todos/create')
 def todos_create(req: TodoCreateRequest):
