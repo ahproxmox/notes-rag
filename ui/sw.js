@@ -1,4 +1,4 @@
-const CACHE = "notes-rag-38e9be6";
+const CACHE = "notes-rag-assignee-dropdown";
 const SHELL = ["/", "/notes", "/chat", "/review", "/new"];
 
 self.addEventListener("install", e => {

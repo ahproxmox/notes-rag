@@ -417,7 +417,13 @@
     </div>
     <div class="form-group">
       <label for="assignee">Assignee <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
-      <input type="text" id="assignee" placeholder="e.g. claude-code, openclaw">
+      <select id="assignee">
+        <option value="">— unassigned —</option>
+        <option value="claude-code">claude-code</option>
+        <option value="hermes">hermes</option>
+        <option value="openclaw">openclaw</option>
+        <option value="user">user</option>
+      </select>
     </div>
   </div>
 
