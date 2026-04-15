@@ -930,19 +930,17 @@ _models_config_path = Path('/mnt/Claude/config/models.json')
 _model_health_path  = Path('/mnt/Claude/config/model-health.json')
 
 _SIDECAR_URLS = {
-    'hermes':        'http://192.168.88.83:8090/reload',
-    'mirofish':      'http://192.168.88.79:8091/reload',
-    'openclaw':      'http://192.168.88.63:8092/reload',
-    'notes-curator': 'http://192.168.88.63:8092/reload',
+    'hermes':   'http://192.168.88.83:8090/reload',
+    'mirofish': 'http://192.168.88.79:8091/reload',
+    'openclaw': 'http://192.168.88.63:8092/reload',
 }
-_DISCORD_SERVICES = frozenset({'hermes', 'openclaw', 'notes-curator'})
-_ALL_SERVICES     = ['notes-rag', 'hermes', 'mirofish', 'openclaw', 'notes-curator']
+_DISCORD_SERVICES = frozenset({'hermes', 'openclaw'})
+_ALL_SERVICES     = ['notes-rag', 'hermes', 'mirofish', 'openclaw']
 _SERVICE_LABELS   = {
-    'notes-rag':     'Notes RAG',
-    'hermes':        'Hermes',
-    'mirofish':      'MiroFish',
-    'openclaw':      'OpenClaw',
-    'notes-curator': 'Notes Curator',
+    'notes-rag': 'Notes RAG',
+    'hermes':    'Hermes',
+    'mirofish':  'MiroFish',
+    'openclaw':  'OpenClaw',
 }
 
 

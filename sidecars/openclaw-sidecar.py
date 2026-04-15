@@ -31,17 +31,6 @@ def update_openclaw_models(service):
             oc['agents']['defaults']['model']['primary'] = _or_prefix(model)
             changed = True
 
-    if service in ('notes-curator', None):
-        nc_model = cfg.get('notes-curator', '').strip()
-        if nc_model:
-            for agent in oc['agents']['list']:
-                if agent['id'] == 'notes-curator':
-                    if 'model' not in agent:
-                        agent['model'] = {}
-                    agent['model']['primary'] = _or_prefix(nc_model)
-                    changed = True
-                    break
-
     if not changed:
         raise ValueError(f'Nothing updated for service: {service}')
 
@@ -62,9 +51,6 @@ def write_health(service, status, error=None):
     if error:
         entry['error'] = str(error)[:200]
     health[service] = entry
-    # openclaw restart affects both openclaw and notes-curator
-    if service == 'openclaw':
-        health['notes-curator'] = entry
     with open(HEALTH_CONFIG, 'w') as f:
         json.dump(health, f, indent=2)
 
