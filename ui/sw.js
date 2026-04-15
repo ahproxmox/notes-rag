@@ -1,5 +1,5 @@
-const CACHE = "notes-rag-assignee-dropdown";
-const SHELL = ["/", "/notes", "/chat", "/review", "/new"];
+const CACHE = "notes-rag-projects-v1";
+const SHELL = ["/", "/notes", "/chat", "/review", "/new", "/projects"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));

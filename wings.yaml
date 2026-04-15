@@ -172,6 +172,7 @@ wings:
       - "USER.md"
       - "MEMORY.md"
       - "todos/*"
+      - "projects/*"
       - "context/shared-protocols*"
       - "context/swimlanes*"
       - "context/TODOS*"
@@ -188,3 +189,5 @@ wings:
         keywords: []   # path-based only (todos/ dir)
       conventions:
         keywords: [conventions, "swimlanes.json"]
+      projects:
+        keywords: []   # path-based only (projects/ dir)

@@ -52,14 +52,15 @@ class Store:
             CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);
             CREATE INDEX IF NOT EXISTS idx_chunks_folder ON chunks(folder);
         ''')
-        # Wing/room columns — added in a later migration, so use ALTER + try/except
-        for col in ('wing', 'room'):
+        # Wing/room/project columns — added in later migrations, so use ALTER + try/except
+        for col in ('wing', 'room', 'project'):
             try:
                 self._conn.execute(f'ALTER TABLE chunks ADD COLUMN {col} TEXT')
             except sqlite3.OperationalError:
                 pass  # column already exists
         self._conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_wing ON chunks(wing)')
         self._conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_wing_room ON chunks(wing, room)')
+        self._conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_project ON chunks(project)')
         # FTS5 virtual table (content-sync with chunks)
         self._conn.execute('''
             CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
@@ -96,10 +97,10 @@ class Store:
         for i, chunk in enumerate(chunks):
             meta = chunk.metadata
             cur.execute(
-                'INSERT INTO chunks (source, filename, folder, headers, content, wing, room) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO chunks (source, filename, folder, headers, content, wing, room, project) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 (source, meta.get('filename', ''), meta.get('folder', 'root'),
                  meta.get('headers', ''), chunk.page_content,
-                 meta.get('wing'), meta.get('room')),
+                 meta.get('wing'), meta.get('room'), meta.get('project')),
             )
             chunk_id = cur.lastrowid
             # Prepend filename so filename terms are searchable via BM25.
@@ -127,8 +128,9 @@ class Store:
         return len(old_ids)
 
     def search_bm25(self, query: str, k: int = 20, folder: str | None = None,
-                    wing: str | None = None, room: str | None = None) -> list[Document]:
-        """BM25-ranked keyword search with optional folder/wing/room filters."""
+                    wing: str | None = None, room: str | None = None,
+                    project: str | None = None) -> list[Document]:
+        """BM25-ranked keyword search with optional folder/wing/room/project filters."""
         fts_query = self._fts_query(query)
         where = ['chunks_fts MATCH ?']
         params: list = [fts_query]
@@ -141,8 +143,11 @@ class Store:
         if room:
             where.append('c.room = ?')
             params.append(room)
+        if project:
+            where.append('c.project = ?')
+            params.append(project)
         sql = f'''
-            SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room
+            SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project
             FROM chunks_fts
             JOIN chunks c ON c.id = chunks_fts.rowid
             WHERE {' AND '.join(where)}
@@ -155,14 +160,15 @@ class Store:
             Document(
                 page_content=r[0],
                 metadata={'source': r[1], 'filename': r[2], 'folder': r[3],
-                          'headers': r[4], 'wing': r[5], 'room': r[6]},
+                          'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7]},
             )
             for r in rows
         ]
 
     def search_vector(self, query: str, k: int = 20, folder: str | None = None,
-                      wing: str | None = None, room: str | None = None) -> list[Document]:
-        """Vector similarity search with optional folder/wing/room filters.
+                      wing: str | None = None, room: str | None = None,
+                      project: str | None = None) -> list[Document]:
+        """Vector similarity search with optional folder/wing/room/project filters.
 
         sqlite-vec's k param is pre-filter — applied before our metadata WHERE
         clauses. To preserve top-k after filtering we over-fetch and trim.
@@ -174,7 +180,7 @@ class Store:
 
         where = ['v.embedding MATCH ?', 'k = ?']
         params: list = [query_bytes]
-        has_filter = bool(folder or wing or room)
+        has_filter = bool(folder or wing or room or project)
         # Over-fetch when filtering post-vec so trimmed result still yields k
         fetch_k = k * 3 if has_filter else k
         params.append(fetch_k)
@@ -187,9 +193,12 @@ class Store:
         if room:
             where.append('c.room = ?')
             params.append(room)
+        if project:
+            where.append('c.project = ?')
+            params.append(project)
 
         sql = f'''
-            SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, v.distance
+            SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project, v.distance
             FROM chunks_vec v
             JOIN chunks c ON c.id = v.chunk_id
             WHERE {' AND '.join(where)}
@@ -202,7 +211,7 @@ class Store:
             Document(
                 page_content=r[0],
                 metadata={'source': r[1], 'filename': r[2], 'folder': r[3],
-                          'headers': r[4], 'wing': r[5], 'room': r[6]},
+                          'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7]},
             )
             for r in rows
         ]

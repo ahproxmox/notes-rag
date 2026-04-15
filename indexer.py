@@ -1,4 +1,5 @@
 import os
+import re
 import yaml
 from pathlib import Path
 from langchain_community.document_loaders import TextLoader
@@ -48,6 +49,14 @@ def chunk_file(path, workspace, cfg):
     rel_path_str = str(path.relative_to(workspace)) if isinstance(workspace, Path) else str(path.relative_to(Path(workspace)))
     wing, room = classify_document(rel_path_str, path.name, text)
 
+    # Extract project: field from YAML frontmatter if present.
+    project = None
+    fm_match = re.match(r'^---\s*\n(.*?)\n---', text, re.DOTALL)
+    if fm_match:
+        pm = re.search(r'^project:\s*([^\n]+)', fm_match.group(1), re.MULTILINE)
+        if pm:
+            project = pm.group(1).strip().strip('"').strip("'")
+
     # Pass 1: split on markdown headers
     md_splitter = MarkdownHeaderTextSplitter(
         headers_to_split_on=[
@@ -91,6 +100,7 @@ def chunk_file(path, workspace, cfg):
                         'headers': headers,
                         'wing': wing,
                         'room': room,
+                        'project': project,
                     },
                 ))
         else:
@@ -103,6 +113,7 @@ def chunk_file(path, workspace, cfg):
                     'headers': headers,
                     'wing': wing,
                     'room': room,
+                    'project': project,
                 },
             ))
 
@@ -122,6 +133,7 @@ def chunk_file(path, workspace, cfg):
             chunk.metadata['headers'] = ''
             chunk.metadata['wing'] = wing
             chunk.metadata['room'] = room
+            chunk.metadata['project'] = project
 
     return chunks
 

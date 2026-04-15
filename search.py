@@ -199,7 +199,8 @@ def _search_recent(query: str) -> tuple[str, list[str], list[dict]]:
 # ---------------------------------------------------------------------------
 
 def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: float = 0.6,
-              folder: str | None = None, wing: str | None = None, room: str | None = None) -> list[Document]:
+              folder: str | None = None, wing: str | None = None, room: str | None = None,
+              project: str | None = None) -> list[Document]:
     """Hybrid retrieval: FTS5 keyword + sqlite-vec vector, merged via RRF.
 
     Retrieves k candidates from each source, then merges with weighted
@@ -207,8 +208,8 @@ def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: 
     """
     store = get_store()
 
-    bm25_docs = store.search_bm25(query, k=k, folder=folder, wing=wing, room=room)
-    vector_docs = store.search_vector(query, k=k, folder=folder, wing=wing, room=room)
+    bm25_docs = store.search_bm25(query, k=k, folder=folder, wing=wing, room=room, project=project)
+    vector_docs = store.search_vector(query, k=k, folder=folder, wing=wing, room=room, project=project)
 
     # Reciprocal rank fusion — merge by content identity
     scores: dict[str, float] = {}
@@ -271,7 +272,8 @@ def _docs_to_chunks(docs: list[Document]) -> list[dict]:
 
 def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
            final_k: int = 6, folder: str | None = None,
-           wing: str | None = None, room: str | None = None) -> tuple[str, list[str], list[dict]]:
+           wing: str | None = None, room: str | None = None,
+           project: str | None = None) -> tuple[str, list[str], list[dict]]:
     """Full RAG search with intent-aware routing.
 
     When called with default weights (0.4/0.6), classifies query intent and
@@ -296,7 +298,7 @@ def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
         # 'default' keeps 0.4/0.6
 
     docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight,
-                     folder=folder, wing=wing, room=room)
+                     folder=folder, wing=wing, room=room, project=project)
     if not docs:
         return 'No relevant context found in the workspace.', [], []
 
@@ -317,14 +319,15 @@ def search_with_weights(query: str, bm25_weight: float, vector_weight: float) ->
 
 
 def search_filtered(query: str, exclude_sources: list[str], folder: str | None = None,
-                    wing: str | None = None, room: str | None = None) -> tuple[str, list[str], list[dict]]:
+                    wing: str | None = None, room: str | None = None,
+                    project: str | None = None) -> tuple[str, list[str], list[dict]]:
     """Retrieve docs, filter out excluded source files, rerank, then synthesise."""
     lookup = _try_todo_lookup(query)
     if lookup:
         answer, sources = lookup
         return answer, sources, []
 
-    docs = _retrieve(query, k=20, folder=folder, wing=wing, room=room)
+    docs = _retrieve(query, k=20, folder=folder, wing=wing, room=room, project=project)
     docs = [d for d in docs if d.metadata.get('filename', '') not in exclude_sources]
     if not docs:
         return 'No relevant context found in the workspace.', [], []
@@ -356,6 +359,7 @@ async def search_stream(
     folder: str | None = None,
     wing: str | None = None,
     room: str | None = None,
+    project: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Streaming RAG search with intent routing — yields SSE-formatted events."""
     def sse(obj: dict) -> str:
@@ -386,7 +390,7 @@ async def search_stream(
             bm25_weight, vector_weight = 0.2, 0.8
 
     docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight,
-                     folder=folder, wing=wing, room=room)
+                     folder=folder, wing=wing, room=room, project=project)
     if not docs:
         yield sse({'type': 'retrieved', 'chunks': [], 'sources': []})
         yield sse({'type': 'token', 'content': 'No relevant context found in the workspace.'})

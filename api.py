@@ -22,6 +22,7 @@ app.mount('/ui', StaticFiles(directory=_ui_dir), name='ui')
 _log_path = Path('/mnt/Claude/log.md')
 _wiki_dir = Path('/mnt/Claude/wiki')
 _todos_dir = Path('/mnt/Claude/todos')
+_projects_dir = Path('/mnt/Claude/projects')
 _inbox_dir = Path('/mnt/Obsidian/Inbox')
 _notes_dir = Path('/mnt/Obsidian/Notes')
 _obsidian_root = Path('/mnt/Obsidian')
@@ -48,6 +49,7 @@ class SearchRequest(BaseModel):
     folder: str | None = None
     wing: str | None = None
     room: str | None = None
+    project: str | None = None
 
 
 class SimilarRequest(BaseModel):
@@ -123,6 +125,14 @@ def new_page():
 def review_page():
     return FileResponse(os.path.join(_ui_dir, 'review.html'))
 
+@app.get('/projects')
+def projects_page():
+    return FileResponse(os.path.join(_ui_dir, 'projects.html'))
+
+@app.get('/projects/{slug}')
+def project_detail_page(slug: str):
+    return FileResponse(os.path.join(_ui_dir, 'projects.html'))
+
 @app.get('/manifest.json')
 def manifest():
     return FileResponse(os.path.join(_ui_dir, 'manifest.json'), media_type='application/manifest+json')
@@ -180,6 +190,61 @@ def log_recent(n: int = Query(default=50, ge=1, le=500)):
     entry_lines = [l for l in all_lines if l.startswith('[20')]
     recent = entry_lines[-n:]
     return {'lines': recent, 'total': len(entry_lines), 'returned': len(recent)}
+
+
+# ── API: projects ────────────────────────────────────────────────────────────
+
+def _parse_project_file(path: Path) -> dict | None:
+    """Parse a project markdown file into a structured dict."""
+    try:
+        import re as _re
+        text = path.read_text(encoding='utf-8', errors='replace')
+        fm_match = _re.match(r'^---\s*\n(.*?)\n---\s*\n?(.*)', text, _re.DOTALL)
+        if not fm_match:
+            return None
+        import yaml as _yaml
+        fm = _yaml.safe_load(fm_match.group(1)) or {}
+        body = fm_match.group(2).strip()
+        return {
+            'slug': fm.get('slug', path.stem),
+            'title': fm.get('title', path.stem),
+            'status': fm.get('status', 'active'),
+            'wing': fm.get('wing'),
+            'room': fm.get('room'),
+            'goal': fm.get('goal', ''),
+            'tags': fm.get('tags', []),
+            'containers': fm.get('containers', []),
+            'repo': fm.get('repo'),
+            'docs': fm.get('docs', []),
+            'created': str(fm.get('created', '')),
+            'summary': body,
+        }
+    except Exception:
+        return None
+
+@api.get('/projects')
+def projects_list(status: str | None = None):
+    if not _projects_dir.exists():
+        return {'projects': []}
+    projects = []
+    for p in sorted(_projects_dir.glob('*.md')):
+        proj = _parse_project_file(p)
+        if proj is None:
+            continue
+        if status and proj['status'] != status:
+            continue
+        projects.append(proj)
+    return {'projects': projects}
+
+@api.get('/projects/{slug}')
+def project_detail(slug: str):
+    if not _projects_dir.exists():
+        raise HTTPException(status_code=404, detail='Projects directory not found')
+    for p in _projects_dir.glob('*.md'):
+        proj = _parse_project_file(p)
+        if proj and proj['slug'] == slug:
+            return proj
+    raise HTTPException(status_code=404, detail=f'Project {slug!r} not found')
 
 
 # ── API: wiki ────────────────────────────────────────────────────────────────
@@ -241,15 +306,18 @@ def search_endpoint(req: SearchRequest):
         answer, sources, chunks = search_with_weights(req.query, req.bm25_weight, req.vector_weight)
     elif req.exclude_sources:
         answer, sources, chunks = search_filtered(req.query, req.exclude_sources,
-                                                  folder=req.folder, wing=req.wing, room=req.room)
+                                                  folder=req.folder, wing=req.wing, room=req.room,
+                                                  project=req.project)
     else:
-        answer, sources, chunks = search(req.query, folder=req.folder, wing=req.wing, room=req.room)
+        answer, sources, chunks = search(req.query, folder=req.folder, wing=req.wing, room=req.room,
+                                         project=req.project)
     return {'answer': answer, 'sources': sources, 'chunks': chunks}
 
 @api.post('/search/stream')
 async def search_stream_endpoint(req: SearchRequest):
     return StreamingResponse(
-        search_stream(req.query, folder=req.folder, wing=req.wing, room=req.room),
+        search_stream(req.query, folder=req.folder, wing=req.wing, room=req.room,
+                      project=req.project),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
     )
