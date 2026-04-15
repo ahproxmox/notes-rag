@@ -84,11 +84,13 @@ class TodoCreateRequest(BaseModel):
     priority: str = 'medium'
     swimlane: str = 'Dev'
     assignee: str = ''
+    project: str = ''
 
 
 class NoteCreateRequest(BaseModel):
     title: str
     description: str = ''
+    project: str = ''
 
 
 class NoteSearchRequest(BaseModel):
@@ -379,6 +381,7 @@ def todos_create(req: TodoCreateRequest):
     today = date.today().isoformat()
 
     assignee_line = f'assignee: {req.assignee}\n' if req.assignee else ''
+    project_line = f'project: {req.project}\n' if req.project else ''
     content = (
         f'---\n'
         f'id: {todo_id}\n'
@@ -388,6 +391,7 @@ def todos_create(req: TodoCreateRequest):
         f'created: {today}\n'
         f'swimlane: {req.swimlane}\n'
         f'{assignee_line}'
+        f'{project_line}'
         f'---\n'
     )
     if req.description:
@@ -406,12 +410,14 @@ def notes_create(req: NoteCreateRequest):
     path = Path('/mnt/Obsidian/Notes') / filename
     today = date.today().isoformat()
 
+    note_project_line = f'project: {req.project}\n' if req.project else ''
     content = (
         f'---\n'
         f'title: "{req.title}"\n'
         f'date_created: {today}\n'
         f'reviewed: unreviewed\n'
         f'tags: []\n'
+        f'{note_project_line}'
         f'---\n'
     )
     if req.description:

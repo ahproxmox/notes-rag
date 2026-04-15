@@ -425,6 +425,12 @@
         <option value="user">user</option>
       </select>
     </div>
+    <div class="form-group">
+      <label for="todo-project">Project <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+      <select id="todo-project">
+        <option value="">— no project —</option>
+      </select>
+    </div>
   </div>
 
   <!-- ── NOTE section ── -->
@@ -432,6 +438,12 @@
     <div class="form-group">
       <label for="note-title">Title</label>
       <input type="text" id="note-title" placeholder="Note title…" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="note-project">Project <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+      <select id="note-project">
+        <option value="">— no project —</option>
+      </select>
     </div>
     <div class="form-group">
       <label>Body</label>
@@ -511,6 +523,21 @@
   let statusPollers = {};   // { research: intervalId, forecast: intervalId }
   let pendingFilenames = {}; // { research: 'filename.md', forecast: 'filename.md' }
 
+  // ── Load projects into dropdowns ─────────────────────────────────────────────
+  async function loadProjects() {
+    try {
+      const res = await fetch('/api/projects');
+      const data = await res.json();
+      const opts = (data.projects || []).map(p =>
+        `<option value="${escHtml(p.slug)}">${escHtml(p.title)}</option>`
+      ).join('');
+      ['todo-project', 'note-project'].forEach(id => {
+        const sel = document.getElementById(id);
+        if (sel) sel.innerHTML = '<option value="">— no project —</option>' + opts;
+      });
+    } catch { /* leave blank */ }
+  }
+
   // ── Fetch next todo ID ────────────────────────────────────────────────────────
   async function fetchNextId() {
     try {
@@ -528,6 +555,7 @@
 
   // ── Init ──────────────────────────────────────────────────────────────────────
   fetchNextId();
+  loadProjects();
   setType('todo');
 
   function setType(type) {
@@ -684,6 +712,7 @@
         priority:    document.getElementById('priority').value,
         swimlane:    document.getElementById('swimlane').value,
         assignee:    document.getElementById('assignee').value.trim(),
+        project:     document.getElementById('todo-project').value,
       }),
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'HTTP ' + res.status); }
@@ -694,6 +723,7 @@
     document.getElementById('assignee').value = '';
     document.getElementById('priority').value = 'medium';
     document.getElementById('swimlane').value = 'Dev';
+    document.getElementById('todo-project').value = '';
     fetchNextId();
   }
 
@@ -706,6 +736,7 @@
       body: JSON.stringify({
         title,
         description: document.getElementById('note-description').value.trim(),
+        project:     document.getElementById('note-project').value,
       }),
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'HTTP ' + res.status); }
@@ -713,6 +744,7 @@
     showToast('Note saved — ' + data.created, 'success');
     document.getElementById('note-title').value = '';
     document.getElementById('note-description').value = '';
+    document.getElementById('note-project').value = '';
   }
 
   async function saveStash() {
