@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todos — Kanban</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+    header { padding: 14px 24px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: #f1f5f9; }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .meta { font-size: 12px; color: #475569; }
+    .refresh-btn { font-size: 13px; color: #60a5fa; cursor: pointer; background: none; border: 1px solid #1e3a5f; padding: 5px 12px; border-radius: 6px; }
+    .refresh-btn:hover { background: #1e3a5f; }
+    .new-btn { font-size: 13px; color: #a78bfa; cursor: pointer; background: none; border: 1px solid #3b2f6e; padding: 5px 12px; border-radius: 6px; }
+    .new-btn:hover { background: #1e1a3a; }
+    .enrich-btn { font-size: 13px; color: #34d399; cursor: pointer; background: none; border: 1px solid #064e3b; padding: 5px 12px; border-radius: 6px; transition: background 0.15s; }
+    .enrich-btn:hover { background: #022c22; }
+    .enrich-btn:disabled { opacity: 0.4; cursor: default; }
+
+    .board { padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; overflow-x: auto; }
+
+    /* ── Swimlane ── */
+    .swimlane { min-width: 480px; background: #1e293b; border-radius: 10px; border: 1px solid #334155; flex: 0 0 auto; }
+
+    .sl-header { padding: 11px 14px; display: flex; align-items: center; gap: 8px; cursor: pointer; border-bottom: 1px solid #334155; user-select: none; }
+    .sl-header:hover .sl-name { color: #94a3b8; }
+    .swimlane.collapsed .sl-header { border-bottom-color: transparent; }
+
+    .sl-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .sl-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; flex: 1; }
+    .sl-count { background: #334155; color: #94a3b8; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; }
+    .sl-toggle { font-size: 14px; color: #475569; line-height: 1; transition: transform 0.25s ease; display: inline-block; }
+    .swimlane.collapsed .sl-toggle { transform: rotate(-90deg); }
+
+    .sl-body { display: flex; gap: 14px; padding: 10px 12px 12px; align-items: flex-start; }
+    .swimlane.collapsed .sl-body { display: none; }
+
+    /* ── Status columns inside each lane ── */
+    .sl-col { flex: 1; min-width: 80px; display: flex; flex-direction: column; border-radius: 7px; transition: flex 0.25s ease, background 0.1s; }
+    .sl-col.drag-over { background: #1e3a5f; outline: 1px solid #3b82f6; }
+
+    .sl-col-label { display: flex; align-items: center; gap: 6px; padding: 4px 4px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #475569; cursor: pointer; user-select: none; }
+    .sl-col-chevron { font-size: 12px; color: #475569; line-height: 1; transition: transform 0.2s ease; display: inline-block; margin-left: 2px; }
+
+    #board.hide-inbox       .sl-col[data-status="inbox"],
+    #board.hide-pending     .sl-col[data-status="pending"],
+    #board.hide-in_progress .sl-col[data-status="in_progress"],
+    #board.hide-completed   .sl-col[data-status="completed"],
+    #board.hide-wontdo      .sl-col[data-status="wontdo"] { flex: 0 0 28px; min-width: 28px; overflow: hidden; background: #131d2e; border-radius: 6px; align-self: stretch; }
+
+    #board.hide-inbox       .sl-col[data-status="inbox"]       .cards,
+    #board.hide-pending     .sl-col[data-status="pending"]     .cards,
+    #board.hide-in_progress .sl-col[data-status="in_progress"] .cards,
+    #board.hide-completed   .sl-col[data-status="completed"]   .cards,
+    #board.hide-wontdo      .sl-col[data-status="wontdo"]      .cards { display: none; }
+
+    #board.hide-inbox       .sl-col[data-status="inbox"]       .sl-col-label,
+    #board.hide-pending     .sl-col[data-status="pending"]     .sl-col-label,
+    #board.hide-in_progress .sl-col[data-status="in_progress"] .sl-col-label,
+    #board.hide-completed   .sl-col[data-status="completed"]   .sl-col-label,
+    #board.hide-wontdo      .sl-col[data-status="wontdo"]      .sl-col-label { writing-mode: vertical-rl; transform: rotate(180deg); padding: 10px 0; flex: 1; justify-content: flex-end; gap: 4px; }
+
+    #board.hide-inbox       .sl-col[data-status="inbox"]       .sl-col-count,
+    #board.hide-pending     .sl-col[data-status="pending"]     .sl-col-count,
+    #board.hide-in_progress .sl-col[data-status="in_progress"] .sl-col-count,
+    #board.hide-completed   .sl-col[data-status="completed"]   .sl-col-count,
+    #board.hide-wontdo      .sl-col[data-status="wontdo"]      .sl-col-count,
+    #board.hide-inbox       .sl-col[data-status="inbox"]       .sl-col-chevron,
+    #board.hide-pending     .sl-col[data-status="pending"]     .sl-col-chevron,
+    #board.hide-in_progress .sl-col[data-status="in_progress"] .sl-col-chevron,
+    #board.hide-completed   .sl-col[data-status="completed"]   .sl-col-chevron,
+    #board.hide-wontdo      .sl-col[data-status="wontdo"]      .sl-col-chevron { display: none; }
+    .sl-col-count { background: #334155; color: #64748b; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 8px; margin-left: auto; }
+
+    .col-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .col-dot.inbox       { background: #8b5cf6; }
+    .col-dot.pending     { background: #3b82f6; }
+    .col-dot.in_progress { background: #f59e0b; }
+    .col-dot.completed   { background: #10b981; }
+    .col-dot.wontdo      { background: #475569; }
+
+    .cards { padding: 0 2px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 7px; min-height: 32px; align-content: start; }
+
+    /* ── Cards ── */
+    .card { background: #0f172a; border-radius: 7px; border: 1px solid #334155; border-left: 3px solid transparent; padding: 10px 11px; cursor: grab; transition: box-shadow 0.12s, border-color 0.12s; user-select: none; }
+    .card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.4); border-color: #475569; }
+    .card.dragging { opacity: 0.45; cursor: grabbing; }
+    .card.priority-high   { border-left-color: #dc2626; }
+    .card.priority-medium { border-left-color: #d97706; }
+    .card.priority-low    { border-left-color: #475569; }
+
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+    .card-title { font-size: 13px; font-weight: 500; line-height: 1.4; color: #e2e8f0; }
+    .card-id { font-size: 11px; color: #475569; font-weight: 600; flex-shrink: 0; margin-top: 1px; }
+
+    .card-footer { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .priority-badge { font-size: 11px; font-weight: 500; padding: 2px 7px; border-radius: 4px; }
+    .priority-badge.high   { background: #3f1212; color: #f87171; }
+    .priority-badge.medium { background: #3f2a0a; color: #fbbf24; }
+    .priority-badge.low    { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+    .card-prereqs { font-size: 11px; color: #475569; }
+
+    .empty { color: #334155; font-size: 12px; text-align: center; padding: 16px 0; }
+
+    /* ── Modal ── */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 22px 24px; max-width: 560px; width: 92%; max-height: 82vh; overflow-y: auto; box-shadow: 0 25px 80px rgba(0,0,0,0.6); }
+    .modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
+    .modal-title { font-size: 15px; font-weight: 600; line-height: 1.4; color: #f1f5f9; }
+    .modal-close { cursor: pointer; color: #475569; font-size: 22px; line-height: 1; flex-shrink: 0; }
+    .modal-close:hover { color: #94a3b8; }
+    .modal-meta { font-size: 12px; color: #64748b; margin-bottom: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .modal-meta span { background: #0f172a; border: 1px solid #334155; color: #94a3b8; padding: 2px 8px; border-radius: 4px; }
+    .modal-section { margin-top: 14px; }
+    .modal-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #475569; margin-bottom: 6px; }
+    .modal-desc { font-size: 13px; color: #94a3b8; line-height: 1.6; }
+    .modal-divider { border: none; border-top: 1px solid #334155; margin: 16px 0; }
+    .modal-body { font-size: 13px; color: #94a3b8; line-height: 1.7; }
+    .modal-body h1, .modal-body h2, .modal-body h3 { color: #cbd5e1; font-size: 13px; font-weight: 700; margin: 12px 0 4px; }
+    .modal-body p { margin-bottom: 8px; }
+    .modal-body ul, .modal-body ol { padding-left: 18px; margin-bottom: 8px; }
+    .modal-body li { margin-bottom: 3px; }
+    .modal-body code { background: #0f172a; border: 1px solid #334155; padding: 1px 5px; border-radius: 3px; font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace; color: #7dd3fc; }
+    .modal-body pre { background: #0f172a; border: 1px solid #334155; padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin-bottom: 8px; }
+    .modal-body pre code { background: none; border: none; padding: 0; color: #94a3b8; }
+    .modal-body hr { border: none; border-top: 1px solid #334155; margin: 10px 0; }
+    .modal-body a { color: #60a5fa; text-decoration: none; }
+    .modal-body a:hover { text-decoration: underline; }
+    .modal-body strong { color: #cbd5e1; font-weight: 600; }
+    .modal-body-loading { color: #475569; font-size: 12px; font-style: italic; padding-top: 14px; }
+
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #334155; color: #f1f5f9; border: 1px solid #475569; padding: 10px 16px; border-radius: 7px; font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 200; white-space: nowrap; }
+    .toast.show { opacity: 1; }
+
+    /* ── Create panel ── */
+    .create-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 110; }
+    .create-overlay.open { display: block; }
+    .create-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 380px; background: #1e293b; border-left: 1px solid #334155; display: flex; flex-direction: column; box-shadow: -10px 0 40px rgba(0,0,0,0.5); }
+    .create-header { padding: 16px 20px; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .create-title { font-size: 15px; font-weight: 600; color: #f1f5f9; }
+    .create-close { color: #475569; font-size: 22px; cursor: pointer; line-height: 1; }
+    .create-close:hover { color: #94a3b8; }
+    .create-form { padding: 20px; display: flex; flex-direction: column; gap: 16px; flex: 1; overflow-y: auto; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-row { display: flex; gap: 12px; }
+    .form-row .form-group { flex: 1; }
+    .form-label { font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+    .form-required { color: #f87171; }
+    .form-optional { color: #475569; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 11px; }
+    .form-input, .form-select, .form-textarea { background: #0f172a; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; padding: 8px 10px; border-radius: 6px; outline: none; font-family: inherit; width: 100%; }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: #8b5cf6; }
+    .form-textarea { resize: vertical; min-height: 80px; }
+    .form-select option { background: #1e293b; }
+    .form-hint { font-size: 11px; color: #475569; font-style: italic; }
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 4px; }
+    .form-cancel { background: none; border: 1px solid #334155; color: #64748b; font-size: 13px; padding: 7px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    .form-cancel:hover { border-color: #475569; color: #94a3b8; }
+    .form-submit { background: #6d28d9; border: 1px solid #7c3aed; color: #f1f5f9; font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    .form-submit:hover { background: #7c3aed; }
+    .form-submit:disabled { opacity: 0.5; cursor: default; }
+
+    /* ── Terminal ── */
+    .term-toggle { position: fixed; bottom: 20px; right: 20px; z-index: 150; background: #1e3a5f; border: 1px solid #3b82f6; color: #60a5fa; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.15s; }
+    .term-toggle:hover { background: #1e4a7f; }
+    .term-toggle .term-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; }
+
+    .term-panel { position: fixed; bottom: 0; left: 0; right: 0; height: 360px; background: #0d1117; border-top: 1px solid #334155; z-index: 140; display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.25s ease; }
+    .term-panel.open { transform: translateY(0); }
+
+    .term-header { padding: 9px 16px; background: #161b22; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .term-header-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; }
+    .term-title { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; flex: 1; }
+    .term-close { color: #475569; font-size: 18px; cursor: pointer; line-height: 1; }
+    .term-close:hover { color: #94a3b8; }
+
+    .term-messages { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .term-msg { display: flex; flex-direction: column; gap: 2px; max-width: 85%; }
+    .term-msg.user { align-self: flex-end; align-items: flex-end; }
+    .term-msg.agent { align-self: flex-start; }
+    .term-msg-label { font-size: 10px; color: #475569; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .term-msg-bubble { font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace; line-height: 1.5; padding: 7px 11px; border-radius: 7px; white-space: pre-wrap; word-break: break-word; }
+    .term-msg.user .term-msg-bubble { background: #1e3a5f; color: #93c5fd; border: 1px solid #1e4a8f; }
+    .term-msg.agent .term-msg-bubble { background: #161b22; color: #94a3b8; border: 1px solid #334155; }
+    .term-msg.agent.thinking .term-msg-bubble { color: #475569; font-style: italic; }
+
+    .term-input-row { padding: 10px 16px; border-top: 1px solid #334155; display: flex; gap: 8px; flex-shrink: 0; background: #0d1117; }
+    .term-input { flex: 1; background: #161b22; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; padding: 7px 11px; border-radius: 6px; outline: none; }
+    .term-input:focus { border-color: #3b82f6; }
+    .term-input::placeholder { color: #334155; }
+    .term-send { background: #1e3a5f; border: 1px solid #3b82f6; color: #60a5fa; font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 6px; cursor: pointer; }
+    .term-send:hover { background: #1e4a7f; }
+    .term-send:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Settings panel ── */
+    .settings-btn { font-size: 13px; color: #94a3b8; cursor: pointer; background: none; border: 1px solid #334155; padding: 5px 12px; border-radius: 6px; }
+    .settings-btn:hover { background: #1e293b; }
+    .settings-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 110; }
+    .settings-overlay.open { display: block; }
+    .settings-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 380px; background: #1e293b; border-left: 1px solid #334155; display: flex; flex-direction: column; box-shadow: -10px 0 40px rgba(0,0,0,0.5); }
+    .settings-header { padding: 16px 20px; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .settings-title { font-size: 15px; font-weight: 600; color: #f1f5f9; }
+    .settings-close { color: #475569; font-size: 22px; cursor: pointer; line-height: 1; }
+    .settings-close:hover { color: #94a3b8; }
+    .settings-body { padding: 20px; display: flex; flex-direction: column; gap: 24px; flex: 1; overflow-y: auto; }
+    .settings-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #475569; margin-bottom: 10px; }
+    .swimlane-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .swimlane-chip { display: flex; align-items: center; gap: 5px; background: #0f172a; border: 1px solid #334155; color: #94a3b8; font-size: 12px; padding: 4px 10px; border-radius: 14px; }
+    .swimlane-chip-del { color: #475569; cursor: pointer; font-size: 15px; line-height: 1; margin-left: 2px; }
+    .swimlane-chip-del:hover { color: #f87171; }
+    .swimlane-add-row { display: flex; gap: 8px; }
+    .swimlane-add-input { flex: 1; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; padding: 7px 10px; border-radius: 6px; outline: none; font-family: inherit; }
+    .swimlane-add-input:focus { border-color: #8b5cf6; }
+    .swimlane-add-btn { background: #1e3a5f; border: 1px solid #3b82f6; color: #60a5fa; font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+    .swimlane-add-btn:hover { background: #1e4a7f; }
+    .cron-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .cron-label { font-size: 12px; color: #64748b; white-space: nowrap; }
+    .cron-select { background: #0f172a; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; padding: 7px 10px; border-radius: 6px; outline: none; font-family: inherit; }
+    .cron-select:focus { border-color: #8b5cf6; }
+    .cron-preview { font-size: 11px; color: #475569; font-family: 'SF Mono', 'Fira Code', monospace; margin-bottom: 12px; }
+    .cron-actions { display: flex; gap: 8px; }
+    .cron-save-btn { background: #6d28d9; border: 1px solid #7c3aed; color: #f1f5f9; font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    .cron-save-btn:hover { background: #7c3aed; }
+    .cron-save-btn:disabled { opacity: 0.5; cursor: default; }
+    .cron-run-btn { background: none; border: 1px solid #064e3b; color: #34d399; font-size: 13px; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    .cron-run-btn:hover { background: #022c22; }
+    .settings-divider { border: none; border-top: 1px solid #334155; margin: 0; }
+    .modal-edit-btn { cursor: pointer; font-size: 12px; color: #60a5fa; background: none; border: 1px solid #1e3a5f; padding: 4px 10px; border-radius: 5px; }
+    .modal-edit-btn:hover { background: #1e3a5f; }
+    .modal-header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .edit-form { display: none; }
+    .edit-form.active { display: block; }
+    .edit-form-group { margin-bottom: 12px; }
+    .edit-form-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #475569; margin-bottom: 5px; }
+    .edit-form-input { width: 100%; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-family: inherit; }
+    .edit-form-input:focus { outline: none; border-color: #3b82f6; }
+    .edit-form-textarea { width: 100%; background: #0f172a; border: 1px solid #334155; color: #94a3b8; padding: 8px 10px; border-radius: 6px; font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; min-height: 180px; resize: vertical; line-height: 1.6; }
+    .edit-form-textarea:focus { outline: none; border-color: #3b82f6; }
+    .edit-form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+    .edit-save-btn { background: #2563eb; color: #fff; border: none; padding: 7px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .edit-save-btn:hover { background: #1d4ed8; }
+    .edit-save-btn:disabled { opacity: 0.5; cursor: default; }
+    .edit-cancel-btn { background: none; color: #64748b; border: 1px solid #334155; padding: 7px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .edit-cancel-btn:hover { color: #94a3b8; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📋 Todos</h1>
+  <div class="header-right">
+    <span class="meta" id="last-updated"></span>
+    <button class="settings-btn" onclick="openSettingsPanel()">&#9881; Settings</button>
+    <button class="enrich-btn" id="enrich-btn" onclick="enrichInbox()">✨ Enrich Inbox</button>
+    <button class="new-btn" onclick="openCreatePanel()">➕ New</button>
+    <button class="refresh-btn" onclick="load()">↻ Refresh</button>
+  </div>
+</header>
+
+<div class="board" id="board"></div>
+
+<!-- Card detail modal -->
+<div class="modal-overlay" id="modal" onclick="closeModalOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title"></span>
+      <div class="modal-header-actions">
+        <button class="modal-edit-btn" id="modal-edit-btn" onclick="startEdit()">Edit</button>
+        <span class="modal-close" onclick="closeModal()">×</span>
+      </div>
+    </div>
+    <div class="modal-meta" id="modal-meta"></div>
+    <div id="modal-extra"></div>
+    <div id="modal-body-wrap"></div>
+    <div id="modal-edit-form" class="edit-form">
+      <hr class="modal-divider" style="margin-top:14px">
+      <div class="edit-form-group">
+        <label class="edit-form-label">Title</label>
+        <input class="edit-form-input" id="edit-title" type="text" />
+      </div>
+      <div class="edit-form-group">
+        <label class="edit-form-label">Body (markdown)</label>
+        <textarea class="edit-form-textarea" id="edit-body"></textarea>
+      </div>
+      <div class="form-row" style="margin-bottom:12px">
+        <div class="form-group">
+          <label class="edit-form-label">Status</label>
+          <select class="form-select" id="edit-status">
+            <option value="inbox">Inbox</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+            <option value="wontdo">Won't Do</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="edit-form-label">Priority</label>
+          <select class="form-select" id="edit-priority">
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:12px">
+        <div class="form-group">
+          <label class="edit-form-label">Swimlane</label>
+          <select class="form-select" id="edit-swimlane">
+            <option value="">— none —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="edit-form-label">Assignee</label>
+          <select class="form-select" id="edit-assignee">
+            <option value="">— unassigned —</option>
+            <option value="claude-code">claude-code</option>
+            <option value="hermes">hermes</option>
+            <option value="openclaw">openclaw</option>
+            <option value="angelo">angelo</option>
+          </select>
+        </div>
+      </div>
+      <div class="edit-form-group">
+        <label class="edit-form-label">Project</label>
+        <select class="form-select" id="edit-project" style="width:100%;background:#0f172a;border:1px solid #334155;color:#e2e8f0;font-size:13px;padding:7px 10px;border-radius:6px;font-family:inherit;">
+          <option value="">— no project —</option>
+        </select>
+      </div>
+      <div class="edit-form-actions">
+        <button class="edit-cancel-btn" onclick="cancelEdit()">Cancel</button>
+        <button class="edit-save-btn" id="edit-save-btn" onclick="saveEdit()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create todo slide-in panel -->
+<div class="create-overlay" id="create-overlay" onclick="closeCreateOverlay(event)">
+  <div class="create-panel">
+    <div class="create-header">
+      <span class="create-title">New Todo</span>
+      <span class="create-close" onclick="closeCreatePanel()">×</span>
+    </div>
+    <form class="create-form" id="create-form" onsubmit="submitCreate(event)">
+      <div class="form-group">
+        <label class="form-label">Title <span class="form-required">*</span></label>
+        <input class="form-input" id="cf-title" type="text" placeholder="What needs doing?" required autocomplete="off" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Priority</label>
+          <select class="form-select" id="cf-priority">
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Swimlane</label>
+          <select class="form-select" id="cf-swimlane"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Assignee <span class="form-optional">(optional)</span></label>
+          <select class="form-select" id="cf-assignee">
+            <option value="">— unassigned —</option>
+            <option value="claude-code">claude-code</option>
+            <option value="hermes">hermes</option>
+            <option value="openclaw">openclaw</option>
+            <option value="user">user</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Project <span class="form-optional">(optional)</span></label>
+          <select class="form-select" id="cf-project">
+            <option value="">— no project —</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description <span class="form-optional">(optional)</span></label>
+        <textarea class="form-textarea" id="cf-desc" placeholder="Any details..." rows="4"></textarea>
+      </div>
+      <p class="form-hint">Todo will land in Inbox — OpenClaw will enrich it with context before it enters the active queue.</p>
+      <div class="form-actions">
+        <button type="button" class="form-cancel" onclick="closeCreatePanel()">Cancel</button>
+        <button type="submit" class="form-submit" id="cf-submit">Create Todo</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Settings slide-in panel -->
+<div class="settings-overlay" id="settings-overlay" onclick="closeSettingsOverlay(event)">
+  <div class="settings-panel">
+    <div class="settings-header">
+      <span class="settings-title">&#9881; Settings</span>
+      <span class="settings-close" onclick="closeSettingsPanel()">&#215;</span>
+    </div>
+    <div class="settings-body">
+      <div>
+        <div class="settings-section-title">Swimlanes</div>
+        <div class="swimlane-chips" id="settings-swimlane-chips"></div>
+        <div class="swimlane-add-row">
+          <input class="swimlane-add-input" id="settings-lane-input" type="text" placeholder="New swimlane name..." autocomplete="off" onkeydown="if(event.key==='Enter')addSwimlane()" maxlength="32" />
+          <button class="swimlane-add-btn" onclick="addSwimlane()">Add</button>
+        </div>
+      </div>
+      <hr class="settings-divider" />
+      <div>
+        <div class="settings-section-title">Enrich Schedule</div>
+        <div class="cron-row">
+          <span class="cron-label">Run at</span>
+          <select class="cron-select" id="cron-hour" onchange="updateCronPreview()"></select>
+          <span class="cron-label">:</span>
+          <select class="cron-select" id="cron-minute" onchange="updateCronPreview()"></select>
+          <span class="cron-label">daily (AEDT)</span>
+        </div>
+        <div class="cron-preview" id="cron-preview"></div>
+        <div class="cron-actions">
+          <button class="cron-save-btn" id="cron-save-btn" onclick="saveCronSchedule()">Save Schedule</button>
+          <button class="cron-run-btn" onclick="runEnrichNow()">Run Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let todos = [];
+  let swimlanes = [];
+  let projects = [];
+  let draggingId = null;
+
+  async function loadProjects() {
+    try {
+      const res = await fetch('/api/projects');
+      const data = await res.json();
+      projects = data.projects || [];
+      const opts = projects.map(p => `<option value="${esc(p.slug)}">${esc(p.title)}</option>`).join('');
+      const blank = '<option value="">— no project —</option>';
+      ['cf-project', 'edit-project'].forEach(id => {
+        const sel = document.getElementById(id);
+        if (sel) sel.innerHTML = blank + opts;
+      });
+    } catch { /* leave blank */ }
+  }
+
+  const LANE_COLORS = ['#3b82f6','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316','#84cc16'];
+
+  const STATUSES = [
+    { id: 'inbox',       label: 'Inbox',       dot: 'inbox'       },
+    { id: 'pending',     label: 'Pending',     dot: 'pending'     },
+    { id: 'in_progress', label: 'In Progress', dot: 'in_progress' },
+    { id: 'completed',   label: 'Completed',   dot: 'completed'   },
+    { id: 'wontdo',      label: "Won't Do",    dot: 'wontdo'      },
+  ];
+
+  function laneId(name) {
+    return name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  }
+
+  function toggleSwimlane(id) {
+    const el = document.getElementById('sl-' + id);
+    if (!el) return;
+    const isCollapsed = el.classList.toggle('collapsed');
+    localStorage.setItem('kanban-sl-' + id, isCollapsed);
+  }
+
+  function toggleStatus(statusId) {
+    const board = document.getElementById('board');
+    const isHidden = board.classList.toggle('hide-' + statusId);
+    localStorage.setItem('kanban-hide-' + statusId, isHidden);
+  }
+
+  function initStatusCollapse() {
+    const board = document.getElementById('board');
+    STATUSES.forEach(s => {
+      if (localStorage.getItem('kanban-hide-' + s.id) === 'true') {
+        board.classList.add('hide-' + s.id);
+      }
+    });
+  }
+
+  async function load() {
+    try {
+      const [todosRes, lanesRes] = await Promise.all([fetch('/api/kanban/todos'), fetch('/api/kanban/swimlanes')]);
+      todos = await todosRes.json();
+      swimlanes = await lanesRes.json();
+      render();
+      document.getElementById('last-updated').textContent =
+        'Updated ' + new Date().toLocaleTimeString();
+    } catch (e) {
+      showToast('Failed to load');
+    }
+  }
+
+  function render() {
+    const board = document.getElementById('board');
+    board.innerHTML = '';
+
+    const lanesToShow = [...swimlanes];
+    const hasUncategorized = todos.some(t => !t.swimlane || !swimlanes.includes(t.swimlane));
+    if (hasUncategorized) lanesToShow.push('__uncategorized__');
+
+    lanesToShow.forEach((lane, idx) => {
+      const isUncategorized = lane === '__uncategorized__';
+      const id = isUncategorized ? 'uncategorized' : laneId(lane);
+      const displayName = isUncategorized ? 'Uncategorized' : lane;
+      const color = isUncategorized ? '#475569' : LANE_COLORS[idx % LANE_COLORS.length];
+      const laneValue = isUncategorized ? '' : lane;
+
+      const laneTodos = isUncategorized
+        ? todos.filter(t => !t.swimlane || !swimlanes.includes(t.swimlane))
+        : todos.filter(t => t.swimlane === lane);
+
+      const section = document.createElement('div');
+      section.className = 'swimlane';
+      section.id = 'sl-' + id;
+
+      const colsHtml = STATUSES.map(s => {
+        const count = laneTodos.filter(t => t.status === s.id).length;
+        return `<div class="sl-col"
+            data-status="${s.id}"
+            data-lane="${esc(laneValue)}"
+            ondragover="onDragOver(event)"
+            ondragleave="onDragLeave(event)"
+            ondrop="onDrop(event,'${s.id}','${esc(laneValue)}')">
+          <div class="sl-col-label" data-status="${s.id}" onclick="toggleStatus('${s.id}')">
+            <span class="col-dot ${s.dot}"></span>
+            <span>${esc(s.label)}</span>
+            <span class="sl-col-count" id="slc-${id}-${s.id}">${count}</span>
+            <span class="sl-col-chevron">▾</span>
+          </div>
+          <div class="cards" id="cards-${id}-${s.id}"></div>
+        </div>`;
+      }).join('');
+
+      section.innerHTML = `
+        <div class="sl-header" onclick="toggleSwimlane('${id}')">
+          <span class="sl-dot" style="background:${color}"></span>
+          <span class="sl-name">${esc(displayName)}</span>
+          <span class="sl-count">${laneTodos.length}</span>
+          <span class="sl-toggle">▾</span>
+        </div>
+        <div class="sl-body">${colsHtml}</div>`;
+
+      board.appendChild(section);
+
+      // Populate cards
+      const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+      STATUSES.forEach(s => {
+        const items = laneTodos
+          .filter(t => t.status === s.id)
+          .sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 1) - (PRIORITY_ORDER[b.priority] ?? 1));
+        const el = document.getElementById('cards-' + id + '-' + s.id);
+        if (!items.length) {
+          el.innerHTML = '<div class="empty">No items</div>';
+          return;
+        }
+        items.forEach(t => el.appendChild(makeCard(t)));
+      });
+
+      // Restore collapse state
+      const stored = localStorage.getItem('kanban-sl-' + id);
+      if (stored === 'true') section.classList.add('collapsed');
+    });
+  }
+
+  function makeCard(todo) {
+    const div = document.createElement('div');
+    div.className = 'card priority-' + (todo.priority || 'medium');
+    div.draggable = true;
+    div.dataset.id = todo.id;
+
+    const prereqText = todo.prereqIds && todo.prereqIds.length
+      ? '<span class="card-prereqs">→ ' + todo.prereqIds.join(', ') + '</span>' : '';
+
+    div.innerHTML =
+      '<div class="card-top">' +
+        '<span class="card-title">' + esc(todo.title) + '</span>' +
+        '<span class="card-id">#' + pad(todo.id) + '</span>' +
+      '</div>' +
+      '<div class="card-footer">' +
+        '<span class="priority-badge ' + (todo.priority || 'medium') + '">' + (todo.priority || 'medium') + '</span>' +
+        prereqText +
+      '</div>';
+
+    div.addEventListener('dragstart', () => {
+      draggingId = todo.id;
+      setTimeout(() => div.classList.add('dragging'), 0);
+    });
+    div.addEventListener('dragend', () => div.classList.remove('dragging'));
+    div.addEventListener('click', () => openModal(todo));
+    return div;
+  }
+
+  function onDragOver(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-over');
+  }
+
+  function onDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+  }
+
+  async function onDrop(e, newStatus, newLane) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    if (draggingId == null) return;
+
+    const todo = todos.find(t => t.id === draggingId);
+    draggingId = null;
+    if (!todo) return;
+
+    const oldStatus = todo.status;
+    const oldLane = todo.swimlane || '';
+    const targetLane = newLane || '';
+
+    if (todo.status === newStatus && oldLane === targetLane) return;
+
+    todo.status = newStatus;
+    todo.swimlane = targetLane || null;
+    render();
+
+    try {
+      const updates = { status: newStatus };
+      if (oldLane !== targetLane) updates.swimlane = targetLane;
+
+      const res = await fetch('/api/kanban/todos/' + todo.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+
+      const label = newStatus.replace('_', ' ') + (targetLane ? ' / ' + targetLane : '');
+      showToast('#' + pad(todo.id) + ' → ' + label);
+    } catch (err) {
+      todo.status = oldStatus;
+      todo.swimlane = oldLane || null;
+      render();
+      showToast('Update failed — reverted');
+    }
+  }
+
+  let editingTodoId = null;
+
+  function openModal(todo) {
+    editingTodoId = todo.id;
+    cancelEdit();
+    document.getElementById('modal-title').textContent =
+      '#' + pad(todo.id) + ' — ' + todo.title;
+
+    const metaEl = document.getElementById('modal-meta');
+    metaEl.innerHTML = '';
+    [
+      todo.status ? todo.status.replace('_', ' ') : null,
+      todo.priority,
+      todo.swimlane || null,
+      todo.project ? '⌥ ' + todo.project : null,
+      todo.created ? 'created ' + todo.created : null,
+      todo.completed ? 'completed ' + todo.completed : null,
+    ].filter(Boolean).forEach(t => {
+      const s = document.createElement('span');
+      s.textContent = t;
+      metaEl.appendChild(s);
+    });
+
+    const extra = document.getElementById('modal-extra');
+    extra.innerHTML = '';
+    if (todo.prereqIds && todo.prereqIds.length) {
+      extra.innerHTML =
+        '<div class="modal-section">' +
+        '<div class="modal-section-label">Prerequisites</div>' +
+        '<div class="modal-desc">' + todo.prereqIds.map(p => '#' + p).join(', ') + '</div>' +
+        '</div>';
+    }
+
+    const bodyWrap = document.getElementById('modal-body-wrap');
+    bodyWrap.innerHTML = '<div class="modal-body-loading">Loading...</div>';
+    document.getElementById('modal').classList.add('open');
+
+    fetch('/api/kanban/todos/' + todo.id + '/raw')
+      .then(r => r.json())
+      .then(data => {
+        const wrap = document.getElementById('modal-body-wrap');
+        if (!wrap) return;
+        if (data.body) {
+          wrap.innerHTML =
+            '<hr class="modal-divider">' +
+            '<div class="modal-body">' + marked.parse(data.body) + '</div>';
+        } else {
+          wrap.innerHTML = '';
+        }
+      })
+      .catch(() => {
+        const wrap = document.getElementById('modal-body-wrap');
+        if (wrap) wrap.innerHTML = '';
+      });
+  }
+
+  function startEdit() {
+    var todo = todos.find(function(t) { return t.id === editingTodoId; });
+    if (!todo) return;
+    document.getElementById('edit-title').value = todo.title;
+    document.getElementById('edit-status').value = todo.status || 'pending';
+    document.getElementById('edit-priority').value = todo.priority || 'medium';
+    const slSel = document.getElementById('edit-swimlane');
+    slSel.innerHTML = '<option value="">\u2014 none \u2014</option>' + swimlanes.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+    slSel.value = todo.swimlane || '';
+    document.getElementById('edit-assignee').value = todo.assignee || '';
+    document.getElementById('edit-body').value = '';
+    const epSel = document.getElementById('edit-project');
+    if (epSel) epSel.value = todo.project || '';
+    fetch('/api/kanban/todos/' + todo.id + '/raw')
+      .then(function(r) { return r.json(); })
+      .then(function(data) { document.getElementById('edit-body').value = data.body || ''; });
+    document.getElementById('modal-meta').style.display = 'none';
+    document.getElementById('modal-extra').style.display = 'none';
+    document.getElementById('modal-body-wrap').style.display = 'none';
+    document.getElementById('modal-edit-btn').style.display = 'none';
+    document.getElementById('modal-edit-form').classList.add('active');
+    document.getElementById('modal-title').textContent = 'Editing #' + pad(todo.id);
+  }
+
+  function cancelEdit() {
+    document.getElementById('modal-meta').style.display = '';
+    document.getElementById('modal-extra').style.display = '';
+    document.getElementById('modal-body-wrap').style.display = '';
+    document.getElementById('modal-edit-btn').style.display = '';
+    document.getElementById('modal-edit-form').classList.remove('active');
+  }
+
+  async function saveEdit() {
+    var title = document.getElementById('edit-title').value.trim();
+    var body = document.getElementById('edit-body').value;
+    if (!title) { showToast('Title cannot be empty'); return; }
+    var btn = document.getElementById('edit-save-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
+    try {
+      var project = document.getElementById('edit-project').value;
+      var status = document.getElementById('edit-status').value;
+      var priority = document.getElementById('edit-priority').value;
+      var swimlane = document.getElementById('edit-swimlane').value;
+      var assignee = document.getElementById('edit-assignee').value;
+      var res = await fetch('/api/kanban/todos/' + editingTodoId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, body, project: project || null, status, priority, swimlane: swimlane || null, assignee: assignee || null }),
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      var updated = await res.json();
+      var idx = todos.findIndex(function(t) { return t.id === editingTodoId; });
+      if (idx !== -1) todos[idx] = updated;
+      render();
+      closeModal();
+      showToast('#' + pad(editingTodoId) + ' updated');
+    } catch (err) {
+      showToast('Save failed');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+
+  function closeModal() { document.getElementById('modal').classList.remove('open'); cancelEdit(); }
+  function closeModalOverlay(e) { if (e.target.id === 'modal') closeModal(); }
+
+  // ── Create panel ──────────────────────────────────────────────────────────────
+  function openCreatePanel() {
+    const sel = document.getElementById('cf-swimlane');
+    sel.innerHTML = swimlanes.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+    document.getElementById('create-overlay').classList.add('open');
+    setTimeout(() => document.getElementById('cf-title').focus(), 50);
+  }
+
+  function closeCreatePanel() {
+    document.getElementById('create-overlay').classList.remove('open');
+    document.getElementById('create-form').reset();
+  }
+
+  function closeCreateOverlay(e) {
+    if (e.target.id === 'create-overlay') closeCreatePanel();
+  }
+
+  async function submitCreate(e) {
+    e.preventDefault();
+    const title = document.getElementById('cf-title').value.trim();
+    if (!title) return;
+    const btn = document.getElementById('cf-submit');
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+    try {
+      const res = await fetch('/api/kanban/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          priority: document.getElementById('cf-priority').value,
+          swimlane: document.getElementById('cf-swimlane').value,
+          description: document.getElementById('cf-desc').value.trim(),
+          assignee: document.getElementById('cf-assignee').value || null,
+          project: document.getElementById('cf-project').value || null,
+        }),
+      });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const todo = await res.json();
+      closeCreatePanel();
+      await load();
+      showToast('#' + pad(todo.id) + ' created → Inbox');
+    } catch (err) {
+      showToast('Failed to create todo');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Create Todo';
+  }
+
+  // ── Enrich inbox ──────────────────────────────────────────────────────────────
+  async function enrichInbox() {
+    const inboxCount = todos.filter(t => t.status === 'inbox').length;
+    if (inboxCount === 0) {
+      showToast('Nothing in Inbox to enrich');
+      return;
+    }
+    const btn = document.getElementById('enrich-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Enriching…';
+    try {
+      const res = await fetch('/api/kanban/enrich', { method: 'POST' });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      await load();
+      showToast(`Enriched ${data.enriched} todo${data.enriched !== 1 ? 's' : ''} (${data.found_context} with context)`);
+    } catch (err) {
+      showToast('Enrich failed');
+    }
+    btn.disabled = false;
+    btn.textContent = '✨ Enrich Inbox';
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function pad(id) { return String(id || '?').padStart(3, '0'); }
+
+  initStatusCollapse();
+
+  // ── Terminal ─────────────────────────────────────────────────────────────────
+  let termSessionId = localStorage.getItem('term-session-id') || null;
+  let termOpen = false;
+  let termHistory = [];
+  let termHistoryIdx = -1;
+
+  function toggleTerminal() {
+    termOpen = !termOpen;
+    document.getElementById('term-panel').classList.toggle('open', termOpen);
+    if (termOpen) {
+      document.getElementById('term-input').focus();
+      termScrollBottom();
+    }
+  }
+
+  function termScrollBottom() {
+    const el = document.getElementById('term-messages');
+    setTimeout(() => { el.scrollTop = el.scrollHeight; }, 50);
+  }
+
+  function termAddMsg(role, text, extra) {
+    const wrap = document.getElementById('term-messages');
+    const div = document.createElement('div');
+    div.className = 'term-msg ' + role + (extra || '');
+    div.innerHTML =
+      '<span class="term-msg-label">' + (role === 'user' ? 'You' : 'Todo Creator') + '</span>' +
+      '<span class="term-msg-bubble">' + esc(text) + '</span>';
+    wrap.appendChild(div);
+    termScrollBottom();
+    return div;
+  }
+
+  async function termSend() {
+    const input = document.getElementById('term-input');
+    const btn = document.getElementById('term-send');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    termHistory.unshift(msg);
+    termHistoryIdx = -1;
+    input.value = '';
+
+    termAddMsg('user', msg);
+    const thinking = termAddMsg('agent', 'Thinking…', ' thinking');
+    btn.disabled = true;
+    input.disabled = true;
+
+    try {
+      const res = await fetch('/api/kanban/agent/turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, sessionId: termSessionId }),
+      });
+      const data = await res.json();
+      thinking.remove();
+      if (data.error) {
+        termAddMsg('agent', 'Error: ' + data.error);
+      } else {
+        termAddMsg('agent', data.text);
+        if (data.sessionId) {
+          termSessionId = data.sessionId;
+          localStorage.setItem('term-session-id', termSessionId);
+        }
+      }
+      // Refresh board in case a todo was created/updated
+      load();
+    } catch (e) {
+      thinking.remove();
+      termAddMsg('agent', 'Request failed. Is the indexer running?');
+    }
+
+    btn.disabled = false;
+    input.disabled = false;
+    input.focus();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const input = document.getElementById('term-input');
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); termSend(); }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (termHistoryIdx < termHistory.length - 1) { termHistoryIdx++; input.value = termHistory[termHistoryIdx]; }
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (termHistoryIdx > 0) { termHistoryIdx--; input.value = termHistory[termHistoryIdx]; }
+        else { termHistoryIdx = -1; input.value = ''; }
+      }
+    });
+  });
+
+
+  // ── Settings panel ────────────────────────────────────────────────────────
+  async function openSettingsPanel() {
+    document.getElementById('settings-overlay').classList.add('open');
+    await loadSettingsData();
+  }
+
+  function closeSettingsPanel() {
+    document.getElementById('settings-overlay').classList.remove('open');
+    document.getElementById('settings-lane-input').value = '';
+  }
+
+  function closeSettingsOverlay(e) {
+    if (e.target.id === 'settings-overlay') closeSettingsPanel();
+  }
+
+  async function loadSettingsData() {
+    try {
+      const [lanesRes, settingsRes] = await Promise.all([fetch('/api/kanban/swimlanes'), fetch('/api/kanban/settings')]);
+      const lanes = await lanesRes.json();
+      const settings = await settingsRes.json();
+      renderSettingsSwimlanes(lanes);
+      populateCronDropdowns(settings);
+    } catch (e) {
+      showToast('Failed to load settings');
+    }
+  }
+
+  function renderSettingsSwimlanes(lanes) {
+    const container = document.getElementById('settings-swimlane-chips');
+    container.innerHTML = lanes.map(function(lane) {
+      return '<span class="swimlane-chip">' +
+        esc(lane) +
+        '<span class="swimlane-chip-del" onclick="deleteSwimlane(\'' + esc(lane) + '\')" title="Remove lane">&times;</span>' +
+        '</span>';
+    }).join('');
+  }
+
+  async function addSwimlane() {
+    const input = document.getElementById('settings-lane-input');
+    const name = input.value.trim();
+    if (!name) return;
+    try {
+      const res = await fetch('/api/kanban/swimlanes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || 'Failed to add swimlane'); return; }
+      input.value = '';
+      renderSettingsSwimlanes(data);
+      swimlanes = data;
+      showToast('Swimlane "' + name + '" added');
+      render();
+    } catch (e) {
+      showToast('Failed to add swimlane');
+    }
+  }
+
+  async function deleteSwimlane(name) {
+    if (!confirm('Remove swimlane "' + name + '"?\n\nTodos in this lane will move to Uncategorized.')) return;
+    try {
+      const res = await fetch('/api/kanban/swimlanes/' + encodeURIComponent(name), { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || 'Cannot delete swimlane'); return; }
+      renderSettingsSwimlanes(data);
+      swimlanes = data;
+      showToast('Swimlane "' + name + '" removed');
+      render();
+    } catch (e) {
+      showToast('Failed to delete swimlane');
+    }
+  }
+
+  function populateCronDropdowns(settings) {
+    const hourSel = document.getElementById('cron-hour');
+    const minSel = document.getElementById('cron-minute');
+    hourSel.innerHTML = '';
+    for (var i = 0; i < 24; i++) {
+      var opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = String(i).padStart(2, '0');
+      if (i === settings.enrich_hour) opt.selected = true;
+      hourSel.appendChild(opt);
+    }
+    minSel.innerHTML = '';
+    for (var m = 0; m < 60; m += 5) {
+      var opt2 = document.createElement('option');
+      opt2.value = m;
+      opt2.textContent = String(m).padStart(2, '0');
+      if (m === settings.enrich_minute) opt2.selected = true;
+      minSel.appendChild(opt2);
+    }
+    updateCronPreview();
+  }
+
+  function updateCronPreview() {
+    var h = parseInt(document.getElementById('cron-hour').value, 10);
+    var m = parseInt(document.getElementById('cron-minute').value, 10);
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    document.getElementById('cron-preview').textContent =
+      'cron: ' + m + ' ' + h + ' * * *   (' + pad(h) + ':' + pad(m) + ' every day)';
+  }
+
+  async function saveCronSchedule() {
+    var hour = parseInt(document.getElementById('cron-hour').value, 10);
+    var minute = parseInt(document.getElementById('cron-minute').value, 10);
+    var btn = document.getElementById('cron-save-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
+    try {
+      const res = await fetch('/api/kanban/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enrich_hour: hour, enrich_minute: minute }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || 'Failed to save schedule'); return; }
+      var pad = function(n) { return String(n).padStart(2, '0'); };
+      showToast('Schedule saved: ' + pad(data.enrich_hour) + ':' + pad(data.enrich_minute) + ' daily');
+    } catch (e) {
+      showToast('Failed to save schedule');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Save Schedule';
+  }
+
+  async function runEnrichNow() {
+    var inboxCount = todos.filter(function(t) { return t.status === 'inbox'; }).length;
+    if (inboxCount === 0) { showToast('Nothing in Inbox to enrich'); return; }
+    closeSettingsPanel();
+    await enrichInbox();
+  }
+
+  load();
+  loadProjects();
+  setInterval(load, 30000);
+</script>
+
+<button class="term-toggle" id="term-toggle" onclick="toggleTerminal()" style="display:none">
+  <span class="term-dot"></span> Todo Assistant
+</button>
+
+<div class="term-panel" id="term-panel">
+  <div class="term-header">
+    <span class="term-header-dot"></span>
+    <span class="term-title">Todo Creator</span>
+    <span class="term-close" onclick="toggleTerminal()">×</span>
+  </div>
+  <div class="term-messages" id="term-messages">
+    <div class="term-msg agent">
+      <span class="term-msg-label">Todo Creator</span>
+      <span class="term-msg-bubble">Hey! I can create todos, list what's pending, update statuses, or search the workspace. What do you need?</span>
+    </div>
+  </div>
+  <div class="term-input-row">
+    <input class="term-input" id="term-input" placeholder="e.g. create a todo: fix login bug, high priority, Dev" autocomplete="off" />
+    <button class="term-send" id="term-send" onclick="termSend()">Send</button>
+  </div>
+</div>
+
+</body>
+</html>

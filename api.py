@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query, HTTPException, APIRouter
+from fastapi import FastAPI, Query, HTTPException, APIRouter, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -134,6 +134,11 @@ def projects_page():
 @app.get('/projects/{slug}')
 def project_detail_page(slug: str):
     return FileResponse(os.path.join(_ui_dir, 'projects.html'))
+
+
+@app.get('/kanban')
+def kanban_page():
+    return FileResponse(os.path.join(_ui_dir, 'kanban.html'))
 
 @app.get('/manifest.json')
 def manifest():
@@ -934,6 +939,72 @@ async def review_auto_tag(note_id: str):
         return {'success': False, 'error': 'Write verification failed'}
     return {'success': True, 'tags': tags, 'filename': note_id, 'review_num': review_num}
 
+
+
+# ── API: kanban proxy ─────────────────────────────────────────────────────────
+# The kanban UI is served at /kanban from CT 111. Its API calls are proxied
+# here to the todos-indexer on CT 122 (:3000) which owns the todo files.
+
+def _kanban_fwd(method: str, path: str, body: bytes = b'', qs: str = ''):
+    url = f'{_TODOS_INDEXER}{path}'
+    if qs:
+        url += f'?{qs}'
+    hdrs = {'Content-Type': 'application/json'} if body else {}
+    try:
+        r = getattr(http_requests, method)(url, data=body or None, headers=hdrs, timeout=15)
+        return Response(content=r.content, status_code=r.status_code,
+                        media_type=r.headers.get('Content-Type', 'application/json'))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f'Kanban indexer unavailable: {e}')
+
+
+@api.get('/kanban/todos')
+async def kanban_todos_list(request: Request):
+    return _kanban_fwd('get', '/todos', qs=str(request.query_params))
+
+@api.post('/kanban/todos')
+async def kanban_todos_create(request: Request):
+    return _kanban_fwd('post', '/todos', body=await request.body())
+
+@api.patch('/kanban/todos/{todo_id}')
+async def kanban_todos_patch(todo_id: int, request: Request):
+    return _kanban_fwd('patch', f'/todos/{todo_id}', body=await request.body())
+
+@api.get('/kanban/todos/{todo_id}/raw')
+def kanban_todos_raw(todo_id: int):
+    return _kanban_fwd('get', f'/todos/{todo_id}/raw')
+
+@api.get('/kanban/refresh')
+def kanban_refresh():
+    return _kanban_fwd('get', '/refresh')
+
+@api.get('/kanban/swimlanes')
+def kanban_swimlanes_list():
+    return _kanban_fwd('get', '/swimlanes')
+
+@api.post('/kanban/swimlanes')
+async def kanban_swimlanes_create(request: Request):
+    return _kanban_fwd('post', '/swimlanes', body=await request.body())
+
+@api.delete('/kanban/swimlanes/{name}')
+def kanban_swimlanes_delete(name: str):
+    return _kanban_fwd('delete', f'/swimlanes/{name}')
+
+@api.post('/kanban/enrich')
+async def kanban_enrich(request: Request):
+    return _kanban_fwd('post', '/enrich', body=await request.body())
+
+@api.post('/kanban/agent/turn')
+async def kanban_agent_turn(request: Request):
+    return _kanban_fwd('post', '/agent/turn', body=await request.body())
+
+@api.get('/kanban/settings')
+def kanban_settings_get():
+    return _kanban_fwd('get', '/settings')
+
+@api.patch('/kanban/settings')
+async def kanban_settings_patch(request: Request):
+    return _kanban_fwd('patch', '/settings', body=await request.body())
 
 # ── API: services health ──────────────────────────────────────────────────────
 
