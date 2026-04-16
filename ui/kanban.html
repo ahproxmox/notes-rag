@@ -819,9 +819,10 @@
       renderModalPrereqs(data.prereqIds);
     } catch (err) {
       showToast('Prereq search failed');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Find prereqs';
     }
-    btn.disabled = false;
-    btn.textContent = 'Find prereqs';
   }
 
   function startEdit() {
