@@ -161,6 +161,43 @@
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
+
+    .drawer-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--surface2);
+    }
+    .drawer-meta label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .project-select {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 5px 28px 5px 8px;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b949e' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      transition: border-color 0.15s;
+    }
+    .project-select:focus { border-color: var(--accent); }
     .drawer-title {
       flex: 1;
       font-size: 14px;
@@ -250,6 +287,12 @@
     <span class="drawer-title" id="drawer-title">Note</span>
     <button class="close-btn" id="close-btn">&#10005; Close</button>
   </div>
+  <div class="drawer-meta">
+    <label for="project-select">Project</label>
+    <select class="project-select" id="project-select">
+      <option value="">— no project —</option>
+    </select>
+  </div>
   <textarea class="editor" id="editor" placeholder="Loading&#8230;"></textarea>
   <div class="drawer-footer">
     <span class="save-status" id="save-status"></span>
@@ -260,17 +303,30 @@
 <script>
   var currentFilename = null;
   var originalBody = '';
+  var originalProject = '';
 
-  var queryEl    = document.getElementById('query');
-  var searchBtn  = document.getElementById('search-btn');
-  var resultsEl  = document.getElementById('results');
-  var overlay    = document.getElementById('overlay');
-  var drawer     = document.getElementById('drawer');
-  var drawerTitle = document.getElementById('drawer-title');
-  var editor     = document.getElementById('editor');
-  var saveBtn    = document.getElementById('save-btn');
-  var saveStatus = document.getElementById('save-status');
-  var closeBtn   = document.getElementById('close-btn');
+  var queryEl       = document.getElementById('query');
+  var searchBtn     = document.getElementById('search-btn');
+  var resultsEl     = document.getElementById('results');
+  var overlay       = document.getElementById('overlay');
+  var drawer        = document.getElementById('drawer');
+  var drawerTitle   = document.getElementById('drawer-title');
+  var editor        = document.getElementById('editor');
+  var saveBtn       = document.getElementById('save-btn');
+  var saveStatus    = document.getElementById('save-status');
+  var closeBtn      = document.getElementById('close-btn');
+  var projectSelect = document.getElementById('project-select');
+
+  // Load projects into the selector
+  fetch('/api/projects')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var opts = (data.projects || []).map(function(p) {
+        return '<option value="' + escHtml(p.slug) + '">' + escHtml(p.title) + '</option>';
+      }).join('');
+      projectSelect.innerHTML = '<option value="">— no project —</option>' + opts;
+    })
+    .catch(function() { /* leave default */ });
 
   searchBtn.addEventListener('click', doSearch);
   queryEl.addEventListener('keydown', function(e) { if (e.key === 'Enter') doSearch(); });
@@ -280,11 +336,14 @@
   closeBtn.addEventListener('click', closeDrawer);
   overlay.addEventListener('click', closeDrawer);
   saveBtn.addEventListener('click', saveNote);
-  editor.addEventListener('input', function() {
-    var dirty = editor.value !== originalBody;
+  editor.addEventListener('input', markDirty);
+  projectSelect.addEventListener('change', markDirty);
+
+  function markDirty() {
+    var dirty = editor.value !== originalBody || projectSelect.value !== originalProject;
     saveBtn.classList.toggle('dirty', dirty);
     saveStatus.textContent = dirty ? 'Unsaved changes' : '';
-  });
+  }
 
   function loadRecent() {
     resultsEl.innerHTML = '<div class="msg">Loading\u2026</div>';
@@ -370,6 +429,8 @@
     .then(function(data) {
       editor.value = data.body;
       originalBody = data.body;
+      originalProject = data.project || '';
+      projectSelect.value = originalProject;
       editor.placeholder = '';
       editor.disabled = false;
       saveBtn.disabled = false;
@@ -387,11 +448,12 @@
     fetch('/api/notes/' + encodeURIComponent(currentFilename), {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({body: editor.value}),
+      body: JSON.stringify({body: editor.value, project: projectSelect.value}),
     })
     .then(function(resp) {
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       originalBody = editor.value;
+      originalProject = projectSelect.value;
       saveBtn.classList.remove('dirty');
       saveStatus.textContent = 'Saved \u2713';
       setTimeout(function() {
@@ -411,6 +473,8 @@
     drawer.classList.remove('open');
     overlay.classList.remove('open');
     currentFilename = null;
+    originalProject = '';
+    projectSelect.value = '';
   }
 
   function escHtml(s) {

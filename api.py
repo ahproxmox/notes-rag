@@ -99,6 +99,7 @@ class NoteSearchRequest(BaseModel):
 
 class NoteUpdateRequest(BaseModel):
     body: str
+    project: str | None = None
 
 class ProjectCreateRequest(BaseModel):
     title: str
@@ -727,6 +728,7 @@ def notes_get(filename: str):
         raise HTTPException(status_code=404, detail=f'Note not found: {filename}')
     content = path.read_text(encoding='utf-8', errors='replace')
     title = filename.removesuffix('.md').replace('-', ' ').title()
+    project = ''
     body = content
     if content.startswith('---'):
         end = content.find('---', 3)
@@ -734,8 +736,10 @@ def notes_get(filename: str):
             for line in content[3:end].splitlines():
                 if line.startswith('title:'):
                     title = line.partition(':')[2].strip().strip('"\'')
+                elif line.startswith('project:'):
+                    project = line.partition(':')[2].strip().strip('"\'')
             body = content[end + 3:].lstrip('\n')
-    return {'filename': filename, 'title': title, 'body': body}
+    return {'filename': filename, 'title': title, 'body': body, 'project': project}
 
 
 @api.patch('/notes/{filename:path}')
@@ -754,7 +758,7 @@ def notes_update(filename: str, req: NoteUpdateRequest):
         if end != -1:
             fm_lines = content[3:end].splitlines()
             new_fm: list[str] = []
-            has_reviewed = has_updated = False
+            has_reviewed = has_updated = has_project = False
             for line in fm_lines:
                 if line.startswith('reviewed:'):
                     new_fm.append('reviewed: unreviewed')
@@ -762,12 +766,19 @@ def notes_update(filename: str, req: NoteUpdateRequest):
                 elif line.startswith('updated:'):
                     new_fm.append(f'updated: {today}')
                     has_updated = True
+                elif line.startswith('project:') and req.project is not None:
+                    if req.project:
+                        new_fm.append(f'project: {req.project}')
+                    # omit line if project is being cleared
+                    has_project = True
                 else:
                     new_fm.append(line)
             if not has_reviewed:
                 new_fm.append('reviewed: unreviewed')
             if not has_updated:
                 new_fm.append(f'updated: {today}')
+            if req.project and not has_project:
+                new_fm.append(f'project: {req.project}')
             new_content = '---\n' + '\n'.join(new_fm) + '\n---\n\n' + req.body.strip() + '\n'
         else:
             new_content = req.body
