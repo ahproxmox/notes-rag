@@ -828,7 +828,7 @@
       extra.innerHTML =
         '<div class="modal-section">' +
         '<div class="modal-section-label">Prerequisites</div>' +
-        '<div class="modal-desc">' + prereqIds.map(function(p) { return '#' + p; }).join(', ') + '</div>' +
+        '<div class="modal-desc">' + prereqIds.map(function(p) { return '#' + parseInt(p, 10); }).filter(function(p) { return p !== '#NaN'; }).join(', ') + '</div>' +
         '</div>';
     }
   }
@@ -836,13 +836,15 @@
   async function findPrereqs() {
     const btn = document.getElementById('prereq-find-btn');
     if (!btn) return;
+    const todoId = editingTodoId;
     btn.disabled = true;
     btn.textContent = 'Searching\u2026';
     try {
-      const res = await fetch('/api/kanban/todos/' + editingTodoId + '/prereqs', { method: 'POST' });
+      const res = await fetch('/api/kanban/todos/' + todoId + '/prereqs', { method: 'POST' });
       if (!res.ok) throw new Error('Server error ' + res.status);
       const data = await res.json();
-      const todo = todos.find(function(t) { return t.id === editingTodoId; });
+      if (editingTodoId !== todoId) return;
+      const todo = todos.find(function(t) { return t.id === todoId; });
       if (todo) todo.prereqIds = data.prereqIds;
       renderModalPrereqs(data.prereqIds);
     } catch (err) {
