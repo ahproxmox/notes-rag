@@ -1458,13 +1458,14 @@ def kanban_todos_find_prereqs(todo_id: int):
         valid_ids = {t['id'] for t in candidates}
         for token in m.group(1).split(','):
             token = token.strip()
-            if token.isdigit() and int(token) in valid_ids:
+            if re.match(r'^\d+$', token) and int(token) in valid_ids:
                 prereq_ids.append(int(token))
 
-    # Write prereqIds to frontmatter
-    id_str = ', '.join(str(i) for i in prereq_ids)
-    content = _set_fm_field(content, 'prereqIds', f'[{id_str}]')
-    filepath.write_text(content, encoding='utf-8')
+    # Write prereqIds to frontmatter (only if non-empty)
+    if prereq_ids:
+        id_str = ', '.join(str(i) for i in prereq_ids)
+        content = _set_fm_field(content, 'prereqIds', f'[{id_str}]')
+        filepath.write_text(content, encoding='utf-8')
 
     return {'prereqIds': prereq_ids}
 
@@ -1503,6 +1504,11 @@ def services_health():
 
 
 
+# ── API: LLM models ────────────────────────────────────────────────────────────
+
+_models_config_path = Path('/mnt/Claude/config/models.json')
+_model_health_path  = Path('/mnt/Claude/config/model-health.json')
+
 # ── OpenRouter helper ─────────────────────────────────────────────────────────
 
 def _call_openrouter(prompt: str) -> str:
@@ -1529,12 +1535,6 @@ def _call_openrouter(prompt: str) -> str:
     )
     r.raise_for_status()
     return r.json()['choices'][0]['message']['content']
-
-
-# ── API: LLM models ────────────────────────────────────────────────────────────
-
-_models_config_path = Path('/mnt/Claude/config/models.json')
-_model_health_path  = Path('/mnt/Claude/config/model-health.json')
 
 _SIDECAR_URLS = {
     'hermes':   'http://192.168.88.83:8090/reload',

@@ -136,3 +136,32 @@ def test_prereqs_handles_empty_llm_response(tmp_path):
 
     assert resp.status_code == 200
     assert resp.json() == {'prereqIds': []}
+
+
+def test_prereqs_overwrites_existing_prereq_ids(tmp_path):
+    """Second call should replace previously written prereqIds, not append."""
+    todo_with_existing_prereqs = """\
+---
+id: 10
+title: "Deploy service"
+status: pending
+swimlane: Dev
+prereqIds: [99]
+---
+Deploy the service to production.
+"""
+    _write_todo(tmp_path / '010-deploy-service.md', todo_with_existing_prereqs)
+    _write_todo(tmp_path / '011-write-tests.md', CANDIDATE_SAME_LANE)
+
+    with patch('api._todos_dir', tmp_path):
+        with patch('api.search', return_value=('', [], [])):
+            with patch('api._call_openrouter', return_value='[11]'):
+                resp = client.post('/api/kanban/todos/10/prereqs')
+
+    assert resp.status_code == 200
+    assert resp.json() == {'prereqIds': [11]}
+    updated = (tmp_path / '010-deploy-service.md').read_text()
+    # Should have exactly one prereqIds line with the new value
+    lines = [l for l in updated.splitlines() if l.startswith('prereqIds:')]
+    assert len(lines) == 1
+    assert lines[0] == 'prereqIds: [11]'
