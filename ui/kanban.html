@@ -48,6 +48,9 @@
     header h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
     .header-right { display: flex; align-items: center; gap: 8px; }
     .meta { font-size: 12px; color: var(--text-dim); }
+    .project-filter { font-size: 13px; color: var(--text-muted); background: var(--surface2); border: 1px solid var(--border); padding: 5px 10px; border-radius: 6px; outline: none; cursor: pointer; max-width: 160px; }
+    .project-filter:focus { border-color: var(--accent); }
+    .project-filter.active { border-color: var(--accent); color: var(--accent); }
     .refresh-btn { font-size: 13px; color: var(--accent); cursor: pointer; background: none; border: 1px solid var(--accent-border); padding: 5px 12px; border-radius: 6px; }
     .refresh-btn:hover { background: var(--accent-border); }
     .new-btn { font-size: 13px; color: var(--purple-light); cursor: pointer; background: none; border: 1px solid var(--purple-dim); padding: 5px 12px; border-radius: 6px; }
@@ -297,6 +300,9 @@
   </div>
   <div class="header-right">
     <span class="meta" id="last-updated"></span>
+    <select class="project-filter" id="project-filter" onchange="setProjectFilter(this.value)">
+      <option value="">All projects</option>
+    </select>
     <button class="settings-btn" onclick="openSettingsPanel()">&#9881; Settings</button>
     <button class="new-btn" onclick="openCreatePanel()">➕ New</button>
     <button class="refresh-btn" onclick="load()">↻ Refresh</button>
@@ -499,6 +505,15 @@
   let swimlanes = [];
   let projects = [];
   let draggingId = null;
+  let filterProject = localStorage.getItem('kanban-filter-project') || '';
+
+  function setProjectFilter(slug) {
+    filterProject = slug;
+    localStorage.setItem('kanban-filter-project', slug);
+    const sel = document.getElementById('project-filter');
+    if (sel) sel.classList.toggle('active', !!slug);
+    render();
+  }
 
   async function loadProjects() {
     try {
@@ -512,6 +527,19 @@
         if (sel) sel.innerHTML = blank + opts;
       });
     } catch { /* leave blank */ }
+  }
+
+  function updateFilterDropdown() {
+    const sel = document.getElementById('project-filter');
+    if (!sel) return;
+    const used = new Set(todos.map(t => t.project).filter(Boolean));
+    const opts = projects
+      .filter(p => used.has(p.slug))
+      .map(p => `<option value="${esc(p.slug)}">${esc(p.title)}</option>`)
+      .join('');
+    sel.innerHTML = '<option value="">All projects</option>' + opts;
+    sel.value = filterProject;
+    sel.classList.toggle('active', !!filterProject);
   }
 
   const LANE_COLORS = ['#3b82f6','#f59e0b','#10b981','#8b5cf6','#ec4899','#06b6d4','#f97316','#84cc16'];
@@ -563,6 +591,7 @@
       const [todosRes, lanesRes] = await Promise.all([fetch('/api/kanban/todos'), fetch('/api/kanban/swimlanes')]);
       todos = await todosRes.json();
       swimlanes = await lanesRes.json();
+      updateFilterDropdown();
       render();
       document.getElementById('last-updated').textContent =
         'Updated ' + new Date().toLocaleTimeString();
@@ -575,8 +604,10 @@
     const board = document.getElementById('board');
     board.innerHTML = '';
 
+    const visibleTodos = filterProject ? todos.filter(t => t.project === filterProject) : todos;
+
     const lanesToShow = [...swimlanes];
-    const hasUncategorized = todos.some(t => !t.swimlane || !swimlanes.includes(t.swimlane));
+    const hasUncategorized = visibleTodos.some(t => !t.swimlane || !swimlanes.includes(t.swimlane));
     if (hasUncategorized) lanesToShow.push('__uncategorized__');
 
     lanesToShow.forEach((lane, idx) => {
@@ -587,8 +618,10 @@
       const laneValue = isUncategorized ? '' : lane;
 
       const laneTodos = isUncategorized
-        ? todos.filter(t => !t.swimlane || !swimlanes.includes(t.swimlane))
-        : todos.filter(t => t.swimlane === lane);
+        ? visibleTodos.filter(t => !t.swimlane || !swimlanes.includes(t.swimlane))
+        : visibleTodos.filter(t => t.swimlane === lane);
+
+      if (!laneTodos.length) return;
 
       const section = document.createElement('div');
       section.className = 'swimlane';
