@@ -1470,15 +1470,6 @@ def kanban_todos_find_prereqs(todo_id: int):
     return {'prereqIds': prereq_ids}
 
 
-@api.get('/kanban/settings')
-def kanban_settings_get():
-    return _kanban_proxy('get', '/settings')
-
-
-@api.patch('/kanban/settings')
-async def kanban_settings_patch(request: Request):
-    return _kanban_proxy('patch', '/settings', body=await request.body())
-
 
 # ── API: services health ──────────────────────────────────────────────────────
 
