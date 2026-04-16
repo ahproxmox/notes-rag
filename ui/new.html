@@ -539,7 +539,7 @@
     try {
       const res = await fetch('/api/projects');
       const data = await res.json();
-      const opts = (data.projects || []).map(p =>
+      const opts = (data.projects || []).filter(p => p.status !== 'archived').map(p =>
         `<option value="${escHtml(p.slug)}">${escHtml(p.title)}</option>`
       ).join('');
       ['todo-project', 'note-project'].forEach(id => {

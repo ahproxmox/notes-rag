@@ -491,7 +491,8 @@
       const res = await fetch('/api/projects');
       const data = await res.json();
       projects = data.projects || [];
-      const opts = projects.map(p => `<option value="${esc(p.slug)}">${esc(p.title)}</option>`).join('');
+      const activeProjects = projects.filter(p => p.status !== 'archived');
+      const opts = activeProjects.map(p => `<option value="${esc(p.slug)}">${esc(p.title)}</option>`).join('');
       const blank = '<option value="">— no project —</option>';
       ['cf-project', 'edit-project'].forEach(id => {
         const sel = document.getElementById(id);
