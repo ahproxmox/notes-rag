@@ -1372,7 +1372,7 @@ def kanban_swimlanes_delete(name: str):
     return lanes
 
 
-# ── enrich / agent / settings: still proxy to CT 122 ────────────────────────
+# ── kanban: agent/turn proxy (CT 122) ────────────────────────────────────────
 
 def _kanban_proxy(method: str, path: str, body: bytes = b'', qs: str = ''):
     url = f'{_TODOS_INDEXER}{path}'
@@ -1387,14 +1387,86 @@ def _kanban_proxy(method: str, path: str, body: bytes = b'', qs: str = ''):
         raise HTTPException(status_code=502, detail=f'Kanban proxy unavailable: {e}')
 
 
-@api.post('/kanban/enrich')
-async def kanban_enrich(request: Request):
-    return _kanban_proxy('post', '/enrich', body=await request.body())
-
-
 @api.post('/kanban/agent/turn')
 async def kanban_agent_turn(request: Request):
     return _kanban_proxy('post', '/agent/turn', body=await request.body())
+
+
+# ── kanban: auto prereq detection ─────────────────────────────────────────────
+
+@api.post('/kanban/todos/{todo_id}/prereqs')
+def kanban_todos_find_prereqs(todo_id: int):
+    filepath = _find_todo_path(todo_id)
+    if not filepath:
+        raise HTTPException(status_code=404, detail=f'Todo not found: {todo_id}')
+
+    todo = _parse_todo_file(filepath.name, filepath)
+    if not todo:
+        raise HTTPException(status_code=500, detail='Failed to parse todo')
+
+    content = filepath.read_text(encoding='utf-8')
+    body = re.sub(r'^---[\s\S]*?---\n?', '', content, count=1).strip()
+
+    # Collect non-completed todos in the same swimlane or project
+    scope_key = todo.get('swimlane') or todo.get('project')
+    candidates: list[dict] = []
+    for p in _todos_dir.glob('*.md'):
+        t = _parse_todo_file(p.name, p)
+        if not t or t['id'] == todo_id:
+            continue
+        if t['status'] in ('completed', 'wontdo'):
+            continue
+        if scope_key and (t.get('swimlane') == scope_key or t.get('project') == scope_key):
+            candidates.append(t)
+
+    if not candidates:
+        return {'prereqIds': []}
+
+    # RAG search for workspace context
+    rag_context = ''
+    try:
+        query = f"{todo['title']} — {body[:300]}" if body else todo['title']
+        answer, _, _ = search(query)
+        if answer and len(answer) > 30:
+            rag_context = answer
+    except Exception:
+        pass
+
+    # Build LLM prompt
+    scope_label = scope_key or 'same scope'
+    todo_list = '\n'.join(f"- #{t['id']}: {t['title']}" for t in candidates)
+    prompt = (
+        'You are analyzing a task management system. '
+        'Given the following todo item, identify which other todos from the list '
+        'MUST be completed BEFORE this one can start.\n\n'
+        f'Current todo:\nTitle: {todo["title"]}\nBody: {body or "(no body)"}\n\n'
+        + (f'Workspace context:\n{rag_context}\n\n' if rag_context else '')
+        + f'Other todos in {scope_label}:\n{todo_list}\n\n'
+        'Return ONLY a JSON array of integer IDs that are prerequisites, e.g. [7, 8]. '
+        'If none apply, return []. No explanation.'
+    )
+
+    try:
+        response = _call_openrouter(prompt)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f'LLM call failed: {e}')
+
+    # Parse and validate the returned IDs
+    m = re.search(r'\[([^\]]*)\]', response)
+    prereq_ids: list[int] = []
+    if m:
+        valid_ids = {t['id'] for t in candidates}
+        for token in m.group(1).split(','):
+            token = token.strip()
+            if token.isdigit() and int(token) in valid_ids:
+                prereq_ids.append(int(token))
+
+    # Write prereqIds to frontmatter
+    id_str = ', '.join(str(i) for i in prereq_ids)
+    content = _set_fm_field(content, 'prereqIds', f'[{id_str}]')
+    filepath.write_text(content, encoding='utf-8')
+
+    return {'prereqIds': prereq_ids}
 
 
 @api.get('/kanban/settings')
@@ -1429,6 +1501,34 @@ def services_health():
             results[svc['id']] = 'down'
     return results
 
+
+
+# ── OpenRouter helper ─────────────────────────────────────────────────────────
+
+def _call_openrouter(prompt: str) -> str:
+    """POST a single user prompt to OpenRouter. Returns the response text."""
+    key = os.environ.get('OPENROUTER_API_KEY', '')
+    if not key:
+        raise ValueError('OPENROUTER_API_KEY not set')
+    model = 'google/gemini-2.0-flash-lite:free'
+    try:
+        if _models_config_path.exists():
+            cfg = json.loads(_models_config_path.read_text())
+            raw = cfg.get('notes-rag', model)
+            model = re.sub(r'^openrouter/', '', raw)
+    except Exception:
+        pass
+    r = http_requests.post(
+        'https://openrouter.ai/api/v1/chat/completions',
+        headers={
+            'Authorization': f'Bearer {key}',
+            'Content-Type': 'application/json',
+        },
+        json={'model': model, 'messages': [{'role': 'user', 'content': prompt}]},
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()['choices'][0]['message']['content']
 
 
 # ── API: LLM models ────────────────────────────────────────────────────────────
