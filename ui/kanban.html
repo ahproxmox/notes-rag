@@ -814,6 +814,10 @@
       if (!res.ok) throw new Error('Server error ' + res.status);
       const data = await res.json();
       if (editingTodoId !== todoId) return;
+      if (data.reason === 'no-scope') {
+        showToast('No swimlane or project — nothing to compare against');
+        return;
+      }
       const todo = todos.find(function(t) { return t.id === todoId; });
       if (todo) todo.prereqIds = data.prereqIds;
       renderModalPrereqs(data.prereqIds);

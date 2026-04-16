@@ -1392,6 +1392,38 @@ async def kanban_agent_turn(request: Request):
     return _kanban_proxy('post', '/agent/turn', body=await request.body())
 
 
+_models_config_path = Path('/mnt/Claude/config/models.json')
+_model_health_path  = Path('/mnt/Claude/config/model-health.json')
+
+
+# ── OpenRouter helper ─────────────────────────────────────────────────────────
+
+def _call_openrouter(prompt: str) -> str:
+    """POST a single user prompt to OpenRouter. Returns the response text."""
+    key = os.environ.get('OPENROUTER_API_KEY', '')
+    if not key:
+        raise ValueError('OPENROUTER_API_KEY not set')
+    model = 'google/gemini-2.0-flash-lite:free'
+    try:
+        if _models_config_path.exists():
+            cfg = json.loads(_models_config_path.read_text())
+            raw = cfg.get('notes-rag', model)
+            model = re.sub(r'^openrouter/', '', raw)
+    except Exception:
+        pass
+    r = http_requests.post(
+        'https://openrouter.ai/api/v1/chat/completions',
+        headers={
+            'Authorization': f'Bearer {key}',
+            'Content-Type': 'application/json',
+        },
+        json={'model': model, 'messages': [{'role': 'user', 'content': prompt}]},
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()['choices'][0]['message']['content']
+
+
 # ── kanban: auto prereq detection ─────────────────────────────────────────────
 
 @api.post('/kanban/todos/{todo_id}/prereqs')
@@ -1409,6 +1441,9 @@ def kanban_todos_find_prereqs(todo_id: int):
 
     # Collect non-completed todos in the same swimlane or project
     scope_key = todo.get('swimlane') or todo.get('project')
+    if not scope_key:
+        return {'prereqIds': [], 'reason': 'no-scope'}
+
     candidates: list[dict] = []
     for p in _todos_dir.glob('*.md'):
         t = _parse_todo_file(p.name, p)
@@ -1416,7 +1451,7 @@ def kanban_todos_find_prereqs(todo_id: int):
             continue
         if t['status'] in ('completed', 'wontdo'):
             continue
-        if scope_key and (t.get('swimlane') == scope_key or t.get('project') == scope_key):
+        if t.get('swimlane') == scope_key or t.get('project') == scope_key:
             candidates.append(t)
 
     if not candidates:
@@ -1496,36 +1531,6 @@ def services_health():
 
 
 # ── API: LLM models ────────────────────────────────────────────────────────────
-
-_models_config_path = Path('/mnt/Claude/config/models.json')
-_model_health_path  = Path('/mnt/Claude/config/model-health.json')
-
-# ── OpenRouter helper ─────────────────────────────────────────────────────────
-
-def _call_openrouter(prompt: str) -> str:
-    """POST a single user prompt to OpenRouter. Returns the response text."""
-    key = os.environ.get('OPENROUTER_API_KEY', '')
-    if not key:
-        raise ValueError('OPENROUTER_API_KEY not set')
-    model = 'google/gemini-2.0-flash-lite:free'
-    try:
-        if _models_config_path.exists():
-            cfg = json.loads(_models_config_path.read_text())
-            raw = cfg.get('notes-rag', model)
-            model = re.sub(r'^openrouter/', '', raw)
-    except Exception:
-        pass
-    r = http_requests.post(
-        'https://openrouter.ai/api/v1/chat/completions',
-        headers={
-            'Authorization': f'Bearer {key}',
-            'Content-Type': 'application/json',
-        },
-        json={'model': model, 'messages': [{'role': 'user', 'content': prompt}]},
-        timeout=30,
-    )
-    r.raise_for_status()
-    return r.json()['choices'][0]['message']['content']
 
 _SIDECAR_URLS = {
     'hermes':   'http://192.168.88.83:8090/reload',
