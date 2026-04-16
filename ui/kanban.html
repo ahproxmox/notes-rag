@@ -55,9 +55,6 @@
     .refresh-btn:hover { background: var(--accent-border); }
     .new-btn { font-size: 13px; color: var(--purple-light); cursor: pointer; background: none; border: 1px solid var(--purple-dim); padding: 5px 12px; border-radius: 6px; }
     .new-btn:hover { background: var(--purple-deep); }
-    .enrich-btn { font-size: 13px; color: var(--green-light); cursor: pointer; background: none; border: 1px solid var(--green-dim); padding: 5px 12px; border-radius: 6px; transition: background 0.15s; }
-    .enrich-btn:hover { background: var(--green-deep); }
-    .enrich-btn:disabled { opacity: 0.4; cursor: default; }
 
     .board { padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; overflow-x: auto; }
 
@@ -260,17 +257,6 @@
     .swimlane-add-input:focus { border-color: var(--purple); }
     .swimlane-add-btn { background: var(--accent-border); border: 1px solid var(--accent); color: var(--accent); font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; white-space: nowrap; }
     .swimlane-add-btn:hover { background: #1e4a7f; }
-    .cron-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-    .cron-label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
-    .cron-select { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 7px 10px; border-radius: 6px; outline: none; font-family: inherit; }
-    .cron-select:focus { border-color: var(--purple); }
-    .cron-preview { font-size: 11px; color: var(--text-dim); font-family: 'SF Mono', 'Fira Code', monospace; margin-bottom: 12px; }
-    .cron-actions { display: flex; gap: 8px; }
-    .cron-save-btn { background: #6d28d9; border: 1px solid #7c3aed; color: var(--text); font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; }
-    .cron-save-btn:hover { background: #7c3aed; }
-    .cron-save-btn:disabled { opacity: 0.5; cursor: default; }
-    .cron-run-btn { background: none; border: 1px solid var(--green-dim); color: var(--green-light); font-size: 13px; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; }
-    .cron-run-btn:hover { background: var(--green-deep); }
     .settings-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
     .modal-edit-btn { cursor: pointer; font-size: 12px; color: var(--accent); background: none; border: 1px solid var(--accent-border); padding: 4px 10px; border-radius: 5px; }
     .modal-edit-btn:hover { background: var(--accent-border); }
@@ -323,6 +309,7 @@
     </div>
     <div class="modal-meta" id="modal-meta"></div>
     <div id="modal-extra"></div>
+    <div id="modal-prereq-actions" style="margin-top:10px"></div>
     <div id="modal-body-wrap"></div>
     <div id="modal-edit-form" class="edit-form">
       <hr class="modal-divider" style="margin-top:14px">
@@ -476,22 +463,6 @@
         <div class="swimlane-add-row">
           <input class="swimlane-add-input" id="settings-lane-input" type="text" placeholder="New swimlane name..." autocomplete="off" onkeydown="if(event.key==='Enter')addSwimlane()" maxlength="32" />
           <button class="swimlane-add-btn" onclick="addSwimlane()">Add</button>
-        </div>
-      </div>
-      <hr class="settings-divider" />
-      <div>
-        <div class="settings-section-title">Enrich Schedule</div>
-        <div class="cron-row">
-          <span class="cron-label">Run at</span>
-          <select class="cron-select" id="cron-hour" onchange="updateCronPreview()"></select>
-          <span class="cron-label">:</span>
-          <select class="cron-select" id="cron-minute" onchange="updateCronPreview()"></select>
-          <span class="cron-label">daily (AEDT)</span>
-        </div>
-        <div class="cron-preview" id="cron-preview"></div>
-        <div class="cron-actions">
-          <button class="cron-save-btn" id="cron-save-btn" onclick="saveCronSchedule()">Save Schedule</button>
-          <button class="cron-run-btn" onclick="runEnrichNow()">Run Now</button>
         </div>
       </div>
     </div>
@@ -793,15 +764,9 @@
       metaEl.appendChild(s);
     });
 
-    const extra = document.getElementById('modal-extra');
-    extra.innerHTML = '';
-    if (todo.prereqIds && todo.prereqIds.length) {
-      extra.innerHTML =
-        '<div class="modal-section">' +
-        '<div class="modal-section-label">Prerequisites</div>' +
-        '<div class="modal-desc">' + todo.prereqIds.map(p => '#' + p).join(', ') + '</div>' +
-        '</div>';
-    }
+    renderModalPrereqs(todo.prereqIds || []);
+    const prereqActions = document.getElementById('modal-prereq-actions');
+    prereqActions.innerHTML = '<button class="modal-edit-btn" id="prereq-find-btn" onclick="findPrereqs()">Find prereqs</button>';
 
     const bodyWrap = document.getElementById('modal-body-wrap');
     bodyWrap.innerHTML = '<div class="modal-body-loading">Loading...</div>';
@@ -826,6 +791,40 @@
       });
   }
 
+  function renderModalPrereqs(prereqIds) {
+    const extra = document.getElementById('modal-extra');
+    extra.innerHTML = '';
+    if (prereqIds && prereqIds.length) {
+      extra.innerHTML =
+        '<div class="modal-section">' +
+        '<div class="modal-section-label">Prerequisites</div>' +
+        '<div class="modal-desc">' + prereqIds.map(function(p) { return '#' + parseInt(p, 10); }).filter(function(p) { return p !== '#NaN'; }).join(', ') + '</div>' +
+        '</div>';
+    }
+  }
+
+  async function findPrereqs() {
+    const btn = document.getElementById('prereq-find-btn');
+    if (!btn) return;
+    const todoId = editingTodoId;
+    btn.disabled = true;
+    btn.textContent = 'Searching\u2026';
+    try {
+      const res = await fetch('/api/kanban/todos/' + todoId + '/prereqs', { method: 'POST' });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
+      if (editingTodoId !== todoId) return;
+      const todo = todos.find(function(t) { return t.id === todoId; });
+      if (todo) todo.prereqIds = data.prereqIds;
+      renderModalPrereqs(data.prereqIds);
+    } catch (err) {
+      showToast('Prereq search failed');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Find prereqs';
+    }
+  }
+
   function startEdit() {
     var todo = todos.find(function(t) { return t.id === editingTodoId; });
     if (!todo) return;
@@ -848,6 +847,7 @@
     document.getElementById('modal-extra').style.display = 'none';
     document.getElementById('modal-body-wrap').style.display = 'none';
     document.getElementById('modal-edit-btn').style.display = 'none';
+    document.getElementById('modal-prereq-actions').style.display = 'none';
     document.getElementById('modal-edit-form').classList.add('active');
     document.getElementById('modal-title').textContent = 'Editing #' + pad(todo.id);
   }
@@ -857,6 +857,7 @@
     document.getElementById('modal-extra').style.display = '';
     document.getElementById('modal-body-wrap').style.display = '';
     document.getElementById('modal-edit-btn').style.display = '';
+    document.getElementById('modal-prereq-actions').style.display = '';
     document.getElementById('modal-edit-form').classList.remove('active');
   }
 
@@ -946,28 +947,6 @@
     btn.textContent = 'Create Todo';
   }
 
-  // ── Enrich inbox ──────────────────────────────────────────────────────────────
-  async function enrichInbox() {
-    const inboxCount = todos.filter(t => t.status === 'inbox').length;
-    if (inboxCount === 0) {
-      showToast('Nothing in Inbox to enrich');
-      return;
-    }
-    const btn = document.getElementById('enrich-btn');
-    btn.disabled = true;
-    btn.textContent = '⏳ Enriching…';
-    try {
-      const res = await fetch('/api/kanban/enrich', { method: 'POST' });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      await load();
-      showToast(`Enriched ${data.enriched} todo${data.enriched !== 1 ? 's' : ''} (${data.found_context} with context)`);
-    } catch (err) {
-      showToast('Enrich failed');
-    }
-    btn.disabled = false;
-    btn.textContent = '✨ Enrich Inbox';
-  }
 
   function showToast(msg) {
     const t = document.getElementById('toast');
@@ -1094,11 +1073,9 @@
 
   async function loadSettingsData() {
     try {
-      const [lanesRes, settingsRes] = await Promise.all([fetch('/api/kanban/swimlanes'), fetch('/api/kanban/settings')]);
+      const lanesRes = await fetch('/api/kanban/swimlanes');
       const lanes = await lanesRes.json();
-      const settings = await settingsRes.json();
       renderSettingsSwimlanes(lanes);
-      populateCronDropdowns(settings);
     } catch (e) {
       showToast('Failed to load settings');
     }
@@ -1151,65 +1128,6 @@
     }
   }
 
-  function populateCronDropdowns(settings) {
-    const hourSel = document.getElementById('cron-hour');
-    const minSel = document.getElementById('cron-minute');
-    hourSel.innerHTML = '';
-    for (var i = 0; i < 24; i++) {
-      var opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = String(i).padStart(2, '0');
-      if (i === settings.enrich_hour) opt.selected = true;
-      hourSel.appendChild(opt);
-    }
-    minSel.innerHTML = '';
-    for (var m = 0; m < 60; m += 5) {
-      var opt2 = document.createElement('option');
-      opt2.value = m;
-      opt2.textContent = String(m).padStart(2, '0');
-      if (m === settings.enrich_minute) opt2.selected = true;
-      minSel.appendChild(opt2);
-    }
-    updateCronPreview();
-  }
-
-  function updateCronPreview() {
-    var h = parseInt(document.getElementById('cron-hour').value, 10);
-    var m = parseInt(document.getElementById('cron-minute').value, 10);
-    var pad = function(n) { return String(n).padStart(2, '0'); };
-    document.getElementById('cron-preview').textContent =
-      'cron: ' + m + ' ' + h + ' * * *   (' + pad(h) + ':' + pad(m) + ' every day)';
-  }
-
-  async function saveCronSchedule() {
-    var hour = parseInt(document.getElementById('cron-hour').value, 10);
-    var minute = parseInt(document.getElementById('cron-minute').value, 10);
-    var btn = document.getElementById('cron-save-btn');
-    btn.disabled = true;
-    btn.textContent = 'Saving\u2026';
-    try {
-      const res = await fetch('/api/kanban/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enrich_hour: hour, enrich_minute: minute }),
-      });
-      const data = await res.json();
-      if (!res.ok) { showToast(data.error || 'Failed to save schedule'); return; }
-      var pad = function(n) { return String(n).padStart(2, '0'); };
-      showToast('Schedule saved: ' + pad(data.enrich_hour) + ':' + pad(data.enrich_minute) + ' daily');
-    } catch (e) {
-      showToast('Failed to save schedule');
-    }
-    btn.disabled = false;
-    btn.textContent = 'Save Schedule';
-  }
-
-  async function runEnrichNow() {
-    var inboxCount = todos.filter(function(t) { return t.status === 'inbox'; }).length;
-    if (inboxCount === 0) { showToast('Nothing in Inbox to enrich'); return; }
-    closeSettingsPanel();
-    await enrichInbox();
-  }
 
   load();
   loadProjects();
