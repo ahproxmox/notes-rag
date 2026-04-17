@@ -460,7 +460,7 @@
       .then(r => r.json())
       .then(d => {
         const el = document.getElementById('stat-chunks');
-        el.textContent = d.total_chunks != null ? d.total_chunks.toLocaleString() : '—';
+        el.textContent = d.chunk_count != null ? d.chunk_count.toLocaleString() : '—';
         el.classList.remove('loading');
       })
       .catch(() => { document.getElementById('stat-chunks').textContent = '—'; });
