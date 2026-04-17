@@ -970,6 +970,27 @@
   </div>
 </div>
 
+<style>
+  .md-body { font-size: 13px; line-height: 1.7; color: var(--text); }
+  .md-body h1,.md-body h2,.md-body h3,.md-body h4 { color: var(--text); font-weight: 600; margin: 1.2em 0 0.4em; letter-spacing: -0.3px; }
+  .md-body h1 { font-size: 18px; } .md-body h2 { font-size: 15px; } .md-body h3 { font-size: 13px; }
+  .md-body p { margin: 0.5em 0; color: var(--text-muted); }
+  .md-body ul,.md-body ol { padding-left: 1.4em; margin: 0.4em 0; color: var(--text-muted); }
+  .md-body li { margin: 0.2em 0; }
+  .md-body code { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; font-family: 'SF Mono','Fira Code',monospace; font-size: 11px; padding: 1px 5px; }
+  .md-body pre { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 0.6em 0; }
+  .md-body pre code { background: none; border: none; padding: 0; font-size: 12px; }
+  .md-body blockquote { border-left: 3px solid var(--border); margin: 0.6em 0; padding: 4px 12px; color: var(--text-muted); }
+  .md-body a { color: var(--accent); text-decoration: none; }
+  .md-body a:hover { text-decoration: underline; }
+  .md-body hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+  .md-body table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 0.6em 0; }
+  .md-body th,.md-body td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
+  .md-body th { background: var(--surface2); color: var(--text); font-weight: 600; }
+  .md-body td { color: var(--text-muted); }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
 <script>
   async function showDoc(path, label) {
     document.getElementById('doc-modal-title').textContent = label;
@@ -980,9 +1001,15 @@
       const res = await fetch('/api/workspace/' + encodeURIComponent(path).replace(/%2F/g, '/'));
       if (!res.ok) throw new Error('Not found');
       const data = await res.json();
-      document.getElementById('doc-modal-body').innerHTML =
-        '<pre style="white-space:pre-wrap;font-size:12px;line-height:1.6;color:var(--text-muted);font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif">' +
-        esc(data.content) + '</pre>';
+      const isMarkdown = path.toLowerCase().endsWith('.md');
+      if (isMarkdown && typeof marked !== 'undefined') {
+        document.getElementById('doc-modal-body').innerHTML =
+          '<div class="md-body">' + marked.parse(data.content) + '</div>';
+      } else {
+        document.getElementById('doc-modal-body').innerHTML =
+          '<pre style="white-space:pre-wrap;font-size:12px;line-height:1.6;color:var(--text-muted);font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif">' +
+          esc(data.content) + '</pre>';
+      }
     } catch (err) {
       document.getElementById('doc-modal-body').innerHTML =
         '<div class="empty-state">Failed to load: ' + esc(String(err)) + '</div>';
