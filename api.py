@@ -1522,7 +1522,7 @@ def kanban_todos_find_prereqs(todo_id: int):
 _SERVICES = [
     {'id': 'notes',    'label': 'Notes RAG',  'url': 'http://192.168.88.71:8080/api/health'},
     {'id': 'kanban',   'label': 'Kanban',      'url': 'http://192.168.88.78:3000'},
-    {'id': 'reports',  'label': 'Reports',     'url': 'http://192.168.88.55:80'},
+    {'id': 'reports',  'label': 'Reports',     'url': 'http://localhost:8082/reports'},
     {'id': 'grafana',  'label': 'Grafana',     'url': 'http://192.168.88.73:3000'},
     {'id': 'dashboard','label': 'Dashboard',   'url': 'http://192.168.88.127:8080'},
 ]
