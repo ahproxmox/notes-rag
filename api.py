@@ -1541,6 +1541,25 @@ def services_health():
 
 
 
+
+# ── API: Hermes queue status ───────────────────────────────────────────────────
+_HERMES_STATUS_FILE = '/mnt/Claude/config/hermes-status.json'
+
+@api.get('/hermes/status')
+def hermes_status():
+    try:
+        with open(_HERMES_STATUS_FILE) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+    return {
+        'research': {'status': 'idle', 'topic': None, 'started_at': None, 'finished_at': None},
+        'forecast': {'status': 'idle', 'topic': None, 'started_at': None, 'finished_at': None},
+    }
+
+
 # ── API: LLM models ────────────────────────────────────────────────────────────
 
 _SIDECAR_URLS = {

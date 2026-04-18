@@ -279,6 +279,100 @@
     @media (max-width: 380px) {
       .tiles { grid-template-columns: 1fr; }
     }
+
+    /* ── Hermes status section ── */
+    .hermes-section {
+      margin-top: 32px;
+    }
+    .hermes-jobs {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .hermes-job {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .hermes-job.running { border-color: #2d4a6a; }
+    .hermes-job.error   { border-color: var(--red); }
+    .hermes-job.recent  { border-color: #2a3a2a; }
+    .hermes-job-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .hermes-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .hermes-badge.research { background: #1d2d3e; color: var(--accent); }
+    .hermes-badge.forecast { background: #2a1d3e; color: #c084fc; }
+    .hermes-topic {
+      font-size: 13px;
+      font-weight: 500;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .hermes-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hermes-spinner {
+      width: 10px; height: 10px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    .hermes-progress {
+      height: 3px;
+      background: var(--surface2);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .hermes-progress-bar {
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--accent), #79c0ff);
+      animation: indeterminate 1.6s ease-in-out infinite;
+      width: 40%;
+    }
+    .hermes-progress-bar.forecast-bar {
+      background: linear-gradient(90deg, #c084fc, #e0aaff);
+    }
+    .hermes-done-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+    }
+    .hermes-err-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes indeterminate {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
   </style>
 </head>
 <body>
@@ -426,6 +520,12 @@
       <div class="tile-desc">View and update active models across all services</div>
     </div>
 
+  </div>
+
+  <!-- Hermes queue status -->
+  <div class="hermes-section" id="hermes-section" style="display:none">
+    <div class="section-label">Hermes Agent</div>
+    <div class="hermes-jobs" id="hermes-jobs"></div>
   </div>
 </main>
 
@@ -655,6 +755,82 @@
       }, 3000);
     }
   }
+
+  // ── Hermes status ─────────────────────────────────────────────────────────────
+  function elapsedStr(startedAt) {
+    if (!startedAt) return '';
+    const secs = Math.floor((Date.now() - new Date(startedAt)) / 1000);
+    if (secs < 60) return secs + 's';
+    return Math.floor(secs / 60) + 'm ' + (secs % 60) + 's';
+  }
+
+  function finishedAgoStr(finishedAt) {
+    if (!finishedAt) return '';
+    const secs = Math.floor((Date.now() - new Date(finishedAt)) / 1000);
+    if (secs < 60) return 'just now';
+    if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+    return null;
+  }
+
+  function renderHermesJob(type, job) {
+    const isRunning = job.status === 'running';
+    const isError   = job.status === 'error';
+    const isDone    = job.status === 'idle' && job.finished_at;
+    if (!isRunning && !isError && !isDone) return null;
+    if (isDone) {
+      const ago = finishedAgoStr(job.finished_at);
+      if (!ago) return null; // older than 1h — hide
+    }
+
+    const cls = isRunning ? 'running' : isError ? 'error' : 'recent';
+    const durationStr = isDone
+      ? (() => {
+          const s = Math.floor((new Date(job.finished_at) - new Date(job.started_at)) / 1000);
+          return s < 60 ? s + 's' : Math.floor(s/60) + 'm ' + (s%60) + 's';
+        })()
+      : '';
+
+    let metaHtml = '';
+    if (isRunning) {
+      metaHtml = `<div class="hermes-meta"><div class="hermes-spinner"></div> Running &mdash; ${elapsedStr(job.started_at)} elapsed</div>
+                  <div class="hermes-progress"><div class="hermes-progress-bar ${type === 'forecast' ? 'forecast-bar' : ''}"></div></div>`;
+    } else if (isError) {
+      metaHtml = `<div class="hermes-meta"><div class="hermes-err-dot"></div> Failed &mdash; ${finishedAgoStr(job.finished_at) || ''}</div>`;
+    } else {
+      metaHtml = `<div class="hermes-meta"><div class="hermes-done-dot"></div> Completed in ${durationStr} &mdash; ${finishedAgoStr(job.finished_at)}</div>`;
+    }
+
+    return `<div class="hermes-job ${cls}">
+      <div class="hermes-job-header">
+        <span class="hermes-badge ${type}">${type}</span>
+        <span class="hermes-topic">${job.topic || '—'}</span>
+      </div>
+      ${metaHtml}
+    </div>`;
+  }
+
+  async function pollHermes() {
+    try {
+      const res  = await fetch('/api/hermes/status');
+      const data = await res.json();
+      const cards = [];
+      for (const type of ['research', 'forecast']) {
+        const card = renderHermesJob(type, data[type] || {});
+        if (card) cards.push(card);
+      }
+      const section = document.getElementById('hermes-section');
+      const jobs    = document.getElementById('hermes-jobs');
+      if (cards.length) {
+        jobs.innerHTML = cards.join('');
+        section.style.display = '';
+      } else {
+        section.style.display = 'none';
+      }
+    } catch { /* silent */ }
+  }
+
+  pollHermes();
+  setInterval(pollHermes, 5000);
 </script>
 </body>
 </html>
