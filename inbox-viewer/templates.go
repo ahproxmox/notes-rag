@@ -47,7 +47,7 @@ header {
   flex-shrink: 0;
 }
 .logo svg { width: 16px; height: 16px; }
-header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; flex: 1; }
+header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
 .back-link {
   font-size: 12px;
   color: var(--text-muted);
@@ -128,6 +128,7 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
 </head>
 <body>
 <header>
+  <a class="back-link" href="/">&#8592; Workspace</a>
   <div class="logo">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
       <rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/>
@@ -137,7 +138,6 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
     </svg>
   </div>
   <h1>Reports &amp; Inbox</h1>
-  <a class="back-link" href="/">&#8592; Home</a>
 </header>
 <main>
   <div class="filters">
