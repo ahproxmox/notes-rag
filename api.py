@@ -8,10 +8,11 @@ from entities import EntityStore
 import os
 import re
 import requests as http_requests
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 import threading
 import time
+import caldav_bridge
 
 app = FastAPI()
 api = APIRouter(prefix='/api')
@@ -86,6 +87,8 @@ class TodoCreateRequest(BaseModel):
     assignee: str = ''
     project: str = ''
     complexity: str = ''
+    due: str = ''
+    create_reminder: bool = False
 
 
 class NoteCreateRequest(BaseModel):
@@ -607,6 +610,22 @@ def todos_create(req: TodoCreateRequest):
 
     _todos_dir.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding='utf-8')
+
+    if req.create_reminder:
+        due_dt = None
+        if req.due:
+            from zoneinfo import ZoneInfo
+            try:
+                due_dt = datetime.fromisoformat(req.due).replace(tzinfo=ZoneInfo('Australia/Melbourne'))
+            except ValueError:
+                pass
+        caldav_bridge.create_reminder(
+            title=req.title,
+            todo_id=todo_id,
+            due_dt=due_dt,
+            notes=req.description[:200] if req.description else '',
+        )
+
     return {'created': filename, 'id': todo_id, 'path': str(path)}
 
 @api.post('/notes/create')

@@ -123,6 +123,37 @@
       color: var(--text-muted);
     }
 
+    .reminder-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .reminder-row input[type="datetime-local"] {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+      color-scheme: dark;
+    }
+    .reminder-row input[type="datetime-local"]:focus { border-color: var(--accent); }
+    .reminder-checkbox-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .reminder-checkbox-wrap input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+
     input[type="text"], input[type="url"], select {
       width: 100%;
       background: var(--surface);
@@ -442,6 +473,13 @@
         <option value="">— no project —</option>
       </select>
     </div>
+    <div class="reminder-row">
+      <input type="datetime-local" id="todo-due" title="Due date (Melbourne time)">
+      <label class="reminder-checkbox-wrap" title="Create an Apple Reminder on save">
+        <input type="checkbox" id="todo-reminder">
+        Apple Reminder
+      </label>
+    </div>
   </div>
 
   <!-- ── NOTE section ── -->
@@ -719,12 +757,14 @@
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         title,
-        description: document.getElementById('description').value.trim(),
-        priority:    document.getElementById('priority').value,
-        swimlane:    document.getElementById('swimlane').value,
-        assignee:    document.getElementById('assignee').value.trim(),
-        complexity:  document.getElementById('complexity').value,
-        project:     document.getElementById('todo-project').value,
+        description:     document.getElementById('description').value.trim(),
+        priority:        document.getElementById('priority').value,
+        swimlane:        document.getElementById('swimlane').value,
+        assignee:        document.getElementById('assignee').value.trim(),
+        complexity:      document.getElementById('complexity').value,
+        project:         document.getElementById('todo-project').value,
+        due:             document.getElementById('todo-due').value,
+        create_reminder: document.getElementById('todo-reminder').checked,
       }),
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'HTTP ' + res.status); }
@@ -737,6 +777,8 @@
     document.getElementById('priority').value = 'medium';
     document.getElementById('swimlane').value = 'Dev';
     document.getElementById('todo-project').value = '';
+    document.getElementById('todo-due').value = '';
+    document.getElementById('todo-reminder').checked = false;
     fetchNextId();
   }
 

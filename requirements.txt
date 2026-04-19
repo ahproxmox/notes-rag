@@ -32,3 +32,4 @@ hvac==2.4.0
 
 # Tokenizer
 tiktoken==0.12.0
+\n# Apple Reminders (CalDAV bridge)\ncaldav>=3.1.0

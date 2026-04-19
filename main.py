@@ -77,6 +77,9 @@ if __name__ == '__main__':
     print('[main] initialising store...', flush=True)
     init_store()
 
+    import caldav_bridge
+    caldav_bridge.start_poller()
+
     print('[main] starting watcher...', flush=True)
     t = threading.Thread(target=run_watcher, daemon=True)
     t.start()
