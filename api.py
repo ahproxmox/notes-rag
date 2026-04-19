@@ -7,6 +7,7 @@ from research import research
 from entities import EntityStore
 import os
 import re
+import sqlite3
 import requests as http_requests
 from datetime import date, datetime
 from pathlib import Path
@@ -23,6 +24,7 @@ app.mount('/ui', StaticFiles(directory=_ui_dir), name='ui')
 _log_path = Path('/mnt/Claude/log.md')
 _wiki_dir = Path('/mnt/Claude/wiki')
 _todos_dir = Path('/mnt/Claude/todos')
+_reminders_db = Path(os.path.dirname(__file__)) / 'reminders.db'
 _projects_dir = Path('/mnt/Claude/projects')
 _inbox_dir = Path('/mnt/Obsidian/Inbox')
 _notes_dir = Path('/mnt/Obsidian/Notes')
@@ -530,6 +532,58 @@ def research_endpoint(req: ResearchRequest):
     summary, filepath = research(req.query)
     return {'summary': summary, 'filepath': filepath}
 
+
+class ReminderAckRequest(BaseModel):
+    id: int
+
+class ReminderCompleteRequest(BaseModel):
+    todo_id: str
+
+# ── API: reminders ───────────────────────────────────────────────────────────
+
+@api.get('/reminders/queue')
+def reminders_queue():
+    """Pending reminders waiting to be created by the Mac bridge."""
+    conn = sqlite3.connect(_reminders_db)
+    rows = conn.execute(
+        'SELECT id, todo_id, title, due_iso, notes FROM queue WHERE status = "pending" ORDER BY id'
+    ).fetchall()
+    conn.close()
+    return [{'id': r[0], 'todo_id': r[1], 'title': r[2], 'due_iso': r[3], 'notes': r[4]} for r in rows]
+
+@api.get('/reminders/tracked')
+def reminders_tracked():
+    """Reminders that have been created on Mac and are being watched for completion."""
+    conn = sqlite3.connect(_reminders_db)
+    rows = conn.execute(
+        'SELECT id, todo_id, title FROM queue WHERE status = "acked" ORDER BY id'
+    ).fetchall()
+    conn.close()
+    return [{'id': r[0], 'todo_id': r[1], 'title': r[2]} for r in rows]
+
+@api.post('/reminders/ack')
+def reminders_ack(req: ReminderAckRequest):
+    """Mark a queued reminder as created (acked) by the Mac bridge."""
+    conn = sqlite3.connect(_reminders_db)
+    conn.execute('UPDATE queue SET status = "acked" WHERE id = ?', (req.id,))
+    conn.commit()
+    conn.close()
+    return {'ok': True}
+
+@api.post('/reminders/complete')
+def reminders_complete(req: ReminderCompleteRequest):
+    """Called by Mac bridge when a reminder is ticked off in Reminders app."""
+    todo_id = str(req.todo_id).zfill(3)
+    for path in _todos_dir.glob(f'{todo_id}-*.md'):
+        text = path.read_text(encoding='utf-8')
+        if 'status: pending' in text:
+            path.write_text(text.replace('status: pending', 'status: completed', 1), encoding='utf-8')
+        break
+    conn = sqlite3.connect(_reminders_db)
+    conn.execute('UPDATE queue SET status = "completed" WHERE todo_id = ? AND status = "acked"', (str(req.todo_id),))
+    conn.commit()
+    conn.close()
+    return {'ok': True}
 
 # ── API: todos ────────────────────────────────────────────────────────────────
 
