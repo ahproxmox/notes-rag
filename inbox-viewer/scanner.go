@@ -130,7 +130,7 @@ func parseReportFolder(name, htmlPath string) ContentItem {
 		Date:     date,
 		Category: "report",
 		Slug:     name,
-		URLPath:  "/reports/report/" + name + "/",
+		URLPath:  "/reports/report/" + name,
 		FilePath: htmlPath,
 	}
 }
