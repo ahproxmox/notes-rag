@@ -302,7 +302,7 @@ const manifestJSON = `{
   "icons": []
 }`
 
-const serviceWorkerJS = `const CACHE = 'reports-v1';
+const serviceWorkerJS = `const CACHE = 'reports-v2';
 const OFFLINE = '/reports/offline.html';
 
 self.addEventListener('install', e => {
@@ -319,7 +319,7 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.mode === 'navigate') {
-    e.respondWith(fetch(e.request).catch(() => caches.match(OFFLINE)));
+    e.respondWith(fetch(e.request, { cache: 'no-store' }).catch(() => caches.match(OFFLINE)));
     return;
   }
   e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
