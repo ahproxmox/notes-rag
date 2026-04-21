@@ -52,8 +52,9 @@ class Store:
             CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);
             CREATE INDEX IF NOT EXISTS idx_chunks_folder ON chunks(folder);
         ''')
-        # Wing/room/project columns — added in later migrations, so use ALTER + try/except
-        for col in ('wing', 'room', 'project'):
+        # Wing/room/project/superseded_by columns — added in later migrations,
+        # so use ALTER + try/except for forward compatibility.
+        for col in ('wing', 'room', 'project', 'superseded_by'):
             try:
                 self._conn.execute(f'ALTER TABLE chunks ADD COLUMN {col} TEXT')
             except sqlite3.OperationalError:
@@ -61,6 +62,7 @@ class Store:
         self._conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_wing ON chunks(wing)')
         self._conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_wing_room ON chunks(wing, room)')
         self._conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_project ON chunks(project)')
+        self._conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_superseded ON chunks(superseded_by)')
         # FTS5 virtual table (content-sync with chunks)
         self._conn.execute('''
             CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
@@ -97,10 +99,11 @@ class Store:
         for i, chunk in enumerate(chunks):
             meta = chunk.metadata
             cur.execute(
-                'INSERT INTO chunks (source, filename, folder, headers, content, wing, room, project) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO chunks (source, filename, folder, headers, content, wing, room, project, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (source, meta.get('filename', ''), meta.get('folder', 'root'),
                  meta.get('headers', ''), chunk.page_content,
-                 meta.get('wing'), meta.get('room'), meta.get('project')),
+                 meta.get('wing'), meta.get('room'), meta.get('project'),
+                 meta.get('superseded_by')),
             )
             chunk_id = cur.lastrowid
             # Prepend filename so filename terms are searchable via BM25.
@@ -129,7 +132,7 @@ class Store:
 
     def search_bm25(self, query: str, k: int = 20, folder: str | None = None,
                     wing: str | None = None, room: str | None = None,
-                    project: str | None = None) -> list[Document]:
+                    project: str | None = None, include_superseded: bool = False) -> list[Document]:
         """BM25-ranked keyword search with optional folder/wing/room/project filters."""
         fts_query = self._fts_query(query)
         where = ['chunks_fts MATCH ?']
@@ -146,6 +149,8 @@ class Store:
         if project:
             where.append('c.project = ?')
             params.append(project)
+        if not include_superseded:
+            where.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
         sql = f'''
             SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project
             FROM chunks_fts
@@ -167,11 +172,13 @@ class Store:
 
     def search_vector(self, query: str, k: int = 20, folder: str | None = None,
                       wing: str | None = None, room: str | None = None,
-                      project: str | None = None) -> list[Document]:
+                      project: str | None = None, include_superseded: bool = False) -> list[Document]:
         """Vector similarity search with optional folder/wing/room/project filters.
 
         sqlite-vec's k param is pre-filter — applied before our metadata WHERE
         clauses. To preserve top-k after filtering we over-fetch and trim.
+
+        Returned Documents include `similarity` in metadata (1 - cosine distance).
         """
         if self._embed_fn is None:
             return []
@@ -180,7 +187,7 @@ class Store:
 
         where = ['v.embedding MATCH ?', 'k = ?']
         params: list = [query_bytes]
-        has_filter = bool(folder or wing or room or project)
+        has_filter = bool(folder or wing or room or project) or not include_superseded
         # Over-fetch when filtering post-vec so trimmed result still yields k
         fetch_k = k * 3 if has_filter else k
         params.append(fetch_k)
@@ -196,6 +203,8 @@ class Store:
         if project:
             where.append('c.project = ?')
             params.append(project)
+        if not include_superseded:
+            where.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
 
         sql = f'''
             SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project, v.distance
@@ -211,7 +220,8 @@ class Store:
             Document(
                 page_content=r[0],
                 metadata={'source': r[1], 'filename': r[2], 'folder': r[3],
-                          'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7]},
+                          'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7],
+                          'similarity': 1.0 - float(r[8])},
             )
             for r in rows
         ]

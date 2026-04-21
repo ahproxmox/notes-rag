@@ -120,6 +120,37 @@
       border-radius: var(--radius); }
     .result-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
 
+    /* Scan-for-links panel */
+    .scan-panel { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+      margin: 6px 0; }
+    .scan-header { font-size: 12px; font-weight: 600; color: var(--text);
+      display: flex; align-items: center; gap: 6px; }
+    .scan-header .count-badge { font-size: 10px; padding: 1px 6px; border-radius: 999px;
+      background: var(--tag-bg); color: var(--text-muted); font-weight: 500; }
+    .scan-header.supersede { color: var(--yellow); }
+    .scan-header.related   { color: var(--accent); }
+    .scan-section { display: flex; flex-direction: column; gap: 6px; }
+    .scan-card { padding: 9px 10px; background: var(--surface); border: 1px solid var(--border);
+      border-left: 3px solid var(--border); border-radius: 6px; display: flex; flex-direction: column; gap: 6px; }
+    .scan-card.supersede { border-left-color: var(--yellow); }
+    .scan-card.related   { border-left-color: var(--accent); }
+    .scan-card .title { font-size: 12px; font-weight: 500; }
+    .scan-card .title a { color: var(--text); text-decoration: none; }
+    .scan-card .title a:hover { color: var(--accent); text-decoration: underline; }
+    .scan-card .reason { font-size: 11px; color: var(--text-muted); line-height: 1.45; }
+    .scan-card .meta { display: flex; align-items: center; gap: 6px; }
+    .scan-card .sim { font-size: 10px; font-family: 'SF Mono', monospace;
+      background: var(--tag-bg); padding: 1px 5px; border-radius: 999px; color: var(--text-muted); }
+    .scan-card-actions { display: flex; gap: 6px; margin-top: 2px; }
+    .scan-card-actions .btn { padding: 3px 10px; font-size: 11px; }
+    .scan-empty { font-size: 12px; color: var(--text-muted); padding: 10px 0; text-align: center; }
+    .scan-banner { font-size: 12px; color: var(--green); padding: 6px 10px;
+      background: rgba(63, 185, 80, 0.08); border: 1px solid rgba(63, 185, 80, 0.3);
+      border-radius: 6px; }
+    .scan-banner.error { color: var(--red); background: rgba(248, 81, 73, 0.08);
+      border-color: rgba(248, 81, 73, 0.3); }
+
     @media (min-width: 768px) {
       .triage-scroll { max-width: 700px; margin: 0 auto; width: 100%; padding: 16px; }
     }
@@ -161,6 +192,7 @@
       <button class="btn primary" id="send-btn">Send</button>
     </div>
     <div class="review-actions">
+      <button class="btn" id="scan-btn">Scan for links</button>
       <button class="btn" id="skip-btn">Skip</button>
       <button class="btn primary" id="complete-btn">Complete Review</button>
     </div>
@@ -185,6 +217,10 @@ const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
 const skipBtn = document.getElementById('skip-btn');
 const completeBtn = document.getElementById('complete-btn');
+const scanBtn = document.getElementById('scan-btn');
+
+let activeNoteFilename = null;
+let reviewNoteFilenames = [];
 
 chatInput.addEventListener('input', () => {
   chatInput.style.height = 'auto';
@@ -196,6 +232,7 @@ chatInput.addEventListener('keydown', e => {
 sendBtn.addEventListener('click', sendReply);
 skipBtn.addEventListener('click', () => showTriage());
 completeBtn.addEventListener('click', completeReview);
+scanBtn.addEventListener('click', scanForLinks);
 
 loadQueue();
 
@@ -384,6 +421,8 @@ async function autoTag(filename, btn) {
 function renderNotePanels(notes) {
   noteTabs.innerHTML = '';
   noteBodies.innerHTML = '';
+  reviewNoteFilenames = notes.map(n => n.filename);
+  activeNoteFilename = notes[0] ? notes[0].filename : null;
   notes.forEach((n, i) => {
     const tab = document.createElement('div');
     tab.className = 'note-tab' + (i === 0 ? ' active' : '');
@@ -391,6 +430,7 @@ function renderNotePanels(notes) {
     tab.onclick = () => {
       noteTabs.querySelectorAll('.note-tab').forEach((t,j) => t.classList.toggle('active', j===i));
       noteBodies.querySelectorAll('.note-body-wrap').forEach((b,j) => b.classList.toggle('active', j===i));
+      activeNoteFilename = n.filename;
     };
     noteTabs.appendChild(tab);
     const wrap = document.createElement('div');
@@ -398,6 +438,144 @@ function renderNotePanels(notes) {
     wrap.innerHTML = `<div class="note-body">${esc(n.body)}</div>`;
     noteBodies.appendChild(wrap);
   });
+}
+
+async function scanForLinks() {
+  if (!activeNoteFilename) return;
+  scanBtn.disabled = true;
+  const origLabel = scanBtn.textContent;
+  scanBtn.textContent = 'Scanning…';
+  const sourceFilename = activeNoteFilename;
+  try {
+    const res = await fetch('/api/links/scan', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({path: sourceFilename}),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      renderScanBanner(`Scan failed: ${detail}`, true);
+      return;
+    }
+    const data = await res.json();
+    renderScanResults(sourceFilename, data);
+  } catch (e) {
+    renderScanBanner(`Scan failed: ${e.message}`, true);
+  } finally {
+    scanBtn.disabled = false;
+    scanBtn.textContent = origLabel;
+  }
+}
+
+function renderScanBanner(msg, isError = false) {
+  const b = document.createElement('div');
+  b.className = 'scan-banner' + (isError ? ' error' : '');
+  b.textContent = msg;
+  chatMessages.appendChild(b);
+  scrollChat();
+}
+
+function renderScanResults(sourceFilename, data) {
+  const sup = data.supersessions || [];
+  const rel = data.related || [];
+  if (!sup.length && !rel.length) {
+    renderScanBanner('No link candidates found for this note.');
+    return;
+  }
+  const panel = document.createElement('div');
+  panel.className = 'scan-panel';
+
+  if (sup.length) {
+    const section = document.createElement('div');
+    section.className = 'scan-section';
+    section.innerHTML = `<div class="scan-header supersede">Possible supersessions <span class="count-badge">${sup.length}</span></div>`;
+    sup.forEach(c => section.appendChild(buildScanCard('supersedes', sourceFilename, c)));
+    panel.appendChild(section);
+  }
+  if (rel.length) {
+    const section = document.createElement('div');
+    section.className = 'scan-section';
+    section.innerHTML = `<div class="scan-header related">Related notes <span class="count-badge">${rel.length}</span></div>`;
+    rel.forEach(c => section.appendChild(buildScanCard('related', sourceFilename, c)));
+    panel.appendChild(section);
+  }
+  chatMessages.appendChild(panel);
+  scrollChat();
+}
+
+function buildScanCard(type, sourceFilename, candidate) {
+  const card = document.createElement('div');
+  card.className = 'scan-card ' + (type === 'supersedes' ? 'supersede' : 'related');
+  const title = esc(candidate.path.replace('.md', ''));
+  card.innerHTML = `
+    <div class="title">${title}</div>
+    <div class="reason">${esc(candidate.reason || '')}</div>
+    <div class="meta"><span class="sim">sim ${(candidate.similarity || 0).toFixed(2)}</span></div>
+    <div class="scan-card-actions">
+      <button class="btn primary" data-act="confirm">Confirm</button>
+      <button class="btn" data-act="reject">Reject</button>
+      <button class="btn" data-act="skip">Skip</button>
+    </div>
+  `;
+  card.querySelector('[data-act=confirm]').onclick = () => confirmLink(card, type, sourceFilename, candidate.path);
+  card.querySelector('[data-act=reject]').onclick = () => rejectLink(card, sourceFilename, candidate.path);
+  card.querySelector('[data-act=skip]').onclick = () => card.remove();
+  return card;
+}
+
+async function confirmLink(card, type, source, target) {
+  disableCardActions(card, 'Saving…');
+  try {
+    const res = await fetch('/api/links/confirm', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({type, source, target}),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      renderScanBanner(`Confirm failed: ${detail}`, true);
+      enableCardActions(card);
+      return;
+    }
+    card.remove();
+    const label = type === 'supersedes'
+      ? `Marked ${target.replace('.md', '')} as superseded.`
+      : `Linked as related: ${target.replace('.md', '')}.`;
+    renderScanBanner(label);
+  } catch (e) {
+    renderScanBanner(`Confirm failed: ${e.message}`, true);
+    enableCardActions(card);
+  }
+}
+
+async function rejectLink(card, source, target) {
+  disableCardActions(card, 'Rejecting…');
+  try {
+    const res = await fetch('/api/links/reject', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({source, target}),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      renderScanBanner(`Reject failed: ${detail}`, true);
+      enableCardActions(card);
+      return;
+    }
+    card.remove();
+  } catch (e) {
+    renderScanBanner(`Reject failed: ${e.message}`, true);
+    enableCardActions(card);
+  }
+}
+
+function disableCardActions(card, label) {
+  card.querySelectorAll('.scan-card-actions .btn').forEach(b => { b.disabled = true; });
+  const confirmBtn = card.querySelector('[data-act=confirm]');
+  if (confirmBtn) confirmBtn.textContent = label;
+}
+
+function enableCardActions(card) {
+  card.querySelectorAll('.scan-card-actions .btn').forEach(b => { b.disabled = false; });
+  const confirmBtn = card.querySelector('[data-act=confirm]');
+  if (confirmBtn) confirmBtn.textContent = 'Confirm';
 }
 
 function addBubble(role, text, streaming=false) {

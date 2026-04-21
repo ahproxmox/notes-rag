@@ -200,7 +200,7 @@ def _search_recent(query: str) -> tuple[str, list[str], list[dict]]:
 
 def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: float = 0.6,
               folder: str | None = None, wing: str | None = None, room: str | None = None,
-              project: str | None = None) -> list[Document]:
+              project: str | None = None, include_superseded: bool = False) -> list[Document]:
     """Hybrid retrieval: FTS5 keyword + sqlite-vec vector, merged via RRF.
 
     Retrieves k candidates from each source, then merges with weighted
@@ -208,8 +208,10 @@ def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: 
     """
     store = get_store()
 
-    bm25_docs = store.search_bm25(query, k=k, folder=folder, wing=wing, room=room, project=project)
-    vector_docs = store.search_vector(query, k=k, folder=folder, wing=wing, room=room, project=project)
+    bm25_docs = store.search_bm25(query, k=k, folder=folder, wing=wing, room=room,
+                                  project=project, include_superseded=include_superseded)
+    vector_docs = store.search_vector(query, k=k, folder=folder, wing=wing, room=room,
+                                      project=project, include_superseded=include_superseded)
 
     # Reciprocal rank fusion — merge by content identity
     scores: dict[str, float] = {}
@@ -224,6 +226,7 @@ def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: 
     for rank, doc in enumerate(vector_docs):
         key = f"{doc.metadata.get('source', '')}:{doc.page_content[:100]}"
         scores[key] = scores.get(key, 0) + vector_weight / (rrf_k + rank + 1)
+        # Prefer vector-arm metadata (has `similarity`) when both arms returned the chunk.
         doc_map[key] = doc
 
     # Boost wiki/ pages — they are synthesised cross-note summaries and should
@@ -273,7 +276,7 @@ def _docs_to_chunks(docs: list[Document]) -> list[dict]:
 def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
            final_k: int = 6, folder: str | None = None,
            wing: str | None = None, room: str | None = None,
-           project: str | None = None) -> tuple[str, list[str], list[dict]]:
+           project: str | None = None, include_superseded: bool = False) -> tuple[str, list[str], list[dict]]:
     """Full RAG search with intent-aware routing.
 
     When called with default weights (0.4/0.6), classifies query intent and
@@ -298,7 +301,8 @@ def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
         # 'default' keeps 0.4/0.6
 
     docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight,
-                     folder=folder, wing=wing, room=room, project=project)
+                     folder=folder, wing=wing, room=room, project=project,
+                     include_superseded=include_superseded)
     if not docs:
         return 'No relevant context found in the workspace.', [], []
 
@@ -313,21 +317,25 @@ def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
     return answer, sources, _docs_to_chunks(docs)
 
 
-def search_with_weights(query: str, bm25_weight: float, vector_weight: float) -> tuple[str, list[str], list[dict]]:
+def search_with_weights(query: str, bm25_weight: float, vector_weight: float,
+                        include_superseded: bool = False) -> tuple[str, list[str], list[dict]]:
     """Run a search with explicit weights — bypasses intent routing."""
-    return search(query, bm25_weight=bm25_weight, vector_weight=vector_weight)
+    return search(query, bm25_weight=bm25_weight, vector_weight=vector_weight,
+                  include_superseded=include_superseded)
 
 
 def search_filtered(query: str, exclude_sources: list[str], folder: str | None = None,
                     wing: str | None = None, room: str | None = None,
-                    project: str | None = None) -> tuple[str, list[str], list[dict]]:
+                    project: str | None = None,
+                    include_superseded: bool = False) -> tuple[str, list[str], list[dict]]:
     """Retrieve docs, filter out excluded source files, rerank, then synthesise."""
     lookup = _try_todo_lookup(query)
     if lookup:
         answer, sources = lookup
         return answer, sources, []
 
-    docs = _retrieve(query, k=20, folder=folder, wing=wing, room=room, project=project)
+    docs = _retrieve(query, k=20, folder=folder, wing=wing, room=room, project=project,
+                     include_superseded=include_superseded)
     docs = [d for d in docs if d.metadata.get('filename', '') not in exclude_sources]
     if not docs:
         return 'No relevant context found in the workspace.', [], []
@@ -421,18 +429,23 @@ async def search_stream(
     yield sse({'type': 'done'})
 
 
-def similar(query: str, k: int = 5) -> list[dict]:
+def similar(query: str, k: int = 5, include_superseded: bool = False) -> list[dict]:
     """Return top-k similar documents by vector similarity. No LLM call."""
     store = get_store()
-    docs = store.search_vector(query, k=k)
+    docs = store.search_vector(query, k=k, include_superseded=include_superseded)
     return [
         {
             'content': doc.page_content,
             'source': doc.metadata.get('filename', 'unknown'),
-            'score': 0.0,
+            'score': float(doc.metadata.get('similarity', 0.0)),
         }
         for doc in docs
     ]
+
+
+def retrieve_hybrid(query: str, k: int = 10, include_superseded: bool = False) -> list:
+    """Public hybrid retrieval without LLM synthesis — used by link scan."""
+    return _retrieve(query, k=k, include_superseded=include_superseded)
 
 
 if __name__ == '__main__':

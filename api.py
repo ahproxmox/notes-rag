@@ -2,9 +2,10 @@ from fastapi import FastAPI, Query, HTTPException, APIRouter, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from search import search, search_filtered, search_with_weights, search_stream, similar, get_stats
+from search import search, search_filtered, search_with_weights, search_stream, similar, get_stats, retrieve_hybrid
 from research import research
 from entities import EntityStore
+import links
 import os
 import re
 import sqlite3
@@ -53,11 +54,27 @@ class SearchRequest(BaseModel):
     wing: str | None = None
     room: str | None = None
     project: str | None = None
+    include_superseded: bool = False
 
 
 class SimilarRequest(BaseModel):
     query: str
     k: int = 5
+
+
+class LinkScanRequest(BaseModel):
+    path: str
+
+
+class LinkConfirmRequest(BaseModel):
+    type: str  # "supersedes" | "related"
+    source: str
+    target: str
+
+
+class LinkRejectRequest(BaseModel):
+    source: str
+    target: str
 
 
 class ResearchRequest(BaseModel):
@@ -503,14 +520,17 @@ sources:
 @api.post('/search')
 def search_endpoint(req: SearchRequest):
     if req.bm25_weight is not None and req.vector_weight is not None:
-        answer, sources, chunks = search_with_weights(req.query, req.bm25_weight, req.vector_weight)
+        answer, sources, chunks = search_with_weights(req.query, req.bm25_weight, req.vector_weight,
+                                                      include_superseded=req.include_superseded)
     elif req.exclude_sources:
         answer, sources, chunks = search_filtered(req.query, req.exclude_sources,
                                                   folder=req.folder, wing=req.wing, room=req.room,
-                                                  project=req.project)
+                                                  project=req.project,
+                                                  include_superseded=req.include_superseded)
     else:
         answer, sources, chunks = search(req.query, folder=req.folder, wing=req.wing, room=req.room,
-                                         project=req.project)
+                                         project=req.project,
+                                         include_superseded=req.include_superseded)
     return {'answer': answer, 'sources': sources, 'chunks': chunks}
 
 @api.post('/search/stream')
@@ -526,6 +546,75 @@ async def search_stream_endpoint(req: SearchRequest):
 def similar_endpoint(req: SimilarRequest):
     results = similar(req.query, k=req.k)
     return {'results': results}
+
+
+
+def _reindex_paths(paths):
+    """Fire-and-forget reindex of a small list of files. Failures are logged only."""
+    try:
+        from indexer import index_file
+        for p in paths:
+            try:
+                index_file(p)
+            except Exception as e:
+                print(f'[links] reindex {p} failed: {e}', flush=True)
+    except Exception as e:
+        print(f'[links] reindex worker crashed: {e}', flush=True)
+
+
+@api.post('/links/scan')
+def links_scan(req: LinkScanRequest):
+    filename = os.path.basename(req.path)
+    path = _find_note(filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail=f'Note not found: {filename}')
+    from review import _get_review_llm
+    llm = _get_review_llm()
+    def resolve(f: str):
+        return _find_note(os.path.basename(f))
+    try:
+        results = links.scan_links(path, resolve, retrieve_hybrid, llm)
+    except Exception as e:
+        print(f'[links] scan failed for {filename}: {e}', flush=True)
+        raise HTTPException(status_code=500, detail=f'Scan failed: {e}')
+    return results
+
+
+@api.post('/links/confirm')
+def links_confirm(req: LinkConfirmRequest):
+    src_path = _find_note(os.path.basename(req.source))
+    tgt_path = _find_note(os.path.basename(req.target))
+    if src_path is None:
+        raise HTTPException(status_code=404, detail=f'Source not found: {req.source}')
+    if tgt_path is None:
+        raise HTTPException(status_code=404, detail=f'Target not found: {req.target}')
+    if req.type == 'supersedes':
+        try:
+            src_fm, tgt_fm = links.commit_supersedes(src_path, tgt_path)
+        except links.ConflictError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+    elif req.type == 'related':
+        src_fm, tgt_fm = links.commit_related(src_path, tgt_path)
+    else:
+        raise HTTPException(status_code=400, detail=f'Unknown type: {req.type}')
+    threading.Thread(target=_reindex_paths, args=([src_path, tgt_path],), daemon=True).start()
+    # yaml-safe serialisation: convert date objects for JSON response
+    def _jsonable(fm):
+        out = {}
+        for k, v in fm.items():
+            out[k] = v.isoformat() if hasattr(v, 'isoformat') else v
+        return out
+    return {'source': req.source, 'target': req.target,
+            'source_fm': _jsonable(src_fm), 'target_fm': _jsonable(tgt_fm)}
+
+
+@api.post('/links/reject')
+def links_reject(req: LinkRejectRequest):
+    src_path = _find_note(os.path.basename(req.source))
+    if src_path is None:
+        raise HTTPException(status_code=404, detail=f'Source not found: {req.source}')
+    links.reject_candidate(src_path, os.path.basename(req.target))
+    return {'source': req.source, 'target': req.target}
 
 @api.post('/research')
 def research_endpoint(req: ResearchRequest):
