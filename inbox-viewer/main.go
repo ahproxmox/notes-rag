@@ -44,7 +44,7 @@ func main() {
 	mux.HandleFunc("/reports/inbox/", inboxHandler)
 	mux.HandleFunc("/reports/report/", reportFileHandler)
 	mux.HandleFunc("/reports/infra-biweekly", infraBiweeklyHandler)
-	mux.HandleFunc("/reports/infra-biweekly/", infraBiweeklySubHandler)
+	mux.HandleFunc("/reports/infra-biweekly/", infraBiweeklyIndexHandler)
 	mux.HandleFunc("/reports", indexHandler)
 	mux.HandleFunc("/reports/", indexHandler)
 
@@ -155,6 +155,14 @@ func reportFileHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func infraBiweeklyHandler(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/reports/infra-biweekly/", http.StatusMovedPermanently)
+}
+
+func infraBiweeklyIndexHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/reports/infra-biweekly/" {
+		infraBiweeklySubHandler(w, r)
+		return
+	}
 	dir, ok := infraLatestDir()
 	if !ok {
 		http.Error(w, "no report runs found", http.StatusNotFound)
