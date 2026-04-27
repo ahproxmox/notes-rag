@@ -34,6 +34,8 @@ type pageData struct {
 	DateFormatted string
 	Category      string
 	Content       template.HTML
+	BackURL       string
+	BackLabel     string
 }
 
 func main() {
@@ -191,6 +193,8 @@ func infraBiweeklyIndexHandler(w http.ResponseWriter, r *http.Request) {
 		DateFormatted: formatDate(date),
 		Category:      "report",
 		Content:       template.HTML(content),
+		BackURL:       "/",
+		BackLabel:     "Home",
 	}
 	var buf bytes.Buffer
 	if err := pageTemplate.Execute(&buf, data); err != nil {
@@ -249,9 +253,11 @@ func infraBiweeklySubHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := pageData{
-		Title:    title,
-		Category: "report",
-		Content:  template.HTML(content),
+		Title:     title,
+		Category:  "report",
+		Content:   template.HTML(content),
+		BackURL:   "/reports/infra-biweekly/",
+		BackLabel: "Infra Report",
 	}
 	var buf bytes.Buffer
 	if err := pageTemplate.Execute(&buf, data); err != nil {

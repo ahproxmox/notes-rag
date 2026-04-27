@@ -257,7 +257,7 @@ h1.page-title { font-size: 22px; font-weight: 700; margin-bottom: 24px; line-hei
 </head>
 <body>
 <header>
-  <a class="back-link" href="/reports">&#8592; Reports &amp; Inbox</a>
+  <a class="back-link" href="{{if .BackURL}}{{.BackURL}}{{else}}/reports{{end}}">&#8592; {{if .BackLabel}}{{.BackLabel}}{{else}}Reports &amp; Inbox{{end}}</a>
 </header>
 <article>
   <div class="page-meta">
