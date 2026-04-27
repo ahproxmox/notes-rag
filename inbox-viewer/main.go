@@ -44,6 +44,7 @@ func main() {
 	mux.HandleFunc("/reports/inbox/", inboxHandler)
 	mux.HandleFunc("/reports/report/", reportFileHandler)
 	mux.HandleFunc("/reports/infra-biweekly", infraBiweeklyHandler)
+	mux.HandleFunc("/reports/infra-biweekly/", infraBiweeklySubHandler)
 	mux.HandleFunc("/reports", indexHandler)
 	mux.HandleFunc("/reports/", indexHandler)
 
@@ -154,24 +155,13 @@ func reportFileHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func infraBiweeklyHandler(w http.ResponseWriter, r *http.Request) {
-	const base = "/mnt/Obsidian/Inbox/reports/infra-biweekly"
-	entries, err := os.ReadDir(base)
-	if err != nil {
-		http.Error(w, "report directory not found", http.StatusNotFound)
-		return
-	}
-	latest := ""
-	for _, e := range entries {
-		n := e.Name()
-		if e.IsDir() && len(n) == 10 && n[4] == '-' && n[7] == '-' && n > latest {
-			latest = n
-		}
-	}
-	if latest == "" {
+	dir, ok := infraLatestDir()
+	if !ok {
 		http.Error(w, "no report runs found", http.StatusNotFound)
 		return
 	}
-	mdPath := filepath.Join(base, latest, "index.md")
+	latest := filepath.Base(dir)
+	mdPath := filepath.Join(dir, "index.md")
 	raw, err := os.ReadFile(mdPath)
 	if err != nil {
 		http.Error(w, "could not read report", http.StatusInternalServerError)
@@ -193,6 +183,67 @@ func infraBiweeklyHandler(w http.ResponseWriter, r *http.Request) {
 		DateFormatted: formatDate(date),
 		Category:      "report",
 		Content:       template.HTML(content),
+	}
+	var buf bytes.Buffer
+	if err := pageTemplate.Execute(&buf, data); err != nil {
+		http.Error(w, "render error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	buf.WriteTo(w)
+}
+
+func infraLatestDir() (string, bool) {
+	const base = "/mnt/Obsidian/Inbox/reports/infra-biweekly"
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return "", false
+	}
+	latest := ""
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() && len(n) == 10 && n[4] == '-' && n[7] == '-' && n > latest {
+			latest = n
+		}
+	}
+	if latest == "" {
+		return "", false
+	}
+	return filepath.Join(base, latest), true
+}
+
+func infraBiweeklySubHandler(w http.ResponseWriter, r *http.Request) {
+	slug := strings.TrimPrefix(r.URL.Path, "/reports/infra-biweekly/")
+	slug = strings.Trim(slug, "/")
+	if slug == "" || strings.Contains(slug, "/") || strings.Contains(slug, "..") || !strings.HasSuffix(slug, ".md") {
+		http.NotFound(w, r)
+		return
+	}
+	dir, ok := infraLatestDir()
+	if !ok {
+		http.Error(w, "no report runs found", http.StatusNotFound)
+		return
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, slug))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	fm, body := splitFrontmatter(raw)
+	title := fm["title"]
+	if title == "" {
+		title = strings.TrimSuffix(slug, ".md")
+	}
+	content, err := renderMarkdown(body)
+	if err != nil {
+		http.Error(w, "render error", http.StatusInternalServerError)
+		return
+	}
+	data := pageData{
+		Title:    title,
+		Category: "report",
+		Content:  template.HTML(content),
 	}
 	var buf bytes.Buffer
 	if err := pageTemplate.Execute(&buf, data); err != nil {
