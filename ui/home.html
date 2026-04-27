@@ -448,17 +448,17 @@
       <div class="tile-desc">Ask your workspace — LLM-synthesised answers</div>
     </a>
 
-    <a class="tile" href="/review">
+    <a class="tile" href="http://192.168.88.55/" target="_blank" rel="noopener">
       <div class="tile-top">
         <div class="tile-icon">
           <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 9l3.5 3.5L15 5"/>
+            <rect x="2" y="3" width="14" height="4" rx="1"/><rect x="2" y="9" width="14" height="4" rx="1"/>
+            <circle cx="13.5" cy="5" r="0.75" fill="currentColor" stroke="none"/><circle cx="13.5" cy="11" r="0.75" fill="currentColor" stroke="none"/>
           </svg>
         </div>
-        <div class="health-dot" id="health-review"></div>
       </div>
-      <div class="tile-title">Review</div>
-      <div class="tile-desc">Triage and tag unreviewed Obsidian notes</div>
+      <div class="tile-title">System</div>
+      <div class="tile-desc">Infrastructure reports and system summaries</div>
     </a>
 
     <a class="tile" href="/reports">
@@ -590,7 +590,7 @@
       const res = await fetch('/api/services/health');
       const data = await res.json();
       const notesUp = data.notes === 'up';
-      ['health-notes', 'health-search', 'health-review'].forEach(id => {
+      ['health-notes', 'health-search'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.className = 'health-dot ' + (notesUp ? 'up' : 'down');
       });
