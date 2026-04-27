@@ -162,8 +162,9 @@ func infraBiweeklyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	latest := ""
 	for _, e := range entries {
-		if e.IsDir() && e.Name() > latest {
-			latest = e.Name()
+		n := e.Name()
+		if e.IsDir() && len(n) == 10 && n[4] == '-' && n[7] == '-' && n > latest {
+			latest = n
 		}
 	}
 	if latest == "" {
