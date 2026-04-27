@@ -43,6 +43,7 @@ func main() {
 	mux.HandleFunc("/reports/offline.html", offlineHandler)
 	mux.HandleFunc("/reports/inbox/", inboxHandler)
 	mux.HandleFunc("/reports/report/", reportFileHandler)
+	mux.HandleFunc("/reports/infra-biweekly", infraBiweeklyHandler)
 	mux.HandleFunc("/reports", indexHandler)
 	mux.HandleFunc("/reports/", indexHandler)
 
@@ -150,6 +151,56 @@ func reportFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeFile(w, r, clean)
+}
+
+func infraBiweeklyHandler(w http.ResponseWriter, r *http.Request) {
+	const base = "/mnt/Obsidian/Inbox/reports/infra-biweekly"
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		http.Error(w, "report directory not found", http.StatusNotFound)
+		return
+	}
+	latest := ""
+	for _, e := range entries {
+		if e.IsDir() && e.Name() > latest {
+			latest = e.Name()
+		}
+	}
+	if latest == "" {
+		http.Error(w, "no report runs found", http.StatusNotFound)
+		return
+	}
+	mdPath := filepath.Join(base, latest, "index.md")
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		http.Error(w, "could not read report", http.StatusInternalServerError)
+		return
+	}
+	fm, body := splitFrontmatter(raw)
+	title := fm["title"]
+	if title == "" {
+		title = "Infra Report — " + latest
+	}
+	date, _ := time.Parse("2006-01-02", latest)
+	content, err := renderMarkdown(body)
+	if err != nil {
+		http.Error(w, "render error", http.StatusInternalServerError)
+		return
+	}
+	data := pageData{
+		Title:         title,
+		DateFormatted: formatDate(date),
+		Category:      "report",
+		Content:       template.HTML(content),
+	}
+	var buf bytes.Buffer
+	if err := pageTemplate.Execute(&buf, data); err != nil {
+		http.Error(w, "render error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	buf.WriteTo(w)
 }
 
 func manifestHandler(w http.ResponseWriter, r *http.Request) {

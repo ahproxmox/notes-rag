@@ -28,7 +28,6 @@ func scanAll() []ContentItem {
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox", "inbox")...)
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Research", "research")...)
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Reviews", "review")...)
-	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/report", "report")...)
 	items = append(items, scanReports("/mnt/Claude/reports")...)
 	seen := make(map[string]struct{})
 	var deduped []ContentItem
