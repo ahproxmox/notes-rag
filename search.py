@@ -204,7 +204,9 @@ def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: 
     """Hybrid retrieval: FTS5 keyword + sqlite-vec vector, merged via RRF.
 
     Retrieves k candidates from each source, then merges with weighted
-    reciprocal rank fusion (RRF) scoring. Returns top-k unique documents.
+    reciprocal rank fusion (RRF) scoring. Applies a lifecycle multiplier
+    (confidence × decay_factor) to the final RRF score before returning.
+    Returns top-k unique documents.
     """
     store = get_store()
 
@@ -242,7 +244,12 @@ def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: 
     result = []
     for key, score in ranked[:k]:
         doc = doc_map[key]
-        doc.metadata['rrf_score'] = score
+        # Lifecycle multiplier: confidence × decay_factor demotes old/low-quality chunks
+        confidence = float(doc.metadata.get('confidence') or 1.0)
+        decay = float(doc.metadata.get('decay_factor') or 1.0)
+        lifecycle = round(confidence * decay, 4)
+        doc.metadata['rrf_score'] = score * lifecycle
+        doc.metadata['lifecycle_score'] = lifecycle
         result.append(doc)
     return result
 

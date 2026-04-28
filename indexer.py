@@ -40,6 +40,9 @@ def chunk_file(path, workspace, cfg):
     2. RecursiveCharacterTextSplitter sub-splits any section that exceeds
        chunk_size, so we never send oversized chunks to the embedding model.
     """
+    from lifecycle import confidence_for_folder, compute_decay_factor
+    import datetime as _dt
+
     loader = TextLoader(str(path), encoding='utf-8', autodetect_encoding=True)
     raw = loader.load()
     text = raw[0].page_content
@@ -52,6 +55,7 @@ def chunk_file(path, workspace, cfg):
     # Extract frontmatter fields we index as metadata columns.
     project = None
     superseded_by = None
+    last_updated = None
     fm_match = re.match(r'^---\s*\n(.*?)\n---', text, re.DOTALL)
     if fm_match:
         pm = re.search(r'^project:\s*([^\n]+)', fm_match.group(1), re.MULTILINE)
@@ -60,6 +64,23 @@ def chunk_file(path, workspace, cfg):
         sm = re.search(r'^superseded_by:\s*([^\n]+)', fm_match.group(1), re.MULTILINE)
         if sm:
             superseded_by = sm.group(1).strip().strip('"').strip("'")
+        # Extract date for lifecycle decay (priority: updated > date > date_created)
+        for date_field in ('updated', 'date', 'date_created'):
+            dm = re.search(rf'^{date_field}:\s*([^\n]+)', fm_match.group(1), re.MULTILINE)
+            if dm:
+                candidate = dm.group(1).strip().strip('"').strip("'")
+                if re.match(r'^\d{4}-\d{2}-\d{2}', candidate):
+                    last_updated = candidate[:10]
+                    break
+
+    # Fall back to file mtime if no date found in frontmatter
+    if not last_updated:
+        last_updated = _dt.date.fromtimestamp(path.stat().st_mtime).isoformat()
+
+    rel = path.relative_to(workspace)
+    folder = rel.parts[0] if len(rel.parts) > 1 else 'root'
+    confidence = confidence_for_folder(folder)
+    decay_factor = compute_decay_factor(last_updated)
 
     # Pass 1: split on markdown headers
     md_splitter = MarkdownHeaderTextSplitter(
@@ -80,8 +101,6 @@ def chunk_file(path, workspace, cfg):
         separators=["\n\n", "\n", " ", ""],
     )
 
-    rel = path.relative_to(workspace)
-    folder = rel.parts[0] if len(rel.parts) > 1 else 'root'
     chunks = []
 
     for section in header_chunks:
@@ -92,36 +111,26 @@ def chunk_file(path, workspace, cfg):
             if k in section.metadata
         )
 
+        base_meta = {
+            'source': str(path),
+            'folder': folder,
+            'filename': path.name,
+            'headers': headers,
+            'wing': wing,
+            'room': room,
+            'project': project,
+            'superseded_by': superseded_by,
+            'last_updated': last_updated,
+            'confidence': confidence,
+            'decay_factor': decay_factor,
+        }
+
         if len(section.page_content) > cfg['chunk_size']:
             sub_chunks = sub_splitter.split_text(section.page_content)
             for sc in sub_chunks:
-                chunks.append(Document(
-                    page_content=sc,
-                    metadata={
-                        'source': str(path),
-                        'folder': folder,
-                        'filename': path.name,
-                        'headers': headers,
-                        'wing': wing,
-                        'room': room,
-                        'project': project,
-                        'superseded_by': superseded_by,
-                    },
-                ))
+                chunks.append(Document(page_content=sc, metadata=dict(base_meta)))
         else:
-            chunks.append(Document(
-                page_content=section.page_content,
-                metadata={
-                    'source': str(path),
-                    'folder': folder,
-                    'filename': path.name,
-                    'headers': headers,
-                    'wing': wing,
-                    'room': room,
-                    'project': project,
-                    'superseded_by': superseded_by,
-                },
-            ))
+            chunks.append(Document(page_content=section.page_content, metadata=dict(base_meta)))
 
     # Fallback: if header splitting produced nothing (e.g. no headers in file),
     # fall back to simple recursive splitting
@@ -133,14 +142,19 @@ def chunk_file(path, workspace, cfg):
         )
         chunks = fallback.split_documents(raw)
         for chunk in chunks:
-            chunk.metadata['source'] = str(path)
-            chunk.metadata['folder'] = folder
-            chunk.metadata['filename'] = path.name
-            chunk.metadata['headers'] = ''
-            chunk.metadata['wing'] = wing
-            chunk.metadata['room'] = room
-            chunk.metadata['project'] = project
-            chunk.metadata['superseded_by'] = superseded_by
+            chunk.metadata.update({
+                'source': str(path),
+                'folder': folder,
+                'filename': path.name,
+                'headers': '',
+                'wing': wing,
+                'room': room,
+                'project': project,
+                'superseded_by': superseded_by,
+                'last_updated': last_updated,
+                'confidence': confidence,
+                'decay_factor': decay_factor,
+            })
 
     return chunks
 

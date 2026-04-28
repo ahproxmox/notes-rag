@@ -58,6 +58,11 @@ def init_store():
     else:
         print(f'[main] store ready: {store.count()} chunks', flush=True)
 
+    # Recalculate lifecycle scores (confidence + decay) for all existing chunks
+    from lifecycle import recalculate_lifecycle
+    result = recalculate_lifecycle(store)
+    print(f'[main] lifecycle: {result["sources_updated"]} sources updated', flush=True)
+
 
 def run_watcher():
     from watcher import start_watcher

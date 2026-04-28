@@ -52,11 +52,19 @@ class Store:
             CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);
             CREATE INDEX IF NOT EXISTS idx_chunks_folder ON chunks(folder);
         ''')
-        # Wing/room/project/superseded_by columns — added in later migrations,
-        # so use ALTER + try/except for forward compatibility.
-        for col in ('wing', 'room', 'project', 'superseded_by'):
+        # Wing/room/project/superseded_by/lifecycle columns — added via ALTER for
+        # forward compatibility with existing databases.
+        for col, default in (
+            ('wing', 'TEXT'),
+            ('room', 'TEXT'),
+            ('project', 'TEXT'),
+            ('superseded_by', 'TEXT'),
+            ('confidence', 'REAL DEFAULT 1.0'),
+            ('last_updated', 'TEXT'),
+            ('decay_factor', 'REAL DEFAULT 1.0'),
+        ):
             try:
-                self._conn.execute(f'ALTER TABLE chunks ADD COLUMN {col} TEXT')
+                self._conn.execute(f'ALTER TABLE chunks ADD COLUMN {col} {default}')
             except sqlite3.OperationalError:
                 pass  # column already exists
         self._conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_wing ON chunks(wing)')
@@ -99,11 +107,14 @@ class Store:
         for i, chunk in enumerate(chunks):
             meta = chunk.metadata
             cur.execute(
-                'INSERT INTO chunks (source, filename, folder, headers, content, wing, room, project, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO chunks (source, filename, folder, headers, content, wing, room, project, superseded_by, confidence, last_updated, decay_factor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (source, meta.get('filename', ''), meta.get('folder', 'root'),
                  meta.get('headers', ''), chunk.page_content,
                  meta.get('wing'), meta.get('room'), meta.get('project'),
-                 meta.get('superseded_by')),
+                 meta.get('superseded_by'),
+                 meta.get('confidence', 1.0),
+                 meta.get('last_updated'),
+                 meta.get('decay_factor', 1.0)),
             )
             chunk_id = cur.lastrowid
             # Prepend filename so filename terms are searchable via BM25.
@@ -152,7 +163,8 @@ class Store:
         if not include_superseded:
             where.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
         sql = f'''
-            SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project
+            SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project,
+                   c.confidence, c.decay_factor, c.superseded_by
             FROM chunks_fts
             JOIN chunks c ON c.id = chunks_fts.rowid
             WHERE {' AND '.join(where)}
@@ -165,7 +177,10 @@ class Store:
             Document(
                 page_content=r[0],
                 metadata={'source': r[1], 'filename': r[2], 'folder': r[3],
-                          'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7]},
+                          'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7],
+                          'confidence': float(r[8]) if r[8] is not None else 1.0,
+                          'decay_factor': float(r[9]) if r[9] is not None else 1.0,
+                          'superseded_by': r[10]},
             )
             for r in rows
         ]
@@ -207,7 +222,8 @@ class Store:
             where.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
 
         sql = f'''
-            SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project, v.distance
+            SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project,
+                   c.confidence, c.decay_factor, c.superseded_by, v.distance
             FROM chunks_vec v
             JOIN chunks c ON c.id = v.chunk_id
             WHERE {' AND '.join(where)}
@@ -221,7 +237,10 @@ class Store:
                 page_content=r[0],
                 metadata={'source': r[1], 'filename': r[2], 'folder': r[3],
                           'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7],
-                          'similarity': 1.0 - float(r[8])},
+                          'confidence': float(r[8]) if r[8] is not None else 1.0,
+                          'decay_factor': float(r[9]) if r[9] is not None else 1.0,
+                          'superseded_by': r[10],
+                          'similarity': 1.0 - float(r[11])},
             )
             for r in rows
         ]

@@ -174,6 +174,9 @@ class MarkdownHandler(FileSystemEventHandler):
     def _do_index(self, path):
         try:
             index_file(path, self.cfg, self.embeddings, self.store)
+            # Run supersession sweep — detects if this file supersedes similar notes
+            from lifecycle import supersession_sweep
+            supersession_sweep(self.store, path)
         except Exception as e:
             print(f'[watcher] error indexing {path}: {e}', flush=True)
 
