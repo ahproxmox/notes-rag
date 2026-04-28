@@ -271,6 +271,7 @@ def _docs_to_chunks(docs: list[Document]) -> list[dict]:
             'content': d.page_content,
             'source': d.metadata.get('filename', 'unknown'),
             'score': round(d.metadata.get('rrf_score', 0.0), 6),
+            'lifecycle_score': round(d.metadata.get('lifecycle_score', 1.0), 4),
         }
         for d in docs
     ]
