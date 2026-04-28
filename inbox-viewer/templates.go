@@ -116,6 +116,7 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
 .badge-research { background: #1a2d1e; color: #3fb950; }
 .badge-review   { background: #2d261a; color: #d29922; }
 .badge-inbox    { background: #231a2d; color: #bc8cff; }
+.badge-recipe   { background: #2d1f1a; color: #f0883e; }
 .card-date { font-size: 11px; color: var(--text-muted); }
 .card-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; line-height: 1.4; letter-spacing: -0.1px; }
 .card-excerpt { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
@@ -145,6 +146,7 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
     <button class="filter-btn" data-cat="report">Reports</button>
     <button class="filter-btn" data-cat="research">Research</button>
     <button class="filter-btn" data-cat="review">Reviews</button>
+    <button class="filter-btn" data-cat="recipe">Recipes</button>
     <button class="filter-btn" data-cat="inbox">Inbox</button>
   </div>
   <div class="section-label">Items</div>
@@ -235,6 +237,7 @@ article { max-width: 780px; margin: 0 auto; padding: 32px 24px; }
 .badge-research { background: #1a2d1e; color: #3fb950; }
 .badge-review   { background: #2d261a; color: #d29922; }
 .badge-inbox    { background: #231a2d; color: #bc8cff; }
+.badge-recipe   { background: #2d1f1a; color: #f0883e; }
 .page-date { font-size: 12px; color: var(--text-muted); }
 h1.page-title { font-size: 22px; font-weight: 700; margin-bottom: 24px; line-height: 1.3; letter-spacing: -0.4px; }
 .content h1 { font-size: 18px; font-weight: 600; margin: 24px 0 10px; }
@@ -302,7 +305,7 @@ const manifestJSON = `{
   "icons": []
 }`
 
-const serviceWorkerJS = `const CACHE = 'reports-v2';
+const serviceWorkerJS = `const CACHE = 'reports-v3';
 const OFFLINE = '/reports/offline.html';
 
 self.addEventListener('install', e => {

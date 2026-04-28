@@ -117,6 +117,8 @@ func inboxHandler(w http.ResponseWriter, r *http.Request) {
 		category = "research"
 	} else if strings.Contains(path, "/Reviews/") {
 		category = "review"
+	} else if strings.Contains(path, "/Recipes/") {
+		category = "recipe"
 	}
 
 	content, err := renderMarkdown(body)

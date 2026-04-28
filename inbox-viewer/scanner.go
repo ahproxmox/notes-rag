@@ -15,7 +15,7 @@ import (
 type ContentItem struct {
 	Title    string
 	Date     time.Time
-	Category string // "report", "research", "review", "inbox"
+	Category string // "report", "research", "review", "recipe", "inbox"
 	Slug     string // filename without extension
 	Excerpt  string
 	URLPath  string // href for links
@@ -28,6 +28,7 @@ func scanAll() []ContentItem {
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox", "inbox")...)
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Research", "research")...)
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Reviews", "review")...)
+	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Recipes", "recipe")...)
 	items = append(items, scanReports("/mnt/Claude/reports")...)
 	seen := make(map[string]struct{})
 	var deduped []ContentItem
@@ -228,6 +229,7 @@ func slugToFile(slug string) (string, bool) {
 		"/mnt/Obsidian/Inbox",
 		"/mnt/Obsidian/Inbox/Research",
 		"/mnt/Obsidian/Inbox/Reviews",
+		"/mnt/Obsidian/Inbox/Recipes",
 	}
 	for _, dir := range dirs {
 		path := filepath.Join(dir, slug+".md")
