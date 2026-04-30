@@ -1,5 +1,6 @@
 """Notes review engine — scanning, sessions, interviews, frontmatter."""
 
+import json
 import os
 import re
 import yaml
@@ -218,11 +219,19 @@ from typing import AsyncGenerator
 # LLM helpers
 # ---------------------------------------------------------------------------
 
+def _get_review_model_name() -> str:
+    try:
+        cfg = json.loads(open('/mnt/Claude/config/models.json').read())
+        return cfg.get('notes-rag') or os.environ.get('LLM_MODEL', 'google/gemini-2.5-flash-lite')
+    except Exception:
+        return os.environ.get('LLM_MODEL', 'google/gemini-2.5-flash-lite')
+
+
 def _get_review_llm() -> ChatOpenAI:
     return ChatOpenAI(
         base_url=os.environ.get('LLM_BASE_URL', 'https://openrouter.ai/api/v1'),
         api_key=os.environ.get('OPENROUTER_API_KEY', ''),
-        model=os.environ.get('LLM_MODEL', 'google/gemini-2.5-flash-lite'),
+        model=_get_review_model_name(),
         temperature=0.7,
         max_tokens=200,
     )

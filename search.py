@@ -87,11 +87,19 @@ def _try_todo_lookup(query):
     return f'[{filename}]\n{content}', [filename]
 
 
+def _get_model_name() -> str:
+    try:
+        cfg = json.loads(open('/mnt/Claude/config/models.json').read())
+        return cfg.get('notes-rag') or os.environ.get('LLM_MODEL', 'google/gemini-2.5-flash-lite')
+    except Exception:
+        return os.environ.get('LLM_MODEL', 'google/gemini-2.5-flash-lite')
+
+
 def _get_llm():
     return ChatOpenAI(
         base_url=os.environ.get('LLM_BASE_URL', 'https://openrouter.ai/api/v1'),
         api_key=os.environ['OPENROUTER_API_KEY'],
-        model=os.environ.get('LLM_MODEL', 'google/gemini-2.5-flash-lite'),
+        model=_get_model_name(),
     )
 
 
