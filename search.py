@@ -198,7 +198,7 @@ def _search_recent(query: str) -> tuple[str, list[str], list[dict]]:
 # Retrieval
 # ---------------------------------------------------------------------------
 
-def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: float = 0.6,
+def _retrieve(query: str, k: int = 30, bm25_weight: float = 0.4, vector_weight: float = 0.6,
               folder: str | None = None, wing: str | None = None, room: str | None = None,
               project: str | None = None, include_superseded: bool = False) -> list[Document]:
     """Hybrid retrieval: FTS5 keyword + sqlite-vec vector, merged via RRF.
@@ -251,6 +251,7 @@ def _retrieve(query: str, k: int = 20, bm25_weight: float = 0.4, vector_weight: 
         doc.metadata['rrf_score'] = score * lifecycle
         doc.metadata['lifecycle_score'] = lifecycle
         result.append(doc)
+    result.sort(key=lambda d: d.metadata.get('rrf_score', 0.0), reverse=True)
     return result
 
 
@@ -282,7 +283,7 @@ def _docs_to_chunks(docs: list[Document]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
-           final_k: int = 6, folder: str | None = None,
+           final_k: int = 8, folder: str | None = None,
            wing: str | None = None, room: str | None = None,
            project: str | None = None, include_superseded: bool = False) -> tuple[str, list[str], list[dict]]:
     """Full RAG search with intent-aware routing.
@@ -371,11 +372,12 @@ async def search_stream(
     query: str,
     bm25_weight: float = 0.4,
     vector_weight: float = 0.6,
-    final_k: int = 6,
+    final_k: int = 8,
     folder: str | None = None,
     wing: str | None = None,
     room: str | None = None,
     project: str | None = None,
+    include_superseded: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Streaming RAG search with intent routing — yields SSE-formatted events."""
     def sse(obj: dict) -> str:
@@ -405,8 +407,9 @@ async def search_stream(
         elif intent == 'synthesis':
             bm25_weight, vector_weight = 0.2, 0.8
 
-    docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight,
-                     folder=folder, wing=wing, room=room, project=project)
+    docs = _retrieve(query, k=30, bm25_weight=bm25_weight, vector_weight=vector_weight,
+                     folder=folder, wing=wing, room=room, project=project,
+                     include_superseded=include_superseded)
     if not docs:
         yield sse({'type': 'retrieved', 'chunks': [], 'sources': []})
         yield sse({'type': 'token', 'content': 'No relevant context found in the workspace.'})

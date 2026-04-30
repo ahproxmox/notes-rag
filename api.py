@@ -537,7 +537,7 @@ def search_endpoint(req: SearchRequest):
 async def search_stream_endpoint(req: SearchRequest):
     return StreamingResponse(
         search_stream(req.query, folder=req.folder, wing=req.wing, room=req.room,
-                      project=req.project),
+                      project=req.project, include_superseded=req.include_superseded),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
     )
