@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#0d1117">
+  <meta name="theme-color" content="#282828">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,17 +15,17 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0d1117;
-      --surface:   #161b22;
-      --surface2:  #1c2128;
-      --border:    #30363d;
-      --text:      #e6edf3;
-      --text-muted:#8b949e;
-      --accent:    #58a6ff;
-      --user-bg:   #1d2d3e;
-      --tag-bg:    #21262d;
-      --green:     #3fb950;
-      --code-bg:   #1f2937;
+      --bg:        #282828;
+      --surface:   #32302f;
+      --surface2:  #3c3836;
+      --border:    #504945;
+      --text:      #ebdbb2;
+      --text-muted:#a89984;
+      --accent:    #83a598;
+      --user-bg:   #3c3836;
+      --tag-bg:    #3c3836;
+      --green:     #b8bb26;
+      --code-bg:   #1d2021;
       --radius:    8px;
     }
 
@@ -283,7 +283,7 @@
     }
     textarea::placeholder { color: var(--text-muted); }
     .send-btn {
-      background: var(--accent); color: #0d1117; border: none;
+      background: var(--accent); color: #282828; border: none;
       border-radius: 6px; padding: 8px 16px; cursor: pointer;
       font-size: 13px; font-weight: 600; flex-shrink: 0;
       transition: opacity 0.15s; align-self: flex-end; margin: 6px 6px 6px 0;
@@ -477,7 +477,7 @@
       loadingCard.remove();
       const errCard = document.createElement('div');
       errCard.className = 'assistant-card';
-      errCard.innerHTML = `<div class="answer-body" style="color:#f85149">Error: ${escHtml(err.message)}</div>`;
+      errCard.innerHTML = `<div class="answer-body" style="color:#fb4934">Error: ${escHtml(err.message)}</div>`;
       exchange.appendChild(errCard);
     } finally {
       sendBtn.disabled = false;

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#0d1117">
+  <meta name="theme-color" content="#282828">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,15 +15,15 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0d1117;
-      --surface:   #161b22;
-      --surface2:  #1c2128;
-      --border:    #30363d;
-      --text:      #e6edf3;
-      --text-muted:#8b949e;
-      --accent:    #58a6ff;
-      --tag-bg:    #21262d;
-      --green:     #3fb950;
+      --bg:        #282828;
+      --surface:   #32302f;
+      --surface2:  #3c3836;
+      --border:    #504945;
+      --text:      #ebdbb2;
+      --text-muted:#a89984;
+      --accent:    #83a598;
+      --tag-bg:    #3c3836;
+      --green:     #b8bb26;
       --radius:    8px;
     }
 
@@ -80,7 +80,7 @@
     .search-input::placeholder { color: var(--text-muted); }
     .search-btn {
       background: var(--accent);
-      color: #0d1117;
+      color: #282828;
       border: none;
       border-radius: var(--radius);
       padding: 10px 20px;
@@ -110,7 +110,7 @@
     .empty-state p { font-size: 13px; }
 
     .msg { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
-    .msg.error { color: #f85149; }
+    .msg.error { color: #fb4934; }
 
     .result-card {
       background: var(--surface);
@@ -192,7 +192,7 @@
       cursor: pointer;
       appearance: none;
       -webkit-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b949e' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23a89984' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 8px center;
       transition: border-color 0.15s;
@@ -241,7 +241,7 @@
       border-radius: 6px; padding: 8px 18px; font-size: 13px; font-weight: 600;
       cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
     }
-    .save-btn.dirty { background: var(--accent); border-color: var(--accent); color: #0d1117; }
+    .save-btn.dirty { background: var(--accent); border-color: var(--accent); color: #282828; }
     .save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .section-label {
