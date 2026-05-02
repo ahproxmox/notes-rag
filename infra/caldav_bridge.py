@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-_DB_PATH = Path(os.path.dirname(__file__)) / 'reminders.db'
+_DB_PATH = Path(os.path.dirname(os.path.dirname(__file__))) / 'reminders.db'
 
 
 def _init_db():

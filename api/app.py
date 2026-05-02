@@ -19,13 +19,13 @@ from infra import caldav_bridge
 app = FastAPI()
 api = APIRouter(prefix='/api')
 
-_ui_dir = os.path.join(os.path.dirname(__file__), 'ui')
+_ui_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ui')
 app.mount('/ui', StaticFiles(directory=_ui_dir), name='ui')
 
 _log_path = Path('/mnt/Claude/log.md')
 _wiki_dir = Path('/mnt/Claude/wiki')
 _todos_dir = Path('/mnt/Claude/todos')
-_reminders_db = Path(os.path.dirname(__file__)) / 'reminders.db'
+_reminders_db = Path(os.path.dirname(os.path.dirname(__file__))) / 'reminders.db'
 _projects_dir = Path('/mnt/Claude/projects')
 _inbox_dir = Path('/mnt/Obsidian/Inbox')
 _notes_dir = Path('/mnt/Obsidian/Notes')
@@ -39,7 +39,7 @@ def _find_note(filename: str):
 
 _TODOS_INDEXER = 'http://192.168.88.78:3000'
 
-_entities_db = os.environ.get('ENTITIES_DB', os.path.join(os.path.dirname(__file__), 'entities.db'))
+_entities_db = os.environ.get('ENTITIES_DB', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'entities.db'))
 _entity_store = EntityStore(_entities_db)
 
 

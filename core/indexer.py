@@ -9,7 +9,7 @@ from .embeddings import ONNXEmbeddings
 from .store import Store
 from .wings import classify_document
 
-CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(__file__), 'indexer.yaml'))
+CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'indexer.yaml'))
 
 def load_config():
     with open(CONFIG_PATH) as f:

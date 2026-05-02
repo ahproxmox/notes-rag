@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Python syntax check
-        run: python3 -m py_compile api.py search.py watcher.py indexer.py main.py research.py
+        run: python3 -m py_compile api/app.py core/search.py infra/watcher.py core/indexer.py main.py features/research.py
 
       - name: Bench suite syntax check
         run: python3 -m py_compile bench/run_bench.py bench/score.py

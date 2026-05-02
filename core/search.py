@@ -12,7 +12,7 @@ from langchain_core.messages import HumanMessage
 from .store import Store
 from .reranker import Reranker
 
-CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(__file__), 'indexer.yaml'))
+CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'indexer.yaml'))
 
 # Shared store — initialised by init_store(), called from main.py
 _store: Store | None = None

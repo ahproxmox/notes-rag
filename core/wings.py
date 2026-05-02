@@ -19,7 +19,7 @@ from pathlib import Path
 
 CONFIG_PATH = os.environ.get(
     'WINGS_CONFIG_PATH',
-    os.path.join(os.path.dirname(__file__), 'wings.yaml'),
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), 'wings.yaml'),
 )
 
 _SLUG_WEIGHT = 3

@@ -20,8 +20,8 @@ from pathlib import Path
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'indexer.yaml')
-WIKI_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'wiki.yaml')
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'indexer.yaml')
+WIKI_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'wiki.yaml')
 
 WIKI_DIR = Path('/mnt/Claude/wiki')
 TODAY = date.today().isoformat()
@@ -146,7 +146,7 @@ def build_topic(topic: dict) -> Path:
 
 def main():
     # Load env from .env file if present (for standalone runs outside systemd)
-    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
     if os.path.exists(env_path):
         for line in open(env_path):
             line = line.strip()
