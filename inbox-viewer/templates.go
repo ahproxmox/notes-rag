@@ -7,20 +7,20 @@ const indexTmpl = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Reports &amp; Inbox</title>
 <link rel="manifest" href="/reports/manifest.json">
-<meta name="theme-color" content="#0d1117">
+<meta name="theme-color" content="#282828">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg:        #0d1117;
-  --surface:   #161b22;
-  --surface2:  #1c2128;
-  --border:    #30363d;
-  --text:      #e6edf3;
-  --text-muted:#8b949e;
-  --accent:    #58a6ff;
-  --green:     #3fb950;
-  --red:       #f85149;
-  --tag-bg:    #21262d;
+  --bg:        #282828;
+  --surface:   #32302f;
+  --surface2:  #3c3836;
+  --border:    #504945;
+  --text:      #ebdbb2;
+  --text-muted:#a89984;
+  --accent:    #83a598;
+  --green:     #b8bb26;
+  --red:       #fb4934;
+  --tag-bg:    #3c3836;
   --radius:    12px;
 }
 html, body {
@@ -112,11 +112,11 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-.badge-report   { background: #1d2d3e; color: var(--accent); }
-.badge-research { background: #1a2d1e; color: #3fb950; }
-.badge-review   { background: #2d261a; color: #d29922; }
-.badge-inbox    { background: #231a2d; color: #bc8cff; }
-.badge-recipe   { background: #2d1f1a; color: #f0883e; }
+.badge-report   { background: #2d3b35; color: var(--accent); }
+.badge-research { background: #3a3a1a; color: #b8bb26; }
+.badge-review   { background: #3a3010; color: #fabd2f; }
+.badge-inbox    { background: #42273a; color: #d3869b; }
+.badge-recipe   { background: #3a2010; color: #fe8019; }
 .card-date { font-size: 11px; color: var(--text-muted); }
 .card-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; line-height: 1.4; letter-spacing: -0.1px; }
 .card-excerpt { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
@@ -187,17 +187,17 @@ const pageTmpl = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{.Title}}</title>
 <link rel="manifest" href="/reports/manifest.json">
-<meta name="theme-color" content="#0d1117">
+<meta name="theme-color" content="#282828">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg:        #0d1117;
-  --surface:   #161b22;
-  --surface2:  #1c2128;
-  --border:    #30363d;
-  --text:      #e6edf3;
-  --text-muted:#8b949e;
-  --accent:    #58a6ff;
+  --bg:        #282828;
+  --surface:   #32302f;
+  --surface2:  #3c3836;
+  --border:    #504945;
+  --text:      #ebdbb2;
+  --text-muted:#a89984;
+  --accent:    #83a598;
   --radius:    12px;
 }
 html, body {
@@ -233,11 +233,11 @@ article { max-width: 780px; margin: 0 auto; padding: 32px 24px; }
   padding: 2px 7px; border-radius: 10px;
   text-transform: uppercase; letter-spacing: 0.5px;
 }
-.badge-report   { background: #1d2d3e; color: var(--accent); }
-.badge-research { background: #1a2d1e; color: #3fb950; }
-.badge-review   { background: #2d261a; color: #d29922; }
-.badge-inbox    { background: #231a2d; color: #bc8cff; }
-.badge-recipe   { background: #2d1f1a; color: #f0883e; }
+.badge-report   { background: #2d3b35; color: var(--accent); }
+.badge-research { background: #3a3a1a; color: #b8bb26; }
+.badge-review   { background: #3a3010; color: #fabd2f; }
+.badge-inbox    { background: #42273a; color: #d3869b; }
+.badge-recipe   { background: #3a2010; color: #fe8019; }
 .page-date { font-size: 12px; color: var(--text-muted); }
 h1.page-title { font-size: 22px; font-weight: 700; margin-bottom: 24px; line-height: 1.3; letter-spacing: -0.4px; }
 .content h1 { font-size: 18px; font-weight: 600; margin: 24px 0 10px; }
@@ -283,10 +283,10 @@ const offlineHTML = `<!DOCTYPE html>
 <title>Offline</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+body { background: #282828; color: #ebdbb2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
        display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; }
 h1 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-p  { color: #8b949e; font-size: 13px; }
+p  { color: #a89984; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -299,13 +299,13 @@ const manifestJSON = `{
   "short_name": "Reports",
   "start_url": "/reports",
   "display": "standalone",
-  "background_color": "#0d1117",
-  "theme_color": "#0d1117",
+  "background_color": "#282828",
+  "theme_color": "#282828",
   "description": "Browse research reports and inbox notes",
   "icons": []
 }`
 
-const serviceWorkerJS = `const CACHE = 'reports-v3';
+const serviceWorkerJS = `const CACHE = 'reports-v4';
 const OFFLINE = '/reports/offline.html';
 
 self.addEventListener('install', e => {
