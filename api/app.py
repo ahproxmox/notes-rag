@@ -2,10 +2,10 @@ from fastapi import FastAPI, Query, HTTPException, APIRouter, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from search import search, search_filtered, search_with_weights, search_stream, similar, get_stats, retrieve_hybrid
-from research import research
-from entities import EntityStore
-import links
+from core.search import search, search_filtered, search_with_weights, search_stream, similar, get_stats, retrieve_hybrid
+from features.research import research
+from features.entities import EntityStore
+from features import links
 import os
 import re
 import sqlite3
@@ -14,7 +14,7 @@ from datetime import date, datetime
 from pathlib import Path
 import threading
 import time
-import caldav_bridge
+from infra import caldav_bridge
 
 app = FastAPI()
 api = APIRouter(prefix='/api')
@@ -552,7 +552,7 @@ def similar_endpoint(req: SimilarRequest):
 def _reindex_paths(paths):
     """Fire-and-forget reindex of a small list of files. Failures are logged only."""
     try:
-        from indexer import index_file
+        from core.indexer import index_file
         for p in paths:
             try:
                 index_file(p)
@@ -568,7 +568,7 @@ def links_scan(req: LinkScanRequest):
     path = _find_note(filename)
     if path is None:
         raise HTTPException(status_code=404, detail=f'Note not found: {filename}')
-    from review import _get_review_llm
+    from features.review import _get_review_llm
     llm = _get_review_llm()
     def resolve(f: str):
         return _find_note(os.path.basename(f))
@@ -1105,7 +1105,7 @@ def queue_status(filename: str):
 # ── API: review ───────────────────────────────────────────────────────────────
 
 import json
-from review import (
+from features.review import (
     scan_unreviewed, parse_frontmatter, write_frontmatter,
     group_notes, SessionManager, generate_question, infer_tags,
     build_review_content,

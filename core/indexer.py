@@ -5,9 +5,9 @@ from pathlib import Path
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
-from embeddings import ONNXEmbeddings
-from store import Store
-from wings import classify_document
+from .embeddings import ONNXEmbeddings
+from .store import Store
+from .wings import classify_document
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(__file__), 'indexer.yaml'))
 
@@ -40,7 +40,7 @@ def chunk_file(path, workspace, cfg):
     2. RecursiveCharacterTextSplitter sub-splits any section that exceeds
        chunk_size, so we never send oversized chunks to the embedding model.
     """
-    from lifecycle import confidence_for_folder, compute_decay_factor
+    from features.lifecycle import confidence_for_folder, compute_decay_factor
     import datetime as _dt
 
     loader = TextLoader(str(path), encoding='utf-8', autodetect_encoding=True)

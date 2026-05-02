@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault('OPENROUTER_API_KEY', 'test')
 
-import links
+from features import links
 from api import app
 
 client = TestClient(app)

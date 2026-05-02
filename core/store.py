@@ -5,7 +5,7 @@ SQLite database. Vectors and full-text are stored side-by-side, enabling
 metadata filtering before ranking and simpler operational management.
 
 Usage:
-    from store import Store
+    from core.store import Store
     store = Store('/opt/rag/rag.db', embed_fn)
     store.upsert_file('/mnt/Claude/todos/001-foo.md', chunks)
     bm25_docs = store.search_bm25('kanban board', k=20)

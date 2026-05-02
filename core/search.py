@@ -9,8 +9,8 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
-from store import Store
-from reranker import Reranker
+from .store import Store
+from .reranker import Reranker
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(__file__), 'indexer.yaml'))
 
@@ -26,7 +26,7 @@ def init_store(store: Store):
 def get_store() -> Store:
     global _store
     if _store is None:
-        from indexer import load_config, get_embeddings, get_store as _get_store
+        from core.indexer import load_config, get_embeddings, get_store as _get_store
         cfg = load_config()
         embeddings = get_embeddings(cfg)
         _store = _get_store(cfg, embeddings)

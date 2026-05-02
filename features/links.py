@@ -20,7 +20,7 @@ from typing import Callable
 
 import yaml
 
-from review import parse_frontmatter
+from .review import parse_frontmatter
 
 
 # ── Frontmatter I/O ─────────────────────────────────────────────────────────

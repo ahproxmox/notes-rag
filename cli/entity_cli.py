@@ -26,7 +26,7 @@ from pathlib import Path
 
 import yaml
 
-from entities import EntityStore
+from features.entities import EntityStore
 
 DEFAULT_DB = os.environ.get('ENTITIES_DB', '/opt/rag/entities.db')
 

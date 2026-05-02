@@ -9,53 +9,53 @@ from unittest.mock import MagicMock, patch
 # ---------------------------------------------------------------------------
 
 def test_decay_factor_none_returns_1():
-    from lifecycle import compute_decay_factor
+    from features.lifecycle import compute_decay_factor
     assert compute_decay_factor(None) == 1.0
 
 
 def test_decay_factor_empty_returns_1():
-    from lifecycle import compute_decay_factor
+    from features.lifecycle import compute_decay_factor
     assert compute_decay_factor('') == 1.0
 
 
 def test_decay_factor_future_returns_1():
-    from lifecycle import compute_decay_factor
+    from features.lifecycle import compute_decay_factor
     future = (date.today() + timedelta(days=10)).isoformat()
     assert compute_decay_factor(future) == 1.0
 
 
 def test_decay_factor_today_returns_1():
-    from lifecycle import compute_decay_factor
+    from features.lifecycle import compute_decay_factor
     assert compute_decay_factor(date.today().isoformat()) == 1.0
 
 
 def test_decay_factor_180_days_approx_0_6():
-    from lifecycle import compute_decay_factor
+    from features.lifecycle import compute_decay_factor
     past = (date.today() - timedelta(days=180)).isoformat()
     factor = compute_decay_factor(past)
     assert 0.58 <= factor <= 0.62
 
 
 def test_decay_factor_365_days_below_0_4():
-    from lifecycle import compute_decay_factor
+    from features.lifecycle import compute_decay_factor
     past = (date.today() - timedelta(days=365)).isoformat()
     assert compute_decay_factor(past) < 0.40
 
 
 def test_decay_factor_30_days_above_0_9():
-    from lifecycle import compute_decay_factor
+    from features.lifecycle import compute_decay_factor
     past = (date.today() - timedelta(days=30)).isoformat()
     assert compute_decay_factor(past) > 0.90
 
 
 def test_decay_factor_bad_string_returns_1():
-    from lifecycle import compute_decay_factor
+    from features.lifecycle import compute_decay_factor
     assert compute_decay_factor('not-a-date') == 1.0
 
 
 def test_decay_factor_datetime_string_uses_date_prefix():
     """Datetime strings like '2025-01-01T12:00:00' should work via [:10] slice."""
-    from lifecycle import compute_decay_factor
+    from features.lifecycle import compute_decay_factor
     past = (date.today() - timedelta(days=180)).isoformat() + 'T12:00:00'
     factor = compute_decay_factor(past)
     assert 0.58 <= factor <= 0.62
@@ -66,32 +66,32 @@ def test_decay_factor_datetime_string_uses_date_prefix():
 # ---------------------------------------------------------------------------
 
 def test_confidence_context_is_max():
-    from lifecycle import confidence_for_folder
+    from features.lifecycle import confidence_for_folder
     assert confidence_for_folder('context') == 1.0
 
 
 def test_confidence_inbox_is_lower_than_context():
-    from lifecycle import confidence_for_folder
+    from features.lifecycle import confidence_for_folder
     assert confidence_for_folder('inbox') < confidence_for_folder('context')
 
 
 def test_confidence_inbox_is_lower_than_sessions():
-    from lifecycle import confidence_for_folder
+    from features.lifecycle import confidence_for_folder
     assert confidence_for_folder('inbox') < confidence_for_folder('sessions')
 
 
 def test_confidence_todos_below_context():
-    from lifecycle import confidence_for_folder
+    from features.lifecycle import confidence_for_folder
     assert confidence_for_folder('todos') < confidence_for_folder('context')
 
 
 def test_confidence_unknown_folder_uses_default():
-    from lifecycle import confidence_for_folder, CONFIDENCE_DEFAULT
+    from features.lifecycle import confidence_for_folder, CONFIDENCE_DEFAULT
     assert confidence_for_folder('unknown-xyz-folder') == CONFIDENCE_DEFAULT
 
 
 def test_confidence_all_values_in_range():
-    from lifecycle import CONFIDENCE_BY_FOLDER
+    from features.lifecycle import CONFIDENCE_BY_FOLDER
     for folder, weight in CONFIDENCE_BY_FOLDER.items():
         assert 0.0 < weight <= 1.0, f'{folder} confidence {weight} out of range'
 
@@ -101,7 +101,7 @@ def test_confidence_all_values_in_range():
 # ---------------------------------------------------------------------------
 
 def test_recalculate_lifecycle_updates_all_sources():
-    from lifecycle import recalculate_lifecycle
+    from features.lifecycle import recalculate_lifecycle
 
     mock_store = MagicMock()
     mock_store._conn.execute.return_value.fetchall.return_value = [
@@ -122,7 +122,7 @@ def test_recalculate_lifecycle_updates_all_sources():
 
 
 def test_recalculate_lifecycle_uses_correct_confidence():
-    from lifecycle import recalculate_lifecycle, CONFIDENCE_BY_FOLDER
+    from features.lifecycle import recalculate_lifecycle, CONFIDENCE_BY_FOLDER
 
     captured_updates = []
 
@@ -148,7 +148,7 @@ def test_recalculate_lifecycle_uses_correct_confidence():
 
 
 def test_recalculate_lifecycle_null_last_updated_gives_decay_1():
-    from lifecycle import recalculate_lifecycle
+    from features.lifecycle import recalculate_lifecycle
 
     captured_updates = []
 
@@ -198,7 +198,7 @@ def _make_doc(content='test content', confidence=1.0, decay_factor=1.0,
 
 
 def test_lifecycle_multiplier_sets_lifecycle_score():
-    from search import _retrieve
+    from core.search import _retrieve
 
     doc = _make_doc(confidence=0.9, decay_factor=0.8)
 
@@ -216,7 +216,7 @@ def test_lifecycle_multiplier_sets_lifecycle_score():
 
 
 def test_lifecycle_multiplier_1_0_for_fresh_confident_doc():
-    from search import _retrieve
+    from core.search import _retrieve
 
     doc = _make_doc(confidence=1.0, decay_factor=1.0)
 
@@ -232,7 +232,7 @@ def test_lifecycle_multiplier_1_0_for_fresh_confident_doc():
 
 
 def test_lifecycle_multiplier_demotes_low_confidence():
-    from search import _retrieve
+    from core.search import _retrieve
 
     doc_high = _make_doc(content='high confidence content', confidence=1.0,
                          decay_factor=1.0, source='high.md')
@@ -252,7 +252,7 @@ def test_lifecycle_multiplier_demotes_low_confidence():
 
 
 def test_lifecycle_multiplier_demotes_old_docs():
-    from search import _retrieve
+    from core.search import _retrieve
 
     doc_fresh = _make_doc(content='fresh document text', confidence=1.0,
                           decay_factor=1.0, source='fresh.md')
@@ -273,7 +273,7 @@ def test_lifecycle_multiplier_demotes_old_docs():
 
 def test_lifecycle_multiplier_missing_fields_default_to_1():
     """Chunks without lifecycle metadata (pre-migration) should get multiplier=1."""
-    from search import _retrieve
+    from core.search import _retrieve
     from langchain_core.documents import Document
 
     doc = Document(
@@ -298,7 +298,7 @@ def test_lifecycle_multiplier_missing_fields_default_to_1():
 # ---------------------------------------------------------------------------
 
 def test_supersession_sweep_skips_when_no_wing():
-    from lifecycle import supersession_sweep
+    from features.lifecycle import supersession_sweep
 
     mock_store = MagicMock()
     cursor = MagicMock()
@@ -311,7 +311,7 @@ def test_supersession_sweep_skips_when_no_wing():
 
 
 def test_supersession_sweep_skips_when_no_similar_docs():
-    from lifecycle import supersession_sweep
+    from features.lifecycle import supersession_sweep
 
     mock_store = MagicMock()
 
@@ -330,7 +330,7 @@ def test_supersession_sweep_skips_when_no_similar_docs():
 
 
 def test_supersession_sweep_skips_below_threshold():
-    from lifecycle import supersession_sweep
+    from features.lifecycle import supersession_sweep
     from langchain_core.documents import Document
 
     mock_store = MagicMock()
@@ -356,7 +356,7 @@ def test_supersession_sweep_skips_below_threshold():
 
 
 def test_supersession_sweep_marks_older_as_superseded():
-    from lifecycle import supersession_sweep
+    from features.lifecycle import supersession_sweep
     from langchain_core.documents import Document
 
     source = '/mnt/Claude/context/new-foo.md'

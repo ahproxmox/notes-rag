@@ -65,7 +65,7 @@ def _get_llm():
 
 def _retrieve_for_topic(topic: dict, k_per_query: int = 15) -> tuple[list, list[str]]:
     """Retrieve chunks for all seed queries, deduplicate by content, return top chunks + sources."""
-    from search import _retrieve
+    from core.search import _retrieve
 
     seen_keys = set()
     all_docs = []

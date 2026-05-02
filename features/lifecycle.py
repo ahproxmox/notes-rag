@@ -9,7 +9,7 @@ Superseded chunks are filtered at the query layer (include_superseded=False by d
 import math
 from datetime import date
 from pathlib import Path
-from store import Store
+from core.store import Store
 
 
 # ---------------------------------------------------------------------------

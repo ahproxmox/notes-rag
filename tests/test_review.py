@@ -1,7 +1,7 @@
 import tempfile
 import os
 import pytest
-from review import parse_frontmatter, write_frontmatter, scan_unreviewed
+from features.review import parse_frontmatter, write_frontmatter, scan_unreviewed
 
 SAMPLE_NOTE = """---
 date_created: 2026-04-10
@@ -151,7 +151,7 @@ More content
     assert "More content" in body
 
 
-from review import SessionManager, group_notes
+from features.review import SessionManager, group_notes
 
 
 def test_session_create_single_note():
@@ -226,7 +226,7 @@ def test_group_notes_by_similarity():
     assert {'recipe.md'} in group_files
 
 
-from review import build_interview_prompt, build_review_content, _detect_note_intent
+from features.review import build_interview_prompt, build_review_content, _detect_note_intent
 
 
 def test_detect_intent_decision():

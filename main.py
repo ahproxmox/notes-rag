@@ -38,9 +38,9 @@ def run_vault_fetch():
 
 def init_store():
     """Initialise unified store — rebuild index if empty."""
-    from indexer import load_config, get_embeddings, get_store
-    from store import Store
-    from search import init_store as search_init_store
+    from core.indexer import load_config, get_embeddings, get_store
+    from core.store import Store
+    from core.search import init_store as search_init_store
 
     cfg = load_config()
     embeddings = get_embeddings(cfg)
@@ -49,7 +49,7 @@ def init_store():
 
     if store.count() == 0:
         print('[main] store empty — running full index build...', flush=True)
-        from indexer import build_index
+        from core.indexer import build_index
         build_index()
         # Re-init store after build
         store = get_store(cfg, embeddings)
@@ -59,20 +59,20 @@ def init_store():
         print(f'[main] store ready: {store.count()} chunks', flush=True)
 
     # Recalculate lifecycle scores (confidence + decay) for all existing chunks
-    from lifecycle import recalculate_lifecycle
+    from features.lifecycle import recalculate_lifecycle
     result = recalculate_lifecycle(store)
     print(f'[main] lifecycle: {result["sources_updated"]} sources updated', flush=True)
 
 
 def run_watcher():
-    from watcher import start_watcher
+    from infra.watcher import start_watcher
     start_watcher()
 
 
 def run_api():
     import uvicorn
     port = int(os.environ.get('RAG_PORT', 8080))
-    uvicorn.run('api:app', host='0.0.0.0', port=port, log_level='warning')
+    uvicorn.run('api.app:app', host='0.0.0.0', port=port, log_level='warning')
 
 
 if __name__ == '__main__':

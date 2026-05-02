@@ -6,8 +6,8 @@ from datetime import date
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from indexer import load_config, get_embeddings, get_store, index_file, chunk_file
-from search import get_store as search_get_store
+from core.indexer import load_config, get_embeddings, get_store, index_file, chunk_file
+from core.search import get_store as search_get_store
 
 NOTES_SUBDIR = 'Notes'
 REVIEWS_PARTS = ('Inbox', 'Reviews')
@@ -175,7 +175,7 @@ class MarkdownHandler(FileSystemEventHandler):
         try:
             index_file(path, self.cfg, self.embeddings, self.store)
             # Run supersession sweep — detects if this file supersedes similar notes
-            from lifecycle import supersession_sweep
+            from features.lifecycle import supersession_sweep
             supersession_sweep(self.store, path)
         except Exception as e:
             print(f'[watcher] error indexing {path}: {e}', flush=True)
