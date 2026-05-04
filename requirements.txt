@@ -32,4 +32,7 @@ hvac==2.4.0
 
 # Tokenizer
 tiktoken==0.12.0
+
+# Markdown rendering (project summaries)
+mistune==3.0.2
 \n# Apple Reminders (CalDAV bridge)\ncaldav>=3.1.0

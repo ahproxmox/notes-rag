@@ -205,7 +205,7 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg);
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.5;
 }
 header {
@@ -226,7 +226,7 @@ header {
   transition: color 0.15s, border-color 0.15s;
 }
 .back-link:hover { color: var(--text); border-color: var(--accent); }
-article { max-width: 780px; margin: 0 auto; padding: 32px 24px; }
+article { max-width: 680px; margin: 0 auto; padding: 32px 24px; }
 .page-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
 .badge {
   font-size: 10px; font-weight: 700;
@@ -240,13 +240,13 @@ article { max-width: 780px; margin: 0 auto; padding: 32px 24px; }
 .badge-recipe   { background: #3a2010; color: #fe8019; }
 .page-date { font-size: 12px; color: var(--text-muted); }
 h1.page-title { font-size: 22px; font-weight: 700; margin-bottom: 24px; line-height: 1.3; letter-spacing: -0.4px; }
-.content h1 { font-size: 18px; font-weight: 600; margin: 24px 0 10px; }
-.content h2 { font-size: 15px; font-weight: 600; color: var(--text); margin: 20px 0 8px; }
-.content h3 { font-size: 13px; font-weight: 600; color: var(--text-muted); margin: 16px 0 6px; }
+.content h1 { font-size: 20px; font-weight: 600; margin: 28px 0 10px; }
+.content h2 { font-size: 17px; font-weight: 600; color: var(--text); margin: 24px 0 8px; }
+.content h3 { font-size: 15px; font-weight: 600; color: var(--text-muted); margin: 18px 0 6px; }
 .content p  { line-height: 1.75; margin-bottom: 14px; color: var(--text); }
 .content ul, .content ol { margin: 8px 0 14px 20px; }
 .content li { line-height: 1.7; margin-bottom: 3px; }
-.content code { background: var(--surface2); padding: 2px 5px; border-radius: 4px; font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace; }
+.content code { background: var(--surface2); padding: 2px 5px; border-radius: 4px; font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; }
 .content pre  { background: var(--surface); border: 1px solid var(--border); padding: 14px 16px; border-radius: var(--radius); overflow-x: auto; margin: 12px 0; }
 .content pre code { background: none; padding: 0; }
 .content blockquote { border-left: 3px solid var(--border); padding-left: 14px; margin: 12px 0; color: var(--text-muted); }

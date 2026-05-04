@@ -244,6 +244,11 @@ def _parse_project_file(path: Path) -> dict | None:
         import yaml as _yaml
         fm = _yaml.safe_load(fm_match.group(1)) or {}
         body = fm_match.group(2).strip()
+        try:
+            import mistune as _mistune
+            summary_html = _mistune.html(body) if body else ''
+        except Exception:
+            summary_html = ''
         return {
             'slug': fm.get('slug', path.stem),
             'title': fm.get('title', path.stem),
@@ -257,6 +262,7 @@ def _parse_project_file(path: Path) -> dict | None:
             'docs': fm.get('docs', []),
             'created': str(fm.get('created', '')),
             'summary': body,
+            'summary_html': summary_html,
         }
     except Exception:
         return None
