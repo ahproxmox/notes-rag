@@ -1351,15 +1351,16 @@ def _parse_todo_file(filename: str, filepath: Path) -> dict | None:
         todo_id = int(id_m.group(1)) if id_m else None
 
         title = (_get_fm_field(content, [
-            r'^title:\s*"?([^"\n]+)"?\s*$',
+            r'^title:\s*\"?([^\"\n]+)\"?\s*$',
             r'^#\s+(.+)',
         ]) or filename.replace('.md', '').lstrip('0123456789-'))
 
-        status     = _get_fm_field(content, [r'^status:\s*([a-zA-Z0-9_-]+)\s*$']) or 'pending'
+        _raw_status = _get_fm_field(content, [r'^status:\s*([a-zA-Z0-9_-]+)\s*$']) or 'pending'
+        status = 'pending' if _raw_status == 'todo' else _raw_status
         priority   = _get_fm_field(content, [r'^priority:\s*(high|medium|low)\s*$']) or 'medium'
         created    = _get_fm_field(content, [r'^created:\s*([\d-]+)\s*$']) or ''
         completed  = _get_fm_field(content, [r'^completed:\s*([\d-]+)\s*$'])
-        swimlane   = _get_fm_field(content, [r'^swimlane:\s*"?([^"\n]+)"?\s*$'])
+        swimlane   = _get_fm_field(content, [r'^swimlane:\s*\"?([^\"\n]+)\"?\s*$'])
         assignee   = _get_fm_field(content, [r'^assignee:\s*([^\n]+)\s*$'])
         project    = _get_fm_field(content, [r'^project:\s*([^\n]+)\s*$'])
         complexity = _get_fm_field(content, [r'^complexity:\s*(small|medium|large)\s*$'])
