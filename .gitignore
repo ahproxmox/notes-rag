@@ -8,6 +8,15 @@ chroma/
 *.bak
 *.bak2
 *.bak3
+*.bak-*
+entities.db
+bench/results.json
+
+# Build output
+inbox-viewer/inbox-viewer
+
+# Tools
+.serena/
 
 # Bench results (workspace-specific data)
 bench/results/
