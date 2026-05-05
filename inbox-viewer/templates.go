@@ -7,11 +7,11 @@ const indexTmpl = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Reports &amp; Inbox</title>
 <link rel="manifest" href="/reports/manifest.json">
-<meta name="theme-color" content="#282828">
+<meta name="theme-color" content="#1a1a1a">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg:        #282828;
+  --bg:        #1a1a1a;
   --surface:   #32302f;
   --surface2:  #3c3836;
   --border:    #504945;
@@ -187,11 +187,11 @@ const pageTmpl = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{.Title}}</title>
 <link rel="manifest" href="/reports/manifest.json">
-<meta name="theme-color" content="#282828">
+<meta name="theme-color" content="#1a1a1a">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg:        #282828;
+  --bg:        #1a1a1a;
   --surface:   #32302f;
   --surface2:  #3c3836;
   --border:    #504945;
@@ -283,7 +283,7 @@ const offlineHTML = `<!DOCTYPE html>
 <title>Offline</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #282828; color: #ebdbb2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+body { background: #1a1a1a; color: #ebdbb2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
        display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; }
 h1 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
 p  { color: #a89984; font-size: 13px; }
@@ -299,8 +299,8 @@ const manifestJSON = `{
   "short_name": "Reports",
   "start_url": "/reports",
   "display": "standalone",
-  "background_color": "#282828",
-  "theme_color": "#282828",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
   "description": "Browse research reports and inbox notes",
   "icons": []
 }`
