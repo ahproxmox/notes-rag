@@ -1459,6 +1459,14 @@ async def kanban_todos_create_native(request: Request):
     return todos_create(req)
 
 
+@api.get('/kanban/todos/{todo_id}')
+def kanban_todos_get(todo_id: int):
+    filepath = _find_todo_path(todo_id)
+    if not filepath:
+        raise HTTPException(status_code=404, detail=f'Todo not found: {todo_id}')
+    return _parse_todo_file(filepath.name, filepath)
+
+
 @api.patch('/kanban/todos/{todo_id}')
 async def kanban_todos_patch(todo_id: int, request: Request):
     updates = json.loads(await request.body())
