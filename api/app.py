@@ -123,6 +123,15 @@ class NoteUpdateRequest(BaseModel):
     body: str
     project: str | None = None
 
+class PaperlessIngestRequest(BaseModel):
+    paperless_id: int
+    title: str
+    content: str
+    correspondent: str = ''
+    doc_type: str = ''
+    tags: list[str] = []
+    created: str = ''
+
 class ProjectCreateRequest(BaseModel):
     title: str
     goal: str = ''
@@ -960,6 +969,49 @@ def notes_update(filename: str, req: NoteUpdateRequest):
         tmp.unlink(missing_ok=True)
         raise
     return {'saved': filename, 'updated': today}
+
+
+# ── API: Paperless ingest ─────────────────────────────────────────────────────
+
+@api.post('/ingest/paperless')
+def ingest_paperless(req: PaperlessIngestRequest):
+    from core.search import get_store
+    from langchain_core.documents import Document
+
+    store = get_store()
+    source = f'paperless:{req.paperless_id}'
+    meta_parts = [
+        f'Correspondent: {req.correspondent}' if req.correspondent else '',
+        f'Type: {req.doc_type}' if req.doc_type else '',
+        f'Tags: {", ".join(req.tags)}' if req.tags else '',
+        f'Date: {req.created}' if req.created else '',
+    ]
+    headers = ' | '.join(p for p in meta_parts if p)
+
+    chunk_size, overlap = 2000, 200
+    text = req.content.strip()
+    docs = []
+    start = 0
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        docs.append(Document(
+            page_content=text[start:end],
+            metadata={'filename': req.title, 'folder': 'paperless', 'headers': headers},
+        ))
+        if end == len(text):
+            break
+        start = end - overlap
+
+    store.upsert_file(source, docs)
+    return {'ok': True, 'source': source, 'chunks_stored': len(docs)}
+
+
+@api.delete('/ingest/paperless/{paperless_id}')
+def delete_paperless(paperless_id: int):
+    from core.search import get_store
+    store = get_store()
+    deleted = store.delete_file(f'paperless:{paperless_id}')
+    return {'ok': True, 'chunks_deleted': deleted}
 
 
 # ── Discord notifications ─────────────────────────────────────────────────────
