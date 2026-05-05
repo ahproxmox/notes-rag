@@ -1737,12 +1737,13 @@ _SIDECAR_URLS = {
     'openclaw': 'http://192.168.88.63:8092/reload',
 }
 _DISCORD_SERVICES = frozenset({'hermes', 'openclaw'})
-_ALL_SERVICES     = ['notes-rag', 'hermes', 'mirofish', 'openclaw']
+_ALL_SERVICES     = ['notes-rag', 'hermes', 'mirofish', 'openclaw', 'paperless-gpt']
 _SERVICE_LABELS   = {
-    'notes-rag': 'Notes RAG',
-    'hermes':    'Hermes',
-    'mirofish':  'MiroFish',
-    'openclaw':  'OpenClaw',
+    'notes-rag':     'Notes RAG',
+    'hermes':        'Hermes',
+    'mirofish':      'MiroFish',
+    'openclaw':      'OpenClaw',
+    'paperless-gpt': 'Paperless OCR',
 }
 
 
