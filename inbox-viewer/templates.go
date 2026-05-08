@@ -174,6 +174,7 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
     <button class="filter-btn" data-cat="research">Research</button>
     <button class="filter-btn" data-cat="review">Reviews</button>
     <button class="filter-btn" data-cat="recipe">Recipes</button>
+    <button class="filter-btn" data-cat="trading">Trading</button>
     <button class="filter-btn" data-cat="inbox">Inbox</button>
   </div>
   <div class="section-label">Items</div>

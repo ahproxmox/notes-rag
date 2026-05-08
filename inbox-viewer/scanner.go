@@ -29,6 +29,7 @@ func scanAll() []ContentItem {
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Research", "research")...)
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Reviews", "review")...)
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Recipes", "recipe")...)
+	items = append(items, scanInboxDir("/mnt/Obsidian/Trading", "trading")...)
 	items = append(items, scanReports("/mnt/Claude/reports")...)
 	seen := make(map[string]struct{})
 	var deduped []ContentItem
@@ -230,6 +231,7 @@ func slugToFile(slug string) (string, bool) {
 		"/mnt/Obsidian/Inbox/Research",
 		"/mnt/Obsidian/Inbox/Reviews",
 		"/mnt/Obsidian/Inbox/Recipes",
+		"/mnt/Obsidian/Trading",
 	}
 	for _, dir := range dirs {
 		path := filepath.Join(dir, slug+".md")
