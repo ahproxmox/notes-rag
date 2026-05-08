@@ -125,9 +125,36 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
   main { padding: 20px 16px; }
   .grid { grid-template-columns: 1fr; }
 }
+#ptr-indicator {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  opacity: 0;
+  transform: translateY(-56px);
+  z-index: 100;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+#ptr-indicator svg {
+  width: 22px; height: 22px;
+  stroke: var(--accent);
+}
+#ptr-indicator.spinning svg {
+  animation: ptr-spin 0.6s linear infinite;
+}
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
+<div id="ptr-indicator">
+  <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+  </svg>
+</div>
 <header>
   <a class="back-link" href="/">&#8592; Workspace</a>
   <div class="logo">
@@ -175,6 +202,45 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
     });
   });
 });
+
+(function () {
+  const PTR_THRESHOLD = 70;
+  const indicator = document.getElementById('ptr-indicator');
+  let startY = 0;
+  let pulling = false;
+
+  document.addEventListener('touchstart', function (e) {
+    if (window.scrollY === 0) {
+      startY = e.touches[0].clientY;
+      pulling = true;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function (e) {
+    if (!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0) { pulling = false; return; }
+    const clamped = Math.min(dy, PTR_THRESHOLD);
+    indicator.style.transform = 'translateY(' + (clamped - 56) + 'px)';
+    indicator.style.opacity = (clamped / PTR_THRESHOLD).toString();
+  }, { passive: true });
+
+  document.addEventListener('touchend', function (e) {
+    if (!pulling) return;
+    pulling = false;
+    const dy = e.changedTouches[0].clientY - startY;
+    if (dy >= PTR_THRESHOLD) {
+      indicator.classList.add('spinning');
+      indicator.style.transform = 'translateY(0)';
+      indicator.style.opacity = '1';
+      location.reload();
+    } else {
+      indicator.style.transform = '';
+      indicator.style.opacity = '0';
+    }
+  });
+}());
+
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/reports/sw.js');
 </script>
 </body>
@@ -305,7 +371,7 @@ const manifestJSON = `{
   "icons": []
 }`
 
-const serviceWorkerJS = `const CACHE = 'reports-v4';
+const serviceWorkerJS = `const CACHE = 'reports-v5';
 const OFFLINE = '/reports/offline.html';
 
 self.addEventListener('install', e => {
