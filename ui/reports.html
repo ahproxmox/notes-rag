@@ -62,7 +62,9 @@
     .report-type-dot.research  { background: var(--accent); }
     .report-type-dot.forecast  { background: var(--purple); }
     .report-type-dot.report    { background: var(--green); }
+    .report-type-dot.recepie, .report-type-dot.recipe { background: var(--orange, #e78a4e); }
     .report-type-dot.queued    { background: var(--yellow); animation: pulse 1.4s ease-in-out infinite; }
+    .report-type-dot.note      { background: var(--gray-1, #928374); }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
     .report-body { flex: 1; min-width: 0; }
@@ -82,6 +84,14 @@
     .report-badge.forecast  { color: var(--purple);  border-color: var(--purple);  background: rgba(211,134,155,0.1); }
     .report-badge.report    { color: var(--green);   border-color: var(--green);   background: rgba(169,182,101,0.1); }
     .report-badge.queued    { color: var(--yellow);  border-color: var(--yellow);  background: rgba(216,166,87,0.1); }
+    .report-badge.recepie, .report-badge.recipe { color: var(--orange,#e78a4e); border-color: var(--orange,#e78a4e); background: rgba(231,138,78,0.1); }
+    .report-badge.note      { color: var(--text-muted); border-color: var(--border); background: transparent; }
+
+    .report-tag {
+      font-size: 10px; padding: 1px 6px; border-radius: 999px;
+      background: var(--tag-bg); border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
 
     .report-filename {
       font-family: var(--mono); font-size: 10px; color: var(--text-muted);
@@ -148,13 +158,13 @@
     </div>
 
     <div id="completed-section" style="display:none">
-      <div class="section-label">Completed</div>
+      <div class="section-label">Inbox</div>
       <div class="report-list" id="completed-list"></div>
     </div>
 
     <div id="empty" class="empty" style="display:none">
-      <h2>No reports yet</h2>
-      <p>Submit a research or forecast job from the <a href="/new" style="color:var(--accent)">new</a> page.</p>
+      <h2>Inbox is empty</h2>
+      <p>Research and forecast reports appear here when completed.</p>
     </div>
 
     <a href="/review" class="review-cta">
@@ -196,7 +206,7 @@ function render(results, pending) {
 
   if (results.length) {
     document.getElementById('completed-section').style.display = '';
-    document.getElementById('completed-list').innerHTML = results.map(r => cardHtml(r, r.category)).join('');
+    document.getElementById('completed-list').innerHTML = results.map(r => cardHtml(r, r.category, r.tags || [])).join('');
   }
 
   if (!results.length && !pending.length) {
@@ -205,20 +215,23 @@ function render(results, pending) {
 
   const total = results.length + pending.length;
   document.getElementById('count-label').textContent =
-    total ? `${total} report${total !== 1 ? 's' : ''}` : 'empty';
+    total ? `${total} item${total !== 1 ? 's' : ''}` : 'empty';
 }
 
-function cardHtml(r, type) {
-  const cls = type.toLowerCase().replace(/[^a-z]/g, '') || 'report';
-  const label = cls === 'queued' ? 'queued' : cls;
+function cardHtml(r, type, tags) {
+  const cls = (type || '').toLowerCase().replace(/[^a-z]/g, '') || 'note';
+  const label = cls || 'note';
   const date = r.date ? `<span>${esc(r.date)}</span>` : '';
+  const tagPills = (tags || []).slice(0, 4).map(t =>
+    `<span class="report-tag">${esc(t)}</span>`).join('');
   return `<div class="report-card">
     <div class="report-type-dot ${cls}"></div>
     <div class="report-body">
       <div class="report-title">${esc(r.title || r.filename)}</div>
       <div class="report-meta">
-        <span class="report-badge ${cls}">${label}</span>
+        ${label ? `<span class="report-badge ${cls}">${label}</span>` : ''}
         ${date}
+        ${tagPills}
         <span class="report-filename">${esc(r.filename)}</span>
       </div>
     </div>

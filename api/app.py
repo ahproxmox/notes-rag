@@ -899,33 +899,38 @@ def notes_recent(n: int = Query(default=10, ge=1, le=50)):
 
 
 @api.get('/reports/list')
-def reports_list(n: int = Query(default=100, ge=1, le=500)):
-    """List research and forecast reports from Obsidian Inbox, newest first."""
+def reports_list(n: int = Query(default=200, ge=1, le=500)):
+    """List all Obsidian Inbox notes newest-first, plus any pending queue jobs."""
     results = []
     if _inbox_dir.is_dir():
         for p in sorted(_inbox_dir.glob('*.md'), key=lambda f: f.stat().st_mtime, reverse=True):
             try:
                 content = p.read_text(encoding='utf-8', errors='replace')
-                title = p.stem
+                title = p.stem.replace('-', ' ').replace('_', ' ').title()
                 category = ''
                 date_str = ''
+                tags = []
                 if content.startswith('---'):
                     end = content.find('---', 3)
                     if end != -1:
                         for line in content[3:end].splitlines():
                             k, _, v = line.partition(':')
-                            k = k.strip(); v = v.strip().strip('"\' ')
-                            if k == 'title':
+                            k = k.strip(); v = v.strip().strip('\"\' ')
+                            if k == 'title' and v:
                                 title = v
-                            elif k in ('category', 'type'):
+                            elif k in ('category', 'type') and v:
                                 category = v
-                            elif k == 'date':
-                                date_str = v
-                if category.lower() in ('research', 'forecast', 'report', 'deep-research', 'analysis'):
-                    results.append({'filename': p.name, 'title': title, 'category': category, 'date': date_str})
+                            elif k == 'topic' and v and not title:
+                                title = v
+                            elif k == 'date' and v:
+                                date_str = v[:10]
+                            elif k == 'tags' and v:
+                                import re as _re
+                                tags = [t.strip().strip('[]') for t in _re.split(r'[,\[\]]+', v) if t.strip().strip('[]')]
+                results.append({'filename': p.name, 'title': title, 'category': category, 'date': date_str, 'tags': tags})
             except OSError:
                 continue
-    # Also include pending queue items
+    # Pending queue jobs
     pending = []
     if _queue_dir.is_dir():
         for p in sorted(_queue_dir.glob('*.md'), key=lambda f: f.stat().st_mtime, reverse=True):
@@ -937,13 +942,13 @@ def reports_list(n: int = Query(default=100, ge=1, le=500)):
                     if end != -1:
                         for line in content[3:end].splitlines():
                             k, _, v = line.partition(':')
-                            k = k.strip(); v = v.strip().strip('"\' ')
+                            k = k.strip(); v = v.strip().strip('\"\' ')
                             if k == 'topic':
                                 topic = v
                             elif k == 'type':
                                 rtype = v
                 if rtype in ('research', 'forecast'):
-                    pending.append({'filename': p.name, 'title': topic or p.stem, 'category': rtype, 'date': '', 'status': 'queued'})
+                    pending.append({'filename': p.name, 'title': topic or p.stem, 'category': rtype, 'date': '', 'tags': [], 'status': 'queued'})
             except OSError:
                 continue
     return {'results': results[:n], 'pending': pending}
