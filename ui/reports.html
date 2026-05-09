@@ -101,16 +101,50 @@
     .empty { padding: 48px 0; text-align: center; color: var(--text-muted); }
     .empty h2 { font-size: 15px; color: var(--text); margin-bottom: 6px; }
 
-    .review-cta {
-      display: inline-flex; align-items: center; gap: 6px;
-      margin-top: 32px; font-size: 12px; color: var(--text-muted);
-      border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 8px 14px; text-decoration: none;
+    .report-card { cursor: pointer; }
+
+    /* ── Report modal ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65); z-index: 200;
+      align-items: flex-start; justify-content: center;
+      padding: 48px 16px 24px; overflow-y: auto;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); width: 100%; max-width: 760px;
+      padding: 28px 28px 32px; position: relative;
+    }
+    .modal-close {
+      position: absolute; top: 16px; right: 16px;
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text-muted); font-size: 13px; padding: 3px 9px;
+      cursor: pointer; font-family: var(--mono);
       transition: border-color 0.15s, color 0.15s;
     }
-    .review-cta:hover { border-color: var(--accent); color: var(--text); }
+    .modal-close:hover { border-color: var(--accent); color: var(--text); }
+    .modal-title { font-size: 18px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 20px; padding-right: 48px; }
+    .modal-loading { color: var(--text-muted); font-size: 13px; padding: 24px 0; }
+    .md-body { font-size: 13px; line-height: 1.75; color: var(--text); }
+    .md-body h1,.md-body h2,.md-body h3,.md-body h4 { color: var(--text); font-weight: 600; margin: 1.3em 0 0.4em; letter-spacing: -0.3px; }
+    .md-body h1 { font-size: 17px; } .md-body h2 { font-size: 14px; } .md-body h3 { font-size: 13px; }
+    .md-body p { margin: 0.5em 0; color: var(--text-muted); }
+    .md-body ul,.md-body ol { padding-left: 1.4em; margin: 0.5em 0; color: var(--text-muted); }
+    .md-body li { margin: 0.25em 0; }
+    .md-body code { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; font-family: var(--mono); font-size: 11px; padding: 1px 5px; }
+    .md-body pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; overflow-x: auto; margin: 0.7em 0; }
+    .md-body pre code { background: none; border: none; padding: 0; font-size: 12px; }
+    .md-body blockquote { border-left: 3px solid var(--border); margin: 0.7em 0; padding: 4px 12px; color: var(--text-muted); }
+    .md-body a { color: var(--accent); }
+    .md-body a:hover { text-decoration: underline; }
+    .md-body hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+    .md-body table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 0.7em 0; }
+    .md-body th,.md-body td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+    .md-body th { background: var(--surface2); color: var(--text); font-weight: 600; }
+    .md-body td { color: var(--text-muted); }
 
-    .filter-row {
+.filter-row {
       display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;
     }
     .filter-btn {
@@ -181,14 +215,16 @@
       <p>Research and forecast reports appear here when completed.</p>
     </div>
 
-    <a href="/review" class="review-cta">
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-        <path d="M9 1H3a1 1 0 00-1 1v8a1 1 0 001 1h6a1 1 0 001-1V2a1 1 0 00-1-1z"/>
-        <path d="M4 4h4M4 6h4M4 8h2"/>
-      </svg>
-      Review notes queue →
-    </a>
   </main>
+</div>
+
+<!-- Report viewer modal -->
+<div class="modal-overlay" id="report-modal" onclick="handleModalClick(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title" id="modal-title"></div>
+    <div id="modal-body"><div class="modal-loading">Loading…</div></div>
+  </div>
 </div>
 
 <div class="gv-bottom-bar">
@@ -287,7 +323,9 @@ function cardHtml(r, type, tags) {
   const date = r.date ? `<span>${esc(r.date)}</span>` : '';
   const tagPills = (tags || []).slice(0, 4).map(t =>
     `<span class="report-tag">${esc(t)}</span>`).join('');
-  return `<div class="report-card">
+  const filenameAttr = esc(r.filename).replace(/"/g, '&quot;');
+  const titleAttr = esc(r.title || r.filename).replace(/"/g, '&quot;');
+  return `<div class="report-card" onclick="openReport('${filenameAttr}','${titleAttr}')">
     <div class="report-type-dot ${cls}"></div>
     <div class="report-body">
       <div class="report-title">${esc(r.title || r.filename)}</div>
@@ -301,10 +339,41 @@ function cardHtml(r, type, tags) {
   </div>`;
 }
 
+async function openReport(filename, title) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = '<div class="modal-loading">Loading…</div>';
+  document.getElementById('report-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  try {
+    const res = await fetch('/api/notes/' + encodeURIComponent(filename));
+    if (!res.ok) throw new Error('Not found');
+    const data = await res.json();
+    const html = typeof marked !== 'undefined'
+      ? marked.parse(data.body)
+      : '<pre style="white-space:pre-wrap;color:var(--text-muted)">' + esc(data.body) + '</pre>';
+    document.getElementById('modal-body').innerHTML = '<div class="md-body">' + html + '</div>';
+  } catch (e) {
+    document.getElementById('modal-body').innerHTML =
+      '<div style="color:var(--red)">Failed to load: ' + esc(e.message) + '</div>';
+  }
+}
+
+function closeModal() {
+  document.getElementById('report-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function handleModalClick(e) {
+  if (e.target === document.getElementById('report-modal')) closeModal();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 load();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
 <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
 </body>
 </html>
