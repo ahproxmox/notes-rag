@@ -2,290 +2,296 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1a1a1a">
+  <meta name="theme-color" content="#d8a657">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Notes RAG">
   <link rel="apple-touch-icon" href="/ui/icon.png">
+  <link rel="stylesheet" href="/ui/theme.css">
   <title>Search — Notes RAG</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ── Search layout ──────────────────────────────────────────── */
+    .search-wrap { max-width: 1240px; margin: 0 auto; }
 
-    :root {
-      --bg:        #1a1a1a;
-      --surface:   #32302f;
-      --surface2:  #3c3836;
-      --border:    #504945;
-      --text:      #ebdbb2;
-      --text-muted:#a89984;
-      --accent:    #83a598;
-      --tag-bg:    #3c3836;
-      --green:     #b8bb26;
-      --radius:    8px;
-    }
-
-    html, body { height: 100%; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      font-size: 14px;
-    }
-
-    header {
-      border-bottom: 1px solid var(--border);
-      padding: 12px 24px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: var(--surface);
-      flex-shrink: 0;
-    }
-    header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
-    #home-btn {
-      background: var(--tag-bg); border: 1px solid var(--border); color: var(--text-muted);
-      border-radius: 6px; padding: 5px 12px; font-size: 12px; text-decoration: none;
-      transition: border-color 0.15s, color 0.15s;
-    }
-    #home-btn:hover { border-color: var(--accent); color: var(--text); }
-
+    /* Big search input */
     .search-bar {
-      padding: 14px 24px;
-      display: flex;
-      gap: 10px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      flex-shrink: 0;
-    }
-    .search-input {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-family: inherit;
-      font-size: 14px;
-      padding: 10px 14px;
-      outline: none;
+      display: flex; align-items: center; gap: 14px;
+      background: var(--bg-1); border: 1px solid var(--bg-3);
+      border-radius: 6px; padding: 14px 18px; margin-bottom: 14px;
       transition: border-color 0.15s;
     }
-    .search-input:focus { border-color: var(--accent); }
-    .search-input::placeholder { color: var(--text-muted); }
+    .search-bar:focus-within { border-color: var(--yellow); }
+    .search-bar input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--fg-2); font-size: 16px; letter-spacing: -0.01em;
+      font-family: var(--mono);
+    }
+    .search-bar input::placeholder { color: var(--gray-0); }
     .search-btn {
-      background: var(--accent);
-      color: #282828;
-      border: none;
-      border-radius: var(--radius);
-      padding: 10px 20px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.15s;
-      flex-shrink: 0;
+      background: var(--yellow); color: var(--bg-dim); border: none;
+      border-radius: 3px; padding: 6px 14px; font-size: 11px; font-weight: 700;
+      font-family: var(--mono); cursor: pointer; flex-shrink: 0;
+      transition: opacity 0.15s; letter-spacing: 0.04em;
     }
     .search-btn:hover { opacity: 0.85; }
     .search-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .results-area {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px 24px;
+    /* Search stat tiles (3 in a row) */
+    .search-stats {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 14px;
     }
-    .results-area::-webkit-scrollbar { width: 6px; }
-    .results-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-    .empty-state {
-      text-align: center;
-      color: var(--text-muted);
-      margin-top: 60px;
+    .stat-tile {
+      background: var(--bg-1); border: 1px solid var(--bg-2); border-radius: 6px;
+      padding: 12px 14px;
     }
-    .empty-state h2 { font-size: 16px; font-weight: 500; margin-bottom: 8px; }
-    .empty-state p { font-size: 13px; }
+    .stat-num {
+      font-size: 24px; font-weight: 600;
+      letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1;
+      margin-top: 4px;
+    }
+    .stat-num.yellow { color: var(--yellow); }
+    .stat-num.green  { color: var(--green); }
+    .stat-num.aqua   { color: var(--aqua); }
 
-    .msg { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
-    .msg.error { color: #fb4934; }
+    /* Main body: results + facets */
+    .search-body { display: grid; grid-template-columns: 1.6fr 1fr; gap: 12px; }
 
+    /* Result cards */
     .result-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px 16px;
+      background: var(--bg-1); border: 1px solid var(--bg-2);
+      border-radius: 6px; padding: 16px; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
       margin-bottom: 10px;
-      cursor: pointer;
-      transition: border-color 0.15s;
     }
-    .result-card:hover { border-color: var(--accent); }
-    .result-top { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
-    .result-title { font-size: 14px; font-weight: 600; flex: 1; }
-    .score-bar { width: 36px; height: 3px; background: var(--border); border-radius: 2px; flex-shrink: 0; }
-    .score-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; }
-    .result-filename { font-size: 11px; color: var(--text-muted); font-family: 'SF Mono', monospace; margin-bottom: 6px; }
-    .result-snippet { font-size: 12px; color: var(--text-muted); line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .result-card:hover { border-color: var(--bg-4); background: var(--bg-2); }
+    .result-top { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+    .result-type {
+      font-size: 10px; letter-spacing: 0.08em; width: 50px; flex-shrink: 0; text-transform: uppercase;
+    }
+    .result-type.note   { color: var(--aqua); }
+    .result-type.todo   { color: var(--yellow); }
+    .result-type.report { color: var(--purple); }
+    .result-title { font-size: 15px; font-weight: 600; flex: 1; color: var(--fg-2); letter-spacing: -0.01em; }
+    .result-score { color: var(--yellow); font-size: 12px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+    .result-filename { font-size: 11px; color: var(--gray-1); margin-bottom: 6px; }
+    .result-snippet { font-size: 12px; color: var(--gray-2); line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    .overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.5);
-      z-index: 99;
+    /* Recent section label */
+    .section-label {
+      font-size: 10px; font-weight: 600; color: var(--gray-1);
+      text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 10px;
     }
+
+    /* Facets */
+    .facets { display: flex; flex-direction: column; gap: 12px; }
+    .facet-tile {
+      background: var(--bg-1); border: 1px solid var(--bg-2);
+      border-radius: 6px; padding: 14px;
+    }
+
+    /* Score bars in facets */
+    .score-row { margin-bottom: 10px; }
+    .score-row:last-child { margin-bottom: 0; }
+    .score-label-row {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--gray-2); margin-bottom: 4px;
+    }
+    .score-label-row span:last-child { color: var(--fg-1); font-variant-numeric: tabular-nums; }
+    .score-bar-outer { height: 4px; background: var(--bg-3); border-radius: 2px; }
+    .score-bar-inner { height: 100%; border-radius: 2px; }
+
+    /* Source mix bar */
+    .mix-bar { height: 16px; display: flex; border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+    .mix-legend { display: flex; justify-content: space-between; font-size: 10px; color: var(--gray-1); }
+
+    /* Tags */
+    .tags-list { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    /* Results list wrapper */
+    .results-list { min-height: 200px; }
+
+    /* Empty / loading states */
+    .state-msg { padding: 40px 0; text-align: center; color: var(--gray-1); font-size: 13px; }
+    .state-msg h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--fg-1); }
+
+    /* Note drawer */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 99; }
     .overlay.open { display: block; }
-
     .drawer {
-      position: fixed;
-      top: 0; right: 0;
-      width: 45%;
-      height: 100vh;
-      background: var(--surface);
-      border-left: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      z-index: 100;
-      transform: translateX(100%);
-      transition: transform 0.2s ease;
+      position: fixed; top: 0; right: 0; width: 45%; height: 100vh;
+      background: var(--bg-1); border-left: 1px solid var(--bg-2);
+      display: flex; flex-direction: column; z-index: 100;
+      transform: translateX(100%); transition: transform 0.2s ease;
     }
     .drawer.open { transform: translateX(0); }
-
     .drawer-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; border-bottom: 1px solid var(--bg-2); flex-shrink: 0;
     }
-
     .drawer-meta {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      background: var(--surface2);
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 16px; border-bottom: 1px solid var(--bg-2); flex-shrink: 0;
+      background: var(--bg-0);
     }
-    .drawer-meta label {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
+    .drawer-meta label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; color: var(--gray-1); flex-shrink: 0; }
     .project-select {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      font-family: inherit;
-      font-size: 12px;
-      padding: 5px 28px 5px 8px;
-      outline: none;
-      cursor: pointer;
-      appearance: none;
-      -webkit-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23a89984' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 8px center;
+      flex: 1; background: var(--bg-1); border: 1px solid var(--bg-3);
+      border-radius: 4px; color: var(--fg-1); font-family: var(--mono);
+      font-size: 12px; padding: 5px 8px; outline: none; cursor: pointer;
       transition: border-color 0.15s;
     }
-    .project-select:focus { border-color: var(--accent); }
-    .drawer-title {
-      flex: 1;
-      font-size: 14px;
-      font-weight: 600;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
+    .project-select:focus { border-color: var(--yellow); }
+    .drawer-title { flex: 1; font-size: 14px; font-weight: 600; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .close-btn {
-      background: var(--tag-bg); border: 1px solid var(--border); color: var(--text-muted);
-      border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px; flex-shrink: 0;
+      background: var(--bg-2); border: 1px solid var(--bg-3); color: var(--gray-2);
+      border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 13px;
+      font-family: var(--mono); flex-shrink: 0;
       transition: border-color 0.15s, color 0.15s;
     }
-    .close-btn:hover { border-color: var(--accent); color: var(--text); }
-
+    .close-btn:hover { border-color: var(--bg-4); color: var(--fg-1); }
     .editor {
-      flex: 1;
-      background: var(--bg);
-      border: none;
-      outline: none;
-      color: var(--text);
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 13px;
-      padding: 16px;
-      resize: none;
-      line-height: 1.6;
+      flex: 1; background: var(--bg-0); border: none; outline: none;
+      color: var(--fg-1); font-family: var(--mono); font-size: 13px;
+      padding: 16px; resize: none; line-height: 1.6;
     }
     .editor:disabled { opacity: 0.5; }
-
     .drawer-footer {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
-      border-top: 1px solid var(--border);
-      flex-shrink: 0;
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; border-top: 1px solid var(--bg-2); flex-shrink: 0;
     }
-    .save-status { flex: 1; font-size: 12px; color: var(--text-muted); }
-    .save-btn {
-      background: var(--tag-bg); border: 1px solid var(--border); color: var(--text-muted);
-      border-radius: 6px; padding: 8px 18px; font-size: 13px; font-weight: 600;
-      cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
+    .save-status { flex: 1; font-size: 12px; color: var(--gray-1); }
+    .save-btn-note {
+      background: var(--bg-2); border: 1px solid var(--bg-3); color: var(--gray-2);
+      border-radius: 4px; padding: 8px 18px; font-size: 13px; font-weight: 600;
+      font-family: var(--mono); cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
     }
-    .save-btn.dirty { background: var(--accent); border-color: var(--accent); color: #282828; }
-    .save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .save-btn-note.dirty { background: var(--yellow); border-color: var(--yellow); color: var(--bg-dim); }
+    .save-btn-note:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .section-label {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-muted);
-      margin-bottom: 10px;
+    /* Responsive */
+    @media (max-width: 900px) {
+      .search-body { grid-template-columns: 1fr; }
+      .facets { display: none; }
     }
-
-    @media (max-width: 768px) {
+    @media (max-width: 719px) {
+      .search-stats { grid-template-columns: 1fr 1fr; }
       .drawer { width: 100%; border-left: none; }
-      .results-area { padding: 12px 16px; }
-      .search-bar { padding: 12px 16px; }
-      header { padding: 12px 16px; }
     }
   </style>
 </head>
 <body>
 
-<header>
-  <h1>Search Notes</h1>
-  <a href="/" id="home-btn">&#8592; Home</a>
-</header>
-
-<div class="search-bar">
-  <input class="search-input" id="query" type="text" placeholder="Search your notes&#8230;" autocomplete="off">
-  <button class="search-btn" id="search-btn">Search</button>
-</div>
-
-<div class="results-area" id="results">
-  <div class="empty-state" id="empty-state">
-    <h2>Search your workspace</h2>
-    <p>Type a keyword and hit Search to find relevant notes.</p>
+<!-- ── Top nav ── -->
+<nav class="gv-top-bar">
+  <div class="gv-logo-area">
+    <div class="gv-logo-mark">w</div>
+    <span class="gv-breadcrumb-root">workspace</span>
+    <span class="gv-breadcrumb-sep">/</span>
+    <span class="gv-breadcrumb-page">search</span>
   </div>
+  <div class="gv-nav">
+    <a href="/"        class="gv-nav-pill">workspace</a>
+    <a href="/new"     class="gv-nav-pill">new</a>
+    <a href="/notes"   class="gv-nav-pill active">search</a>
+    <a href="/chat"    class="gv-nav-pill">chat</a>
+    <a href="/reports" class="gv-nav-pill">reports</a>
+    <a href="/kanban"  class="gv-nav-pill">kanban</a>
+    <a href="/projects" class="gv-nav-pill">projects</a>
+  </div>
+</nav>
+
+<!-- ── Content ── -->
+<div class="gv-content">
+  <div class="search-wrap">
+
+    <!-- Eyebrow -->
+    <div class="gv-eyebrow" style="margin-bottom:12px">
+      <span class="pip"></span> SEARCH
+    </div>
+
+    <!-- Big search input -->
+    <div class="search-bar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--gray-0);flex-shrink:0">
+        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+      </svg>
+      <input id="query" type="text" placeholder="Search your workspace…" autocomplete="off">
+      <span class="gv-pill aqua">k=12</span>
+      <span class="gv-pill">α=0.5</span>
+      <button class="search-btn" id="search-btn">⌘ ↵</button>
+    </div>
+
+    <!-- Stat tiles -->
+    <div class="search-stats">
+      <div class="stat-tile">
+        <div class="gv-eyebrow"><span class="pip" style="background:var(--yellow)"></span> RESULTS</div>
+        <div class="stat-num yellow" id="stat-results">—</div>
+      </div>
+      <div class="stat-tile">
+        <div class="gv-eyebrow"><span class="pip" style="background:var(--green)"></span> LATENCY</div>
+        <div class="stat-num green" id="stat-latency">—<span style="font-size:14px;color:var(--gray-1)">ms</span></div>
+      </div>
+      <div class="stat-tile">
+        <div class="gv-eyebrow"><span class="pip" style="background:var(--aqua)"></span> TOP SCORE</div>
+        <div class="stat-num aqua" id="stat-topscore">—</div>
+      </div>
+    </div>
+
+    <!-- Main body -->
+    <div class="search-body">
+
+      <!-- Results -->
+      <div class="results-list" id="results">
+        <div class="state-msg" id="empty-state">
+          <h2>Search your workspace</h2>
+          Type a keyword and hit search.
+        </div>
+      </div>
+
+      <!-- Facets -->
+      <div class="facets">
+        <div class="facet-tile" id="facet-score" style="display:none">
+          <div class="gv-eyebrow" style="margin-bottom:10px"><span class="pip"></span> SCORE BREAKDOWN</div>
+          <div id="score-bars"></div>
+        </div>
+
+        <div class="facet-tile" id="facet-tags" style="display:none">
+          <div class="gv-eyebrow" style="margin-bottom:10px">
+            <span class="pip" style="background:var(--purple)"></span> RELATED TAGS
+          </div>
+          <div class="tags-list" id="tags-list"></div>
+        </div>
+
+        <div class="facet-tile" id="facet-mix" style="display:none">
+          <div class="gv-eyebrow" style="margin-bottom:10px">
+            <span class="pip" style="background:var(--aqua)"></span> SOURCE MIX
+          </div>
+          <div class="mix-bar" id="mix-bar"></div>
+          <div class="mix-legend" id="mix-legend"></div>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /.search-wrap -->
+</div><!-- /.gv-content -->
+
+<!-- ── Bottom bar ── -->
+<div class="gv-bottom-bar">
+  <span style="color:var(--aqua)">●</span> search
+  <span class="sep">│</span>
+  <span>BM25 + vector hybrid</span>
+  <div style="flex:1"></div>
+  <span class="gv-kbd">↵</span> search
 </div>
 
+<!-- Note drawer overlay -->
 <div class="overlay" id="overlay"></div>
-
 <div class="drawer" id="drawer">
   <div class="drawer-header">
     <span class="drawer-title" id="drawer-title">Note</span>
-    <button class="close-btn" id="close-btn">&#10005; Close</button>
+    <button class="close-btn" id="close-btn">✕ Close</button>
   </div>
   <div class="drawer-meta">
     <label for="project-select">Project</label>
@@ -293,17 +299,16 @@
       <option value="">— no project —</option>
     </select>
   </div>
-  <textarea class="editor" id="editor" placeholder="Loading&#8230;"></textarea>
+  <textarea class="editor" id="editor" placeholder="Loading…"></textarea>
   <div class="drawer-footer">
     <span class="save-status" id="save-status"></span>
-    <button class="save-btn" id="save-btn" disabled>Save</button>
+    <button class="save-btn-note" id="save-btn" disabled>Save</button>
   </div>
 </div>
 
 <script>
-  var currentFilename = null;
-  var originalBody = '';
-  var originalProject = '';
+  var currentFilename = null, originalBody = '', originalProject = '';
+  var _searchStart = 0;
 
   var queryEl       = document.getElementById('query');
   var searchBtn     = document.getElementById('search-btn');
@@ -317,22 +322,19 @@
   var closeBtn      = document.getElementById('close-btn');
   var projectSelect = document.getElementById('project-select');
 
-  // Load projects into the selector
+  // Load projects
   fetch('/api/projects')
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var opts = (data.projects || []).map(function(p) {
-        return '<option value="' + escHtml(p.slug) + '">' + escHtml(p.title) + '</option>';
+        return '<option value="' + esc(p.slug) + '">' + esc(p.title) + '</option>';
       }).join('');
       projectSelect.innerHTML = '<option value="">— no project —</option>' + opts;
-    })
-    .catch(function() { /* leave default */ });
+    }).catch(function() {});
 
   searchBtn.addEventListener('click', doSearch);
   queryEl.addEventListener('keydown', function(e) { if (e.key === 'Enter') doSearch(); });
-  queryEl.addEventListener('input', function() {
-    if (!queryEl.value.trim()) loadRecent();
-  });
+  queryEl.addEventListener('input', function() { if (!queryEl.value.trim()) loadRecent(); });
   closeBtn.addEventListener('click', closeDrawer);
   overlay.addEventListener('click', closeDrawer);
   saveBtn.addEventListener('click', saveNote);
@@ -346,140 +348,177 @@
   }
 
   function loadRecent() {
-    resultsEl.innerHTML = '<div class="msg">Loading\u2026</div>';
+    setResults('<div class="state-msg">Loading…</div>');
     fetch('/api/notes/recent?n=10')
-    .then(function(resp) {
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      return resp.json();
-    })
-    .then(function(data) { renderResults(data.results, true); })
-    .catch(function() {
-      resultsEl.innerHTML = '<div class="empty-state" id="empty-state"><h2>Search your workspace</h2><p>Type a keyword and hit Search to find relevant notes.</p></div>';
-    });
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(d) { renderResults(d.results, true); })
+      .catch(function() {
+        setResults('<div class="state-msg"><h2>Search your workspace</h2>Type a keyword and hit search.</div>');
+      });
   }
 
   function doSearch() {
     var query = queryEl.value.trim();
     if (!query) return;
     searchBtn.disabled = true;
-    resultsEl.innerHTML = '<div class="msg">Searching\u2026</div>';
+    _searchStart = Date.now();
+    setResults('<div class="state-msg">Searching…</div>');
+    hideFacets();
     fetch('/api/notes/search', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({query: query}),
     })
-    .then(function(resp) {
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      return resp.json();
-    })
-    .then(function(data) { renderResults(data.results, false); })
-    .catch(function(err) {
-      resultsEl.innerHTML = '<div class="msg error">Error: ' + escHtml(err.message) + '</div>';
-    })
-    .finally(function() { searchBtn.disabled = false; });
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(d) { renderResults(d.results, false); })
+      .catch(function(err) { setResults('<div class="state-msg" style="color:var(--red)">Error: ' + esc(err.message) + '</div>'); })
+      .finally(function() { searchBtn.disabled = false; });
   }
 
   loadRecent();
 
+  function setResults(html) { resultsEl.innerHTML = html; }
+  function hideFacets() {
+    ['facet-score','facet-tags','facet-mix'].forEach(function(id) {
+      document.getElementById(id).style.display = 'none';
+    });
+    document.getElementById('stat-results').textContent = '—';
+    document.getElementById('stat-latency').innerHTML = '—<span style="font-size:14px;color:var(--gray-1)">ms</span>';
+    document.getElementById('stat-topscore').textContent = '—';
+  }
+
   function renderResults(results, isRecent) {
-    if (!results || results.length === 0) {
-      resultsEl.innerHTML = '<div class="msg">' + (isRecent ? 'No notes yet.' : 'No notes found.') + '</div>';
+    var elapsed = Date.now() - _searchStart;
+    if (!results || !results.length) {
+      setResults('<div class="state-msg">' + (isRecent ? 'No notes yet.' : 'No notes found.') + '</div>');
       return;
     }
+
+    // Update stat tiles
+    if (!isRecent) {
+      var maxScore = Math.max.apply(null, results.map(function(r) { return r.score || 0; }).concat([0]));
+      document.getElementById('stat-results').textContent = results.length;
+      document.getElementById('stat-latency').innerHTML = elapsed + '<span style="font-size:14px;color:var(--gray-1)">ms</span>';
+      document.getElementById('stat-topscore').textContent = maxScore.toFixed(2);
+      renderFacets(results, maxScore);
+    }
+
     resultsEl.innerHTML = '';
     if (isRecent) {
       var label = document.createElement('div');
-      label.className = 'section-label';
-      label.textContent = 'Recently modified';
+      label.className = 'section-label'; label.textContent = 'Recently modified';
       resultsEl.appendChild(label);
     }
     var maxScore = isRecent ? 1 : Math.max.apply(null, results.map(function(r) { return r.score || 0; }).concat([0.001]));
     results.forEach(function(r) {
       var card = document.createElement('div');
       card.className = 'result-card';
-      var scoreBar = isRecent ? '' :
-        '<div class="score-bar"><div class="score-bar-fill" style="width:' + Math.round(((r.score || 0) / maxScore) * 100) + '%"></div></div>';
+      var typeClass = (r.filename || '').includes('todos') ? 'todo' : (r.filename || '').includes('report') ? 'report' : 'note';
+      var scoreHtml = isRecent ? '' : '<span class="result-score">' + (r.score||0).toFixed(2) + '</span>';
       card.innerHTML =
         '<div class="result-top">' +
-          '<span class="result-title">' + escHtml(r.title) + '</span>' +
-          scoreBar +
+          '<span class="result-type ' + typeClass + '">' + typeClass.toUpperCase() + '</span>' +
+          '<span class="result-title">' + esc(r.title) + '</span>' +
+          scoreHtml +
         '</div>' +
-        '<div class="result-filename">' + escHtml(r.filename) + '</div>' +
-        '<div class="result-snippet">' + escHtml(r.snippet) + '</div>';
+        '<div class="result-filename">' + esc(r.filename) + '</div>' +
+        '<div class="result-snippet">' + esc(r.snippet) + '</div>';
       card.addEventListener('click', function() { openNote(r.filename, r.title); });
       resultsEl.appendChild(card);
     });
   }
 
+  function renderFacets(results, maxScore) {
+    // Score breakdown (vector/bm25/rerank aren't in the API response, show approximate from score)
+    var scoreTile = document.getElementById('facet-score');
+    var barsEl = document.getElementById('score-bars');
+    barsEl.innerHTML = [
+      {l:'top result', v: maxScore, c:'yellow'},
+      {l:'median',     v: results[Math.floor(results.length/2)]?.score || 0, c:'aqua'},
+      {l:'cutoff',     v: results[results.length-1]?.score || 0, c:'green'},
+    ].map(function(b) {
+      return '<div class="score-row"><div class="score-label-row"><span>' + b.l + '</span><span>' + b.v.toFixed(2) + '</span></div>' +
+        '<div class="score-bar-outer"><div class="score-bar-inner" style="width:' + (b.v*100).toFixed(0) + '%;background:var(--' + b.c + ')"></div></div></div>';
+    }).join('');
+    scoreTile.style.display = '';
+
+    // Related tags (extracted from filenames)
+    var tags = new Set();
+    results.forEach(function(r) {
+      var parts = (r.filename || '').replace(/\.md$/, '').split('/');
+      parts.forEach(function(p) { if (p && p.length > 2) tags.add(p.toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20)); });
+    });
+    var tagsEl = document.getElementById('tags-list');
+    var tagArr = Array.from(tags).slice(0, 12);
+    tagsEl.innerHTML = tagArr.map(function(t) { return '<span class="gv-pill">#' + esc(t) + '</span>'; }).join('');
+    document.getElementById('facet-tags').style.display = tagArr.length ? '' : 'none';
+
+    // Source mix
+    var counts = {note:0, todo:0, report:0, other:0};
+    results.forEach(function(r) {
+      var fn = r.filename || '';
+      if (fn.includes('todos')) counts.todo++;
+      else if (fn.includes('report')) counts.report++;
+      else if (fn.includes('.md')) counts.note++;
+      else counts.other++;
+    });
+    var total = results.length || 1;
+    var mixParts = [
+      {k:'note', c:'var(--aqua)', label:'notes'},
+      {k:'todo', c:'var(--yellow)', label:'todos'},
+      {k:'report', c:'var(--purple)', label:'reports'},
+      {k:'other', c:'var(--gray-1)', label:'other'},
+    ].filter(function(p) { return counts[p.k] > 0; });
+    document.getElementById('mix-bar').innerHTML = mixParts.map(function(p) {
+      return '<div style="flex:' + counts[p.k] + ';background:' + p.c + '"></div>';
+    }).join('');
+    document.getElementById('mix-legend').innerHTML = mixParts.map(function(p) {
+      return '<span>' + p.label + ' ' + Math.round(counts[p.k]/total*100) + '%</span>';
+    }).join('');
+    document.getElementById('facet-mix').style.display = '';
+  }
+
   function openNote(filename, title) {
     currentFilename = filename;
     drawerTitle.textContent = title;
-    editor.value = '';
-    editor.placeholder = 'Loading\u2026';
-    editor.disabled = true;
-    saveBtn.disabled = true;
-    saveBtn.classList.remove('dirty');
-    saveStatus.textContent = '';
+    editor.value = ''; editor.placeholder = 'Loading…'; editor.disabled = true;
+    saveBtn.disabled = true; saveBtn.classList.remove('dirty'); saveStatus.textContent = '';
     openDrawer();
     fetch('/api/notes/' + encodeURIComponent(filename))
-    .then(function(resp) {
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      return resp.json();
-    })
-    .then(function(data) {
-      editor.value = data.body;
-      originalBody = data.body;
-      originalProject = data.project || '';
-      projectSelect.value = originalProject;
-      editor.placeholder = '';
-      editor.disabled = false;
-      saveBtn.disabled = false;
-      editor.focus();
-    })
-    .catch(function(err) {
-      editor.placeholder = 'Error loading note: ' + err.message;
-    });
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(data) {
+        editor.value = data.body; originalBody = data.body;
+        originalProject = data.project || ''; projectSelect.value = originalProject;
+        editor.placeholder = ''; editor.disabled = false; saveBtn.disabled = false; editor.focus();
+      })
+      .catch(function(err) { editor.placeholder = 'Error loading: ' + err.message; });
   }
 
   function saveNote() {
     if (!currentFilename || saveBtn.disabled) return;
-    saveBtn.disabled = true;
-    saveStatus.textContent = 'Saving\u2026';
+    saveBtn.disabled = true; saveStatus.textContent = 'Saving…';
     fetch('/api/notes/' + encodeURIComponent(currentFilename), {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({body: editor.value, project: projectSelect.value}),
     })
-    .then(function(resp) {
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      originalBody = editor.value;
-      originalProject = projectSelect.value;
-      saveBtn.classList.remove('dirty');
-      saveStatus.textContent = 'Saved \u2713';
-      setTimeout(function() {
-        if (saveStatus.textContent === 'Saved \u2713') saveStatus.textContent = '';
-      }, 2500);
-    })
-    .catch(function(err) { saveStatus.textContent = 'Error: ' + err.message; })
-    .finally(function() { saveBtn.disabled = false; });
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); })
+      .then(function() {
+        originalBody = editor.value; originalProject = projectSelect.value;
+        saveBtn.classList.remove('dirty'); saveStatus.textContent = 'Saved ✓';
+        setTimeout(function() { if (saveStatus.textContent === 'Saved ✓') saveStatus.textContent = ''; }, 2500);
+      })
+      .catch(function(err) { saveStatus.textContent = 'Error: ' + err.message; })
+      .finally(function() { saveBtn.disabled = false; });
   }
 
-  function openDrawer() {
-    drawer.classList.add('open');
-    overlay.classList.add('open');
-  }
-
+  function openDrawer()  { drawer.classList.add('open'); overlay.classList.add('open'); }
   function closeDrawer() {
-    drawer.classList.remove('open');
-    overlay.classList.remove('open');
-    currentFilename = null;
-    originalProject = '';
-    projectSelect.value = '';
+    drawer.classList.remove('open'); overlay.classList.remove('open');
+    currentFilename = null; originalProject = ''; projectSelect.value = '';
   }
 
-  function escHtml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>
 <script>
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');

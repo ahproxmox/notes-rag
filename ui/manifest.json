@@ -1,11 +1,11 @@
 {
-  "name": "Notes",
-  "short_name": "Notes",
-  "description": "Personal notes search and review",
+  "name": "notes-rag",
+  "short_name": "notes-rag",
+  "description": "Homelab notes, todos, reports — searchable.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0d1117",
-  "theme_color": "#0d1117",
+  "background_color": "#1d2021",
+  "theme_color": "#d8a657",
   "icons": [
     {
       "src": "/ui/icon.png",

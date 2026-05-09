@@ -2,551 +2,524 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1a1a1a">
+  <meta name="theme-color" content="#d8a657">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Notes RAG">
   <link rel="apple-touch-icon" href="/ui/icon.png">
-  <title>Workspace</title>
+  <link rel="stylesheet" href="/ui/theme.css">
+  <title>Workspace — Notes RAG</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:        #1a1a1a;
-      --surface:   #32302f;
-      --surface2:  #3c3836;
-      --border:    #504945;
-      --text:      #ebdbb2;
-      --text-muted:#a89984;
-      --accent:    #83a598;
-      --green:     #b8bb26;
-      --red:       #fb4934;
-      --yellow:    #fabd2f;
-      --tag-bg:    #3c3836;
-      --radius:    12px;
-    }
-
-    html, body {
-      height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    /* ── Header ── */
-    header {
-      border-bottom: 1px solid var(--border);
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      background: var(--surface);
-    }
-    .logo {
-      width: 26px; height: 26px;
-      background: var(--surface2);
-      border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
-    .logo svg { width: 16px; height: 16px; }
-    header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
-    .live-dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--green); flex-shrink: 0;
-      box-shadow: 0 0 6px var(--green);
-    }
-
-    /* ── Main layout ── */
-    main {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 32px 24px;
-    }
-
-    /* ── Stats row ── */
-    .stats-row {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 32px;
-    }
-    .stat-card {
-      flex: 1;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .stat-value {
-      font-size: 22px;
-      font-weight: 700;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      color: var(--text);
-      line-height: 1;
-    }
-    .stat-value.loading { color: var(--text-muted); font-size: 16px; }
-    .stat-label {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    /* ── Section heading ── */
-    .section-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      margin-bottom: 12px;
-    }
-
-    /* ── Tiles grid ── */
-    .tiles {
+    /* ── Bento grid ─────────────────────────────────────────────── */
+    .bento {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(12, 1fr);
+      grid-auto-rows: 92px;
       gap: 12px;
+      max-width: 1240px;
+      margin: 0 auto;
     }
 
-    .tile {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      text-decoration: none;
-      color: var(--text);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      transition: border-color 0.15s, background 0.15s, transform 0.1s;
-      cursor: pointer;
-      position: relative;
-    }
-    .tile:hover {
-      border-color: var(--accent);
-      background: var(--surface2);
-      transform: translateY(-1px);
-    }
-    .tile:active { transform: translateY(0); }
-
-    .tile-top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
+    /* Hero tile */
+    .tile-hero {
+      grid-column: 1 / span 8; grid-row: 1 / span 2;
+      padding: 22px 26px;
+      display: flex; flex-direction: column; justify-content: space-between;
+      background: linear-gradient(135deg, var(--bg-1) 0%, rgba(216,166,87,0.04) 100%);
     }
 
-    .tile-icon {
-      width: 36px; height: 36px;
-      border-radius: 8px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
-    .tile:hover .tile-icon { border-color: var(--accent); }
-    .tile-icon svg { width: 18px; height: 18px; color: var(--accent); }
-
-    .health-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--border);
-      flex-shrink: 0;
-      margin-top: 2px;
-      transition: background 0.3s, box-shadow 0.3s;
-    }
-    .health-dot.up   { background: var(--green); box-shadow: 0 0 5px var(--green); }
-    .health-dot.down { background: var(--red); }
-
-    .tile-title { font-size: 14px; font-weight: 600; letter-spacing: -0.2px; }
-    .tile-desc  { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
-
-    .tile.primary { border-color: var(--accent); background: var(--surface); }
-    .tile.primary:hover { border-color: var(--accent); background: var(--surface2); }
-    .tile.primary .tile-icon { background: var(--surface2); border-color: var(--accent); }
-
-    /* ── Models Modal ── */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.72);
-      z-index: 100;
-      align-items: center;
-      justify-content: center;
-    }
-    .modal-overlay.open { display: flex; }
-
-    .modal-panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      width: min(660px, 95vw);
-      max-height: 85vh;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-    }
-    .modal-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--border);
-      font-weight: 600;
-      font-size: 14px;
-      flex-shrink: 0;
-      position: sticky;
-      top: 0;
-      background: var(--surface);
-      z-index: 1;
-    }
-    .modal-close {
-      background: none; border: none;
-      color: var(--text-muted); cursor: pointer;
-      font-size: 16px; padding: 2px 6px; line-height: 1;
-      border-radius: 4px;
-    }
-    .modal-close:hover { color: var(--text); background: var(--surface2); }
-    .modal-body { padding: 20px; }
-
-    .models-table { width: 100%; border-collapse: collapse; }
-    .models-table th {
-      font-size: 11px; color: var(--text-muted);
-      text-transform: uppercase; letter-spacing: 0.5px;
-      padding: 0 8px 10px 0; text-align: left;
-      border-bottom: 1px solid var(--border); font-weight: 600;
-    }
-    .models-table td {
-      padding: 10px 8px 10px 0;
-      border-bottom: 1px solid #504945;
-      vertical-align: middle;
-    }
-    .models-table tr:last-child td { border-bottom: none; }
-
-    .svc-label { font-size: 13px; font-weight: 500; white-space: nowrap; }
-
-    .model-input-wrap { display: flex; align-items: center; gap: 6px; }
-    .model-input {
-      flex: 1; min-width: 0;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      font-size: 12px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      padding: 5px 8px;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .model-input:focus   { border-color: var(--accent); }
-    .model-input.valid   { border-color: var(--green); }
-    .model-input.invalid { border-color: var(--red); }
-    .val-icon { font-size: 12px; width: 14px; text-align: center; flex-shrink: 0; }
-
-    .model-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      flex-shrink: 0; transition: background 0.3s;
-    }
-    .model-dot.ok      { background: var(--green); box-shadow: 0 0 4px var(--green); }
-    .model-dot.error   { background: var(--red); }
-    .model-dot.unknown { background: var(--border); }
-
-    .save-btn {
-      background: var(--accent); border: none;
-      border-radius: 6px; color: #000;
-      font-size: 12px; font-weight: 600;
-      padding: 5px 12px; cursor: pointer; flex-shrink: 0;
-      transition: opacity 0.15s, background 0.2s;
-      white-space: nowrap;
-    }
-    .save-btn:hover    { opacity: 0.85; }
-    .save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    @media (max-width: 600px) {
-      .stats-row { flex-direction: column; }
-      .tiles { grid-template-columns: 1fr 1fr; }
-      main { padding: 20px 16px; }
-    }
-    @media (max-width: 380px) {
-      .tiles { grid-template-columns: 1fr; }
-    }
-
-    /* ── Hermes status section ── */
-    .hermes-section {
-      margin-top: 32px;
-    }
-    .hermes-jobs {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .hermes-job {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
+    /* Stat tiles */
+    .tile-stat {
       padding: 14px 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      display: flex; flex-direction: column; justify-content: space-between;
     }
-    .hermes-job.running { border-color: #2d4a6a; }
-    .hermes-job.error   { border-color: var(--red); }
-    .hermes-job.recent  { border-color: #2a3a2a; }
-    .hermes-job-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    .tile-stat-unreviewed { grid-column: 9 / span 4; grid-row: 1; }
+    .tile-stat-pending    { grid-column: 9 / span 4; grid-row: 2; }
+
+    /* Service tiles */
+    .tile-chat    { grid-column: 1 / span 4; grid-row: 3 / span 3; }
+    .tile-search  { grid-column: 5 / span 4; grid-row: 3 / span 2; }
+    .tile-new     { grid-column: 9 / span 4; grid-row: 3 / span 2; }
+    .tile-reports { grid-column: 5 / span 4; grid-row: 5 / span 2; }
+    .tile-kanban  { grid-column: 9 / span 4; grid-row: 5 / span 2; }
+
+    .tile-svc {
+      padding: 18px;
+      display: flex; flex-direction: column;
+      text-decoration: none; color: inherit;
     }
+    .tile-svc-top {
+      display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px;
+    }
+
+    /* Compact tiles */
+    .tile-compact {
+      padding: 12px 14px;
+      display: flex; align-items: center; gap: 12px;
+      text-decoration: none; color: inherit;
+      cursor: pointer;
+    }
+    .tile-compact-projects { grid-column: 1  / span 3; grid-row: 7; }
+    .tile-compact-system   { grid-column: 4  / span 3; grid-row: 7; }
+    .tile-compact-models   { grid-column: 7  / span 3; grid-row: 7; }
+    .tile-compact-inbox    { grid-column: 10 / span 3; grid-row: 7; }
+
+    /* Stats */
+    .stat-big {
+      font-size: 36px; font-weight: 600;
+      letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+      line-height: 1.05;
+    }
+    .stat-big.yellow { color: var(--yellow); }
+    .stat-big.green  { color: var(--green); }
+    .stat-big.aqua   { color: var(--aqua); }
+
+    /* Service tile inner layout */
+    .svc-spacer { flex: 1; }
+    .svc-title  { font-size: 16px; color: var(--fg-2); font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+    .svc-title.big { font-size: 20px; }
+    .svc-desc   { font-size: 11px; color: var(--gray-2); line-height: 1.5; }
+    .svc-desc.big { font-size: 12px; }
+
+    .svc-stats {
+      display: flex; gap: 14px;
+      margin-top: 14px; padding-top: 12px;
+      border-top: 1px solid var(--bg-2);
+    }
+    .svc-stat-label {
+      color: var(--gray-1); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+    }
+    .svc-stat-val {
+      color: var(--fg-1); font-size: 14px; font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Compact tile inner */
+    .compact-text { flex: 1; min-width: 0; }
+    .compact-title { font-size: 13px; color: var(--fg-2); font-weight: 600; letter-spacing: -0.01em; }
+    .compact-sub   { font-size: 11px; color: var(--gray-2); margin-top: 1px; }
+
+    /* Hermes section */
+    .hermes-section { max-width: 1240px; margin: 16px auto 0; }
+    .hermes-jobs { display: flex; flex-direction: column; gap: 10px; }
+    .hermes-job {
+      background: var(--bg-1); border: 1px solid var(--bg-2);
+      border-radius: 6px; padding: 14px 18px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .hermes-job.running { border-color: rgba(125,174,163,0.35); }
+    .hermes-job.error   { border-color: rgba(234,105,98,0.35); }
+    .hermes-job-header  { display: flex; align-items: center; gap: 10px; }
     .hermes-badge {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      padding: 2px 7px;
-      border-radius: 4px;
-      flex-shrink: 0;
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+      padding: 2px 7px; border-radius: 3px;
     }
-    .hermes-badge.research { background: #1d2d3e; color: var(--accent); }
-    .hermes-badge.forecast { background: #2a1d3e; color: #c084fc; }
-    .hermes-topic {
-      font-size: 13px;
-      font-weight: 500;
-      flex: 1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .hermes-meta {
-      font-size: 11px;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+    .hermes-badge.research { background: var(--blue-dim);   color: var(--blue); }
+    .hermes-badge.forecast { background: var(--purple-dim); color: var(--purple); }
+    .hermes-topic { font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hermes-meta  { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--gray-1); }
     .hermes-spinner {
       width: 10px; height: 10px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      flex-shrink: 0;
+      border: 2px solid var(--bg-3); border-top-color: var(--aqua);
+      border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;
     }
-    .hermes-progress {
-      height: 3px;
-      background: var(--surface2);
-      border-radius: 2px;
-      overflow: hidden;
-    }
+    .hermes-progress { height: 3px; background: var(--bg-2); border-radius: 2px; overflow: hidden; margin-top: 2px; }
     .hermes-progress-bar {
-      height: 100%;
-      border-radius: 2px;
-      background: linear-gradient(90deg, var(--accent), #79c0ff);
-      animation: indeterminate 1.6s ease-in-out infinite;
-      width: 40%;
+      height: 100%; border-radius: 2px;
+      background: linear-gradient(90deg, var(--aqua), var(--blue));
+      animation: indeterminate 1.6s ease-in-out infinite; width: 40%;
     }
-    .hermes-progress-bar.forecast-bar {
-      background: linear-gradient(90deg, #c084fc, #e0aaff);
-    }
-    .hermes-done-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      flex-shrink: 0;
-    }
-    .hermes-err-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--red);
-      flex-shrink: 0;
-    }
+    .hermes-progress-bar.forecast-bar { background: linear-gradient(90deg, var(--purple), #e0aaff); }
+    .hermes-done-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+    .hermes-err-dot  { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes indeterminate {
       0%   { transform: translateX(-100%); }
       100% { transform: translateX(350%); }
     }
+
+    /* ── Models modal ────────────────────────────────────────────── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.72); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-panel {
+      background: var(--bg-1); border: 1px solid var(--bg-3);
+      border-radius: 6px; width: min(660px, 95vw);
+      max-height: 85vh; overflow-y: auto;
+      display: flex; flex-direction: column;
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--bg-2);
+      font-weight: 600; font-size: 14px; flex-shrink: 0;
+      position: sticky; top: 0; background: var(--bg-1); z-index: 1;
+    }
+    .modal-close {
+      background: none; border: none; color: var(--gray-1); cursor: pointer;
+      font-size: 16px; padding: 2px 6px; border-radius: 4px;
+    }
+    .modal-close:hover { color: var(--fg-1); background: var(--bg-2); }
+    .modal-body { padding: 20px; }
+    .models-table { width: 100%; border-collapse: collapse; }
+    .models-table th {
+      font-size: 10px; color: var(--gray-1); text-transform: uppercase; letter-spacing: 0.1em;
+      padding: 0 8px 10px 0; text-align: left;
+      border-bottom: 1px solid var(--bg-2); font-weight: 600;
+    }
+    .models-table td { padding: 10px 8px 10px 0; border-bottom: 1px solid var(--bg-2); vertical-align: middle; }
+    .models-table tr:last-child td { border-bottom: none; }
+    .svc-label { font-size: 13px; font-weight: 500; white-space: nowrap; }
+    .model-input-wrap { display: flex; align-items: center; gap: 6px; }
+    .model-input {
+      flex: 1; min-width: 0;
+      background: var(--bg-0); border: 1px solid var(--bg-3);
+      border-radius: 4px; color: var(--fg-1);
+      font-size: 12px; font-family: var(--mono); padding: 5px 8px; outline: none;
+      transition: border-color 0.15s;
+    }
+    .model-input:focus   { border-color: var(--yellow); }
+    .model-input.valid   { border-color: var(--green); }
+    .model-input.invalid { border-color: var(--red); }
+    .val-icon { font-size: 12px; width: 14px; text-align: center; flex-shrink: 0; }
+    .model-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: background 0.3s; }
+    .model-dot.ok      { background: var(--green); box-shadow: 0 0 4px var(--green); }
+    .model-dot.error   { background: var(--red); }
+    .model-dot.unknown { background: var(--bg-3); }
+    .save-btn {
+      background: var(--aqua); border: none; border-radius: 4px;
+      color: var(--bg-dim); font-size: 12px; font-weight: 600;
+      padding: 5px 12px; cursor: pointer; flex-shrink: 0;
+      transition: opacity 0.15s; white-space: nowrap; font-family: var(--mono);
+    }
+    .save-btn:hover { opacity: 0.85; }
+    .save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 1099px) {
+      .bento {
+        grid-template-columns: repeat(6, 1fr);
+        grid-auto-rows: 92px;
+      }
+      .tile-hero       { grid-column: 1 / span 6; grid-row: 1 / span 2; }
+      .tile-stat-unreviewed { grid-column: 1 / span 3; grid-row: 3; }
+      .tile-stat-pending    { grid-column: 4 / span 3; grid-row: 3; }
+      .tile-chat    { grid-column: 1 / span 3; grid-row: 4 / span 3; }
+      .tile-search  { grid-column: 4 / span 3; grid-row: 4 / span 2; }
+      .tile-new     { grid-column: 4 / span 3; grid-row: 6 / span 2; }
+      .tile-reports { grid-column: 1 / span 3; grid-row: 7 / span 2; }
+      .tile-kanban  { grid-column: 4 / span 3; grid-row: 8 / span 2; }
+      .tile-compact-projects { grid-column: 1 / span 3; grid-row: 9; }
+      .tile-compact-system   { grid-column: 4 / span 3; grid-row: 9; }
+      .tile-compact-models   { grid-column: 1 / span 3; grid-row: 10; }
+      .tile-compact-inbox    { grid-column: 4 / span 3; grid-row: 10; }
+    }
+
+    @media (max-width: 719px) {
+      .bento {
+        grid-template-columns: 1fr;
+        grid-auto-rows: auto;
+      }
+      .tile-hero,
+      .tile-stat-unreviewed, .tile-stat-pending,
+      .tile-chat, .tile-search, .tile-new, .tile-reports, .tile-kanban,
+      .tile-compact-projects, .tile-compact-system, .tile-compact-models, .tile-compact-inbox {
+        grid-column: 1; grid-row: auto;
+      }
+      .tile-stat { min-height: 80px; }
+      .tile-svc  { min-height: 100px; }
+      .tile-compact { min-height: 64px; }
+    }
   </style>
 </head>
 <body>
 
-<header>
-  <div class="logo">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-      <rect x="3" y="1.5" width="10" height="13" rx="1.5"/>
-      <line x1="5.5" y1="5.5" x2="10.5" y2="5.5"/>
-      <line x1="5.5" y1="8" x2="10.5" y2="8"/>
-      <line x1="5.5" y1="10.5" x2="8.5" y2="10.5"/>
-    </svg>
+<!-- ── Top nav ── -->
+<nav class="gv-top-bar">
+  <div class="gv-logo-area">
+    <div class="gv-logo-mark">w</div>
+    <span class="gv-breadcrumb-root">workspace</span>
+    <span class="gv-breadcrumb-sep">/</span>
+    <span class="gv-breadcrumb-page">home</span>
   </div>
-  <h1>Workspace</h1>
-  <div class="live-dot" title="Notes RAG online"></div>
-</header>
-
-<main>
-  <!-- Stats row -->
-  <div class="stats-row">
-    <div class="stat-card">
-      <div class="stat-value loading" id="stat-chunks">—</div>
-      <div class="stat-label">Indexed Chunks</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value loading" id="stat-unreviewed">—</div>
-      <div class="stat-label">Unreviewed Notes</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value loading" id="stat-todos">—</div>
-      <div class="stat-label">Pending Todos</div>
-    </div>
+  <div class="gv-nav">
+    <a href="/"        class="gv-nav-pill active">workspace</a>
+    <a href="/new"     class="gv-nav-pill">new</a>
+    <a href="/notes"   class="gv-nav-pill">search</a>
+    <a href="/chat"    class="gv-nav-pill">chat</a>
+    <a href="/reports" class="gv-nav-pill">reports</a>
+    <a href="/kanban"  class="gv-nav-pill">kanban</a>
+    <a href="/projects" class="gv-nav-pill">projects</a>
   </div>
+  <div class="gv-top-right">
+    <div class="gv-cmd-hint" style="font-size:11px">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+      </svg>
+      search anything
+      <span style="margin-left:10px"><span class="gv-kbd">⌘</span><span class="gv-kbd">K</span></span>
+    </div>
+    <div class="gv-active-dot" id="top-dot" style="opacity:0.3"></div>
+  </div>
+</nav>
 
-  <!-- Tiles -->
-  <div class="section-label">Services</div>
-  <div class="tiles">
+<!-- ── Content ── -->
+<div class="gv-content">
+  <div class="bento">
 
-    <a class="tile primary" href="/new">
-      <div class="tile-top">
-        <div class="tile-icon">
-          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="9" y1="3" x2="9" y2="15"/><line x1="3" y1="9" x2="15" y2="9"/>
-          </svg>
+    <!-- HERO — 8×2 -->
+    <div class="gv-tile tinted-yellow tile-hero">
+      <div>
+        <div class="gv-eyebrow" style="margin-bottom:6px">
+          <span class="pip"></span> WORKSPACE
         </div>
-        <div class="health-dot up" id="health-notes"></div>
-      </div>
-      <div class="tile-title">New</div>
-      <div class="tile-desc">Create a todo or note and save it to the workspace</div>
-    </a>
-
-    <a class="tile" href="/notes">
-      <div class="tile-top">
-        <div class="tile-icon">
-          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="7.5" cy="7.5" r="4.5"/><line x1="11.5" y1="11.5" x2="15" y2="15"/>
-          </svg>
+        <div style="font-size:26px;color:var(--fg-2);font-weight:600;letter-spacing:-0.02em;margin-top:6px;line-height:1.2">
+          Notes, todos, reports — one searchable surface.
         </div>
-      </div>
-      <div class="tile-title">Search</div>
-      <div class="tile-desc">Find notes by keyword — deduplicated BM25 + vector results</div>
-    </a>
-    <a class="tile" href="/chat">
-      <div class="tile-top">
-        <div class="tile-icon">
-          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 10.5a1.5 1.5 0 0 1-1.5 1.5h-9L1.5 15V3a1.5 1.5 0 0 1 1.5-1.5h10.5A1.5 1.5 0 0 1 15 3v7.5z"/>
-          </svg>
-        </div>
-        <div class="health-dot" id="health-search"></div>
-      </div>
-      <div class="tile-title">Chat</div>
-      <div class="tile-desc">Ask your workspace — LLM-synthesised answers</div>
-    </a>
-
-    <a class="tile" href="/reports/infra-biweekly">
-      <div class="tile-top">
-        <div class="tile-icon">
-          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="3" width="14" height="4" rx="1"/><rect x="2" y="9" width="14" height="4" rx="1"/>
-            <circle cx="13.5" cy="5" r="0.75" fill="currentColor" stroke="none"/><circle cx="13.5" cy="11" r="0.75" fill="currentColor" stroke="none"/>
-          </svg>
+        <div style="color:var(--gray-2);font-size:13px;margin-top:8px;max-width:520px;line-height:1.55">
+          Hybrid retrieval over your homelab knowledge base.
+          <span style="color:var(--yellow)" id="hero-chunks">…</span> chunks across notes, system reports, projects.
         </div>
       </div>
-      <div class="tile-title">System</div>
-      <div class="tile-desc">Infrastructure reports and system summaries</div>
-    </a>
-
-    <a class="tile" href="/reports">
-      <div class="tile-top">
-        <div class="tile-icon">
-          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2.5" y="2.5" width="13" height="13" rx="1.5"/>
-            <line x1="5.5" y1="7" x2="12.5" y2="7"/><line x1="5.5" y1="10" x2="10" y2="10"/><line x1="5.5" y1="13" x2="8" y2="13"/>
-          </svg>
-        </div>
-        <div class="health-dot" id="health-reports"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="gv-pill green" id="hero-status">● connecting</span>
+        <span class="gv-pill aqua">▴ synced</span>
+        <span class="gv-pill">k=12 · α=0.5</span>
       </div>
-      <div class="tile-title">Reports</div>
-      <div class="tile-desc">Research reports and workspace summaries</div>
-    </a>
-
-    <a class="tile" href="/kanban">
-      <div class="tile-top">
-        <div class="tile-icon">
-          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2.5" y="3" width="3.5" height="12" rx="1"/>
-            <rect x="7.25" y="3" width="3.5" height="8" rx="1"/>
-            <rect x="12" y="3" width="3.5" height="10" rx="1"/>
-          </svg>
-        </div>
-        <div class="health-dot" id="health-kanban"></div>
-      </div>
-      <div class="tile-title">Kanban</div>
-      <div class="tile-desc">Project board and task tracking</div>
-    </a>
-
-    <a class="tile" href="/projects">
-      <div class="tile-top">
-        <div class="tile-icon">
-          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="2" width="6" height="6" rx="1.5"/>
-            <rect x="10" y="2" width="6" height="6" rx="1.5"/>
-            <rect x="2" y="10" width="6" height="6" rx="1.5"/>
-            <rect x="10" y="10" width="6" height="6" rx="1.5"/>
-          </svg>
-        </div>
-      </div>
-      <div class="tile-title">Projects</div>
-      <div class="tile-desc">Browse active projects — goals, containers, repos, and related notes</div>
-    </a>
-
-    <!-- LLM Models tile -->
-    <div class="tile" onclick="openModelsModal()">
-      <div class="tile-top">
-        <div class="tile-icon">
-          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="9" cy="9" r="2.5"/>
-            <path d="M9 2.5v1.75M9 13.75v1.75M2.5 9h1.75M13.75 9h1.75"/>
-            <path d="M4.4 4.4l1.2 1.2M12.4 12.4l1.2 1.2M4.4 13.6l1.2-1.2M12.4 5.6l1.2-1.2"/>
-          </svg>
-        </div>
-      </div>
-      <div class="tile-title">LLM Models</div>
-      <div class="tile-desc">View and update active models across all services</div>
     </div>
 
-  </div>
+    <!-- STAT: Unreviewed Notes — 4×1 -->
+    <div class="gv-tile tinted-green tile-stat tile-stat-unreviewed">
+      <div class="gv-eyebrow">
+        <span class="pip" style="background:var(--green)"></span> UNREVIEWED NOTES
+      </div>
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <div class="stat-big green" id="stat-unreviewed">—</div>
+        <div style="color:var(--gray-2);font-size:11px" id="stat-unreviewed-sub">loading</div>
+      </div>
+    </div>
 
-  <!-- Hermes queue status -->
+    <!-- STAT: Pending Todos — 4×1 -->
+    <div class="gv-tile tinted-aqua tile-stat tile-stat-pending">
+      <div class="gv-eyebrow">
+        <span class="pip" style="background:var(--aqua)"></span> PENDING TODOS
+      </div>
+      <div style="display:flex;align-items:baseline;gap:10px">
+        <div class="stat-big aqua" id="stat-todos">—</div>
+        <div style="color:var(--gray-2);font-size:11px">in progress</div>
+      </div>
+    </div>
+
+    <!-- SERVICE: Chat — 4×3, featured -->
+    <a href="/chat" class="gv-tile tinted-blue tile-svc tile-chat"
+       style="background:linear-gradient(180deg,var(--bg-1) 0%,rgba(125,174,163,0.03) 100%)">
+      <div class="tile-svc-top">
+        <div class="gv-icon blue" style="width:44px;height:44px">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 5h16v11H8l-4 4z"/>
+          </svg>
+        </div>
+        <div style="flex:1"></div>
+        <div class="gv-active-dot" id="health-chat" style="opacity:0.3"></div>
+        <span class="gv-kbd">c</span>
+      </div>
+      <div class="svc-spacer"></div>
+      <div class="svc-title big">Chat</div>
+      <div class="svc-desc big">Ask your workspace — LLM-synthesised answers with cited sources.</div>
+      <div class="svc-stats">
+        <div>
+          <div class="svc-stat-label">SESSIONS</div>
+          <div class="svc-stat-val" id="stat-sessions">—</div>
+        </div>
+        <div>
+          <div class="svc-stat-label">TOKENS·24H</div>
+          <div class="svc-stat-val" id="stat-tokens">—</div>
+        </div>
+      </div>
+    </a>
+
+    <!-- SERVICE: Search — 4×2 -->
+    <a href="/notes" class="gv-tile tile-svc tile-search">
+      <div class="tile-svc-top">
+        <div class="gv-icon aqua" style="width:36px;height:36px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+          </svg>
+        </div>
+        <div style="flex:1"></div>
+        <div class="gv-active-dot" id="health-search" style="opacity:0.3"></div>
+        <span class="gv-kbd">/</span>
+      </div>
+      <div class="svc-spacer"></div>
+      <div class="svc-title">Search</div>
+      <div class="svc-desc">Find notes by keyword — BM25 + vector results.</div>
+    </a>
+
+    <!-- SERVICE: New — 4×2 -->
+    <a href="/new" class="gv-tile tile-svc tile-new">
+      <div class="tile-svc-top">
+        <div class="gv-icon yellow" style="width:36px;height:36px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/>
+          </svg>
+        </div>
+        <div style="flex:1"></div>
+        <span class="gv-kbd">n</span>
+      </div>
+      <div class="svc-spacer"></div>
+      <div class="svc-title">New</div>
+      <div class="svc-desc">Create a todo or note. Captures to inbox.</div>
+    </a>
+
+    <!-- SERVICE: Reports — 4×2 -->
+    <a href="/reports" class="gv-tile tile-svc tile-reports">
+      <div class="tile-svc-top">
+        <div class="gv-icon purple" style="width:36px;height:36px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>
+          </svg>
+        </div>
+        <div style="flex:1"></div>
+        <div class="gv-active-dot" id="health-reports" style="opacity:0.3"></div>
+        <span class="gv-kbd">r</span>
+      </div>
+      <div class="svc-spacer"></div>
+      <div class="svc-title">Reports</div>
+      <div class="svc-desc">Research reports and weekly summaries.</div>
+    </a>
+
+    <!-- SERVICE: Kanban — 4×2 -->
+    <a href="/kanban" class="gv-tile tile-svc tile-kanban">
+      <div class="tile-svc-top">
+        <div class="gv-icon green" style="width:36px;height:36px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="6" height="16" rx="1"/><rect x="11" y="4" width="6" height="10" rx="1"/><rect x="19" y="4" width="2" height="14" rx="1"/>
+          </svg>
+        </div>
+        <div style="flex:1"></div>
+        <div class="gv-active-dot" id="health-kanban" style="opacity:0.3"></div>
+        <span class="gv-kbd">k</span>
+      </div>
+      <div class="svc-spacer"></div>
+      <div class="svc-title">Kanban</div>
+      <div class="svc-desc">Project board · <span id="kanban-count">—</span> in flight.</div>
+    </a>
+
+    <!-- COMPACT: Projects -->
+    <a href="/projects" class="gv-tile tile-compact tile-compact-projects">
+      <div class="gv-icon orange" style="width:30px;height:30px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/>
+          <rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>
+        </svg>
+      </div>
+      <div class="compact-text">
+        <div class="compact-title">Projects</div>
+        <div class="compact-sub">Active goals</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--gray-0)">
+        <path d="m9 6 6 6-6 6"/>
+      </svg>
+    </a>
+
+    <!-- COMPACT: System -->
+    <a href="/reports/infra-biweekly" class="gv-tile tile-compact tile-compact-system">
+      <div class="gv-icon aqua" style="width:30px;height:30px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/>
+          <path d="M7 7.5h.01M7 16.5h.01"/>
+        </svg>
+      </div>
+      <div class="compact-text">
+        <div class="compact-title">System</div>
+        <div class="compact-sub" id="system-status">Infra reports</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--gray-0)">
+        <path d="m9 6 6 6-6 6"/>
+      </svg>
+    </a>
+
+    <!-- COMPACT: LLM Models (opens modal) -->
+    <div class="gv-tile tile-compact tile-compact-models" onclick="openModelsModal()">
+      <div class="gv-icon red" style="width:30px;height:30px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/>
+        </svg>
+      </div>
+      <div class="compact-text">
+        <div class="compact-title">LLM Models</div>
+        <div class="compact-sub" id="models-sub">3 active</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--gray-0)">
+        <path d="m9 6 6 6-6 6"/>
+      </svg>
+    </div>
+
+    <!-- COMPACT: Inbox -->
+    <a href="/review" class="gv-tile tile-compact tile-compact-inbox">
+      <div class="gv-icon yellow" style="width:30px;height:30px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9z"/><path d="M9 11h6M9 15h4"/>
+        </svg>
+      </div>
+      <div class="compact-text">
+        <div class="compact-title">Inbox</div>
+        <div class="compact-sub"><span id="inbox-count">—</span> unreviewed</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--gray-0)">
+        <path d="m9 6 6 6-6 6"/>
+      </svg>
+    </a>
+
+  </div><!-- /.bento -->
+
+  <!-- Hermes section (below grid, hidden until jobs exist) -->
   <div class="hermes-section" id="hermes-section" style="display:none">
-    <div class="section-label">Hermes Agent</div>
+    <div class="gv-eyebrow" style="margin-bottom:10px"><span class="pip"></span> HERMES AGENT</div>
     <div class="hermes-jobs" id="hermes-jobs"></div>
   </div>
-</main>
 
-<!-- LLM Models Modal -->
+</div><!-- /.gv-content -->
+
+<!-- ── Bottom bar ── -->
+<div class="gv-bottom-bar">
+  <span style="color:var(--green)">●</span>
+  <span id="bb-indexer">indexer idle</span>
+  <span class="sep">│</span>
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/>
+    <path d="M6 8v8M8 18h2a4 4 0 0 0 4-4v-2"/>
+  </svg>
+  main
+  <span class="sep">│</span>
+  <span id="bb-chunks">— chunks</span>
+  <span class="sep">│</span>
+  <span id="bb-models">—</span>
+  <div style="flex:1"></div>
+  <span class="bb-host" id="bb-host">cpu — · mem —</span>
+</div>
+
+<!-- ── LLM Models modal ── -->
 <div class="modal-overlay" id="models-modal" onclick="closeModalOnBg(event)">
   <div class="modal-panel">
     <div class="modal-header">
       <span>LLM Models</span>
-      <button class="modal-close" onclick="closeModelsModal()" title="Close">✕</button>
+      <button class="modal-close" onclick="closeModelsModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div id="models-loading" style="color:var(--text-muted);font-size:13px;padding:4px 0">Loading...</div>
+      <div id="models-loading" style="color:var(--gray-1);font-size:13px;padding:4px 0">Loading…</div>
       <table class="models-table" id="models-table" style="display:none">
-        <thead>
-          <tr>
-            <th style="width:110px">Service</th>
-            <th>Model</th>
-            <th style="width:24px" title="Model health"></th>
-            <th style="width:64px"></th>
-          </tr>
-        </thead>
+        <thead><tr>
+          <th style="width:110px">Service</th>
+          <th>Model</th>
+          <th style="width:24px" title="Health"></th>
+          <th style="width:64px"></th>
+        </tr></thead>
         <tbody id="models-tbody"></tbody>
       </table>
     </div>
@@ -554,62 +527,64 @@
 </div>
 
 <script>
-  // ── Stats ────────────────────────────────────────────────────────────────────
+  // ── Stats ────────────────────────────────────────────────────────────────
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
   async function loadStats() {
-    fetch('/api/stats')
-      .then(r => r.json())
-      .then(d => {
-        const el = document.getElementById('stat-chunks');
-        el.textContent = d.chunk_count != null ? d.chunk_count.toLocaleString() : '—';
-        el.classList.remove('loading');
-      })
-      .catch(() => { document.getElementById('stat-chunks').textContent = '—'; });
+    try {
+      const d = await fetch('/api/stats').then(r => r.json());
+      const n = d.chunk_count != null ? d.chunk_count.toLocaleString() : '—';
+      document.getElementById('hero-chunks').textContent = n;
+      document.getElementById('bb-chunks').textContent = n + ' chunks';
+    } catch { /* leave —'s */ }
 
-    fetch('/api/review/queue')
-      .then(r => r.json())
-      .then(d => {
-        const el = document.getElementById('stat-unreviewed');
-        el.textContent = (d.notes || []).length;
-        el.classList.remove('loading');
-      })
-      .catch(() => { document.getElementById('stat-unreviewed').textContent = '—'; });
+    try {
+      const d = await fetch('/api/review/queue').then(r => r.json());
+      const count = (d.notes || []).length;
+      document.getElementById('stat-unreviewed').textContent = count;
+      document.getElementById('stat-unreviewed-sub').textContent = count === 0 ? 'inbox zero' : 'to review';
+      document.getElementById('inbox-count').textContent = count;
+    } catch { /* leave —'s */ }
 
-    fetch('/api/todos/pending-count')
-      .then(r => r.json())
-      .then(d => {
-        const el = document.getElementById('stat-todos');
-        el.textContent = d.count != null ? d.count : '—';
-        el.classList.remove('loading');
-      })
-      .catch(() => { document.getElementById('stat-todos').textContent = '—'; });
+    try {
+      const d = await fetch('/api/todos/pending-count').then(r => r.json());
+      const count = d.count != null ? d.count : '—';
+      document.getElementById('stat-todos').textContent = count;
+      document.getElementById('kanban-count').textContent = count;
+    } catch { /* leave —'s */ }
   }
 
-  // ── Health dots ───────────────────────────────────────────────────────────────
   async function loadHealth() {
     try {
-      const res = await fetch('/api/services/health');
-      const data = await res.json();
-      const notesUp = data.notes === 'up';
-      ['health-notes', 'health-search'].forEach(id => {
+      const data = await fetch('/api/services/health').then(r => r.json());
+      const up = (svc) => data[svc] === 'up';
+      const applyDot = (id, isUp) => {
         const el = document.getElementById(id);
-        if (el) el.className = 'health-dot ' + (notesUp ? 'up' : 'down');
-      });
-      const map = { reports: 'health-reports', kanban: 'health-kanban' };
-      for (const [svc, id] of Object.entries(map)) {
-        const el = document.getElementById(id);
-        if (el) el.className = 'health-dot ' + (data[svc] === 'up' ? 'up' : 'down');
-      }
-    } catch { /* leave dots grey */ }
+        if (!el) return;
+        el.style.opacity = isUp ? '1' : '0.3';
+        el.style.background = isUp ? 'var(--green)' : 'var(--gray-1)';
+        el.style.boxShadow = isUp
+          ? '0 0 0 3px rgba(169,182,101,0.18)'
+          : 'none';
+      };
+      const anyUp = up('notes') || up('search');
+      applyDot('top-dot',      anyUp);
+      applyDot('health-chat',   up('notes'));
+      applyDot('health-search', up('notes'));
+      applyDot('health-reports', up('reports'));
+      applyDot('health-kanban',  up('kanban'));
+
+      document.getElementById('hero-status').textContent =
+        anyUp ? '● online' : '● offline';
+      document.getElementById('hero-status').className =
+        'gv-pill ' + (anyUp ? 'green' : 'red');
+    } catch { /* leave dots dim */ }
   }
 
   loadStats();
   loadHealth();
 
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js');
-  }
-
-  // ── LLM Models Modal ──────────────────────────────────────────────────────────
+  // ── LLM Models modal ──────────────────────────────────────────────────────
   let _modelsData = [];
   const _validateTimers = {};
 
@@ -620,23 +595,21 @@
   function closeModelsModal() {
     document.getElementById('models-modal').classList.remove('open');
   }
-  function closeModalOnBg(e) {
-    if (e.target === e.currentTarget) closeModelsModal();
-  }
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeModelsModal();
-  });
+  function closeModalOnBg(e) { if (e.target === e.currentTarget) closeModelsModal(); }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModelsModal(); });
 
   async function loadModels() {
     document.getElementById('models-loading').style.display = '';
     document.getElementById('models-table').style.display = 'none';
     try {
-      const res = await fetch('/api/models');
-      const data = await res.json();
+      const data = await fetch('/api/models').then(r => r.json());
       _modelsData = data.services;
       renderModels(data.services);
+      document.getElementById('models-sub').textContent = data.services.length + ' active';
+      document.getElementById('bb-models').textContent =
+        data.services.slice(0,2).map(s => s.model.split('/').pop()).join(' · ');
     } catch (err) {
-      document.getElementById('models-loading').textContent = 'Failed to load — ' + err.message;
+      document.getElementById('models-loading').textContent = 'Failed — ' + err.message;
     }
   }
 
@@ -647,23 +620,23 @@
       const h = svc.health || {};
       const dotClass = h.status === 'ok' ? 'ok' : h.status === 'error' ? 'error' : 'unknown';
       const dotTitle = h.error
-        ? `Error: ${h.error}`
-        : h.last_checked ? `Last checked: ${h.last_checked}` : 'Status unknown';
+        ? 'Error: ' + h.error
+        : h.last_checked ? 'Last checked: ' + h.last_checked : 'Status unknown';
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><span class="svc-label">${svc.label}</span></td>
+        <td><span class="svc-label">${esc(svc.label)}</span></td>
         <td>
           <div class="model-input-wrap">
             <input class="model-input" id="inp-${svc.id}" type="text"
-              value="${svc.model}" placeholder="provider/model-name"
+              value="${esc(svc.model)}" placeholder="provider/model-name"
               oninput="scheduleValidate('${svc.id}')">
             <span class="val-icon" id="vi-${svc.id}"></span>
           </div>
         </td>
-        <td><div class="model-dot ${dotClass}" id="dot-${svc.id}" title="${dotTitle}"></div></td>
+        <td><div class="model-dot ${dotClass}" id="dot-${svc.id}" title="${esc(dotTitle)}"></div></td>
         <td>
           <button class="save-btn" id="btn-${svc.id}"
-            onclick="saveModel('${svc.id}', ${svc.discord_warning})">Save</button>
+            onclick="saveModel('${svc.id}', ${!!svc.discord_warning})">Save</button>
         </td>`;
       tbody.appendChild(tr);
     });
@@ -673,102 +646,73 @@
 
   function scheduleValidate(svcId) {
     clearTimeout(_validateTimers[svcId]);
-    const inp = document.getElementById(`inp-${svcId}`);
-    const vi  = document.getElementById(`vi-${svcId}`);
-    inp.className = 'model-input';
-    vi.textContent = '';
+    const inp = document.getElementById('inp-' + svcId);
+    const vi  = document.getElementById('vi-'  + svcId);
+    inp.className = 'model-input'; vi.textContent = '';
     _validateTimers[svcId] = setTimeout(() => doValidate(svcId), 420);
   }
 
   async function doValidate(svcId) {
-    const inp   = document.getElementById(`inp-${svcId}`);
-    const vi    = document.getElementById(`vi-${svcId}`);
+    const inp = document.getElementById('inp-' + svcId);
+    const vi  = document.getElementById('vi-'  + svcId);
     const model = inp.value.trim();
     if (!model) return;
-    vi.textContent = '…';
-    vi.style.color = 'var(--text-muted)';
+    vi.textContent = '…'; vi.style.color = 'var(--gray-1)';
     try {
-      const res  = await fetch('/api/models/validate?model=' + encodeURIComponent(model));
-      const data = await res.json();
-      if (data.valid) {
-        inp.className   = 'model-input valid';
-        vi.textContent  = '✓';
-        vi.style.color  = 'var(--green)';
-      } else {
-        inp.className   = 'model-input invalid';
-        vi.textContent  = '✗';
-        vi.style.color  = 'var(--red)';
-      }
+      const data = await fetch('/api/models/validate?model=' + encodeURIComponent(model)).then(r => r.json());
+      inp.className  = 'model-input ' + (data.valid ? 'valid' : 'invalid');
+      vi.textContent = data.valid ? '✓' : '✗';
+      vi.style.color = data.valid ? 'var(--green)' : 'var(--red)';
     } catch {
-      vi.textContent = '?';
-      vi.style.color = 'var(--text-muted)';
+      vi.textContent = '?'; vi.style.color = 'var(--gray-1)';
     }
   }
 
   async function saveModel(svcId, discordWarning) {
-    const inp   = document.getElementById(`inp-${svcId}`);
-    const btn   = document.getElementById(`btn-${svcId}`);
-    const dot   = document.getElementById(`dot-${svcId}`);
+    const inp = document.getElementById('inp-' + svcId);
+    const btn = document.getElementById('btn-' + svcId);
+    const dot = document.getElementById('dot-' + svcId);
     const model = inp.value.trim();
     if (!model) return;
-
     if (discordWarning) {
       const label = (_modelsData.find(s => s.id === svcId) || {}).label || svcId;
-      if (!confirm(`This will restart ${label}, dropping any in-flight Discord messages.\n\nContinue?`)) return;
+      if (!confirm('This will restart ' + label + ', dropping any in-flight Discord messages.\n\nContinue?')) return;
     }
-
-    btn.disabled    = true;
-    btn.textContent = '...';
-
+    btn.disabled = true; btn.textContent = '…';
     try {
-      const res  = await fetch(`/api/models/${svcId}`, {
+      const data = await fetch('/api/models/' + svcId, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model }),
-      });
-      const data = await res.json();
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({model}),
+      }).then(r => r.json());
       if (data.updated) {
-        btn.textContent      = 'Saved ✓';
-        btn.style.background = 'var(--green)';
-        btn.style.color      = '#000';
-        dot.className        = 'model-dot ok';
-        dot.title            = 'Updated just now';
+        btn.textContent = 'Saved ✓';
+        btn.style.background = 'var(--green)'; btn.style.color = 'var(--bg-dim)';
+        dot.className = 'model-dot ok'; dot.title = 'Updated just now';
         setTimeout(() => {
-          btn.textContent      = 'Save';
-          btn.style.background = '';
-          btn.disabled         = false;
+          btn.textContent = 'Save'; btn.style.background = ''; btn.disabled = false;
         }, 2200);
-      } else {
-        throw new Error(data.error || 'Update failed');
-      }
+      } else throw new Error(data.error || 'Update failed');
     } catch (err) {
-      btn.textContent      = 'Error';
-      btn.style.background = 'var(--red)';
-      btn.style.color      = '#fff';
-      dot.className        = 'model-dot error';
-      dot.title            = String(err);
+      btn.textContent = 'Error'; btn.style.background = 'var(--red)'; btn.style.color = '#fff';
+      dot.className = 'model-dot error'; dot.title = String(err);
       setTimeout(() => {
-        btn.textContent      = 'Save';
-        btn.style.background = '';
-        btn.style.color      = '';
-        btn.disabled         = false;
+        btn.textContent = 'Save'; btn.style.background = ''; btn.style.color = ''; btn.disabled = false;
       }, 3000);
     }
   }
 
-  // ── Hermes status ─────────────────────────────────────────────────────────────
+  // ── Hermes status ─────────────────────────────────────────────────────────
   function elapsedStr(startedAt) {
     if (!startedAt) return '';
-    const secs = Math.floor((Date.now() - new Date(startedAt)) / 1000);
-    if (secs < 60) return secs + 's';
-    return Math.floor(secs / 60) + 'm ' + (secs % 60) + 's';
+    const s = Math.floor((Date.now() - new Date(startedAt)) / 1000);
+    return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
   }
-
   function finishedAgoStr(finishedAt) {
     if (!finishedAt) return '';
-    const secs = Math.floor((Date.now() - new Date(finishedAt)) / 1000);
-    if (secs < 60) return 'just now';
-    if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+    const s = Math.floor((Date.now() - new Date(finishedAt)) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
     return null;
   }
 
@@ -777,42 +721,31 @@
     const isError   = job.status === 'error';
     const isDone    = job.status === 'idle' && job.finished_at;
     if (!isRunning && !isError && !isDone) return null;
-    if (isDone) {
-      const ago = finishedAgoStr(job.finished_at);
-      if (!ago) return null; // older than 1h — hide
-    }
-
-    const cls = isRunning ? 'running' : isError ? 'error' : 'recent';
-    const durationStr = isDone
-      ? (() => {
-          const s = Math.floor((new Date(job.finished_at) - new Date(job.started_at)) / 1000);
-          return s < 60 ? s + 's' : Math.floor(s/60) + 'm ' + (s%60) + 's';
-        })()
-      : '';
-
+    if (isDone && !finishedAgoStr(job.finished_at)) return null;
+    const cls = isRunning ? 'running' : isError ? 'error' : '';
     let metaHtml = '';
     if (isRunning) {
-      metaHtml = `<div class="hermes-meta"><div class="hermes-spinner"></div> Running &mdash; ${elapsedStr(job.started_at)} elapsed</div>
+      metaHtml = `<div class="hermes-meta"><div class="hermes-spinner"></div> Running — ${elapsedStr(job.started_at)} elapsed</div>
                   <div class="hermes-progress"><div class="hermes-progress-bar ${type === 'forecast' ? 'forecast-bar' : ''}"></div></div>`;
     } else if (isError) {
-      metaHtml = `<div class="hermes-meta"><div class="hermes-err-dot"></div> Failed &mdash; ${finishedAgoStr(job.finished_at) || ''}</div>`;
+      metaHtml = `<div class="hermes-meta"><div class="hermes-err-dot"></div> Failed — ${finishedAgoStr(job.finished_at) || ''}</div>`;
     } else {
-      metaHtml = `<div class="hermes-meta"><div class="hermes-done-dot"></div> Completed in ${durationStr} &mdash; ${finishedAgoStr(job.finished_at)}</div>`;
+      const dur = (() => {
+        const s = Math.floor((new Date(job.finished_at) - new Date(job.started_at)) / 1000);
+        return s < 60 ? s + 's' : Math.floor(s/60) + 'm ' + (s%60) + 's';
+      })();
+      metaHtml = `<div class="hermes-meta"><div class="hermes-done-dot"></div> Completed in ${dur} — ${finishedAgoStr(job.finished_at)}</div>`;
     }
-
     return `<div class="hermes-job ${cls}">
       <div class="hermes-job-header">
         <span class="hermes-badge ${type}">${type}</span>
-        <span class="hermes-topic">${job.topic || '—'}</span>
-      </div>
-      ${metaHtml}
-    </div>`;
+        <span class="hermes-topic">${esc(job.topic || '—')}</span>
+      </div>${metaHtml}</div>`;
   }
 
   async function pollHermes() {
     try {
-      const res  = await fetch('/api/hermes/status');
-      const data = await res.json();
+      const data = await fetch('/api/hermes/status').then(r => r.json());
       const cards = [];
       for (const type of ['research', 'forecast']) {
         const card = renderHermesJob(type, data[type] || {});
@@ -831,6 +764,19 @@
 
   pollHermes();
   setInterval(pollHermes, 5000);
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === '/') { e.preventDefault(); location.href = '/notes'; }
+    if (e.key === 'n') location.href = '/new';
+    if (e.key === 'c') location.href = '/chat';
+    if (e.key === 'r') location.href = '/reports';
+    if (e.key === 'k') location.href = '/kanban';
+  });
+</script>
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 </script>
 </body>
 </html>
