@@ -2,313 +2,277 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1a1a1a">
+  <meta name="theme-color" content="#d8a657">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Notes RAG">
   <link rel="apple-touch-icon" href="/ui/icon.png">
+  <link rel="stylesheet" href="/ui/theme.css">
   <title>Chat — Notes RAG</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:        #1a1a1a;
-      --surface:   #32302f;
-      --surface2:  #3c3836;
-      --border:    #504945;
-      --text:      #ebdbb2;
-      --text-muted:#a89984;
-      --accent:    #83a598;
-      --user-bg:   #3c3836;
-      --tag-bg:    #3c3836;
-      --green:     #b8bb26;
-      --code-bg:   #1d2021;
-      --radius:    8px;
-    }
-
-    html, body { height: 100%; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
+    /* ── Layout ─────────────────────────────────────────────────── */
+    .chat-layout {
       display: flex;
-      flex-direction: column;
-      height: 100%;
-      font-size: 14px;
-      line-height: 1.6;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
     }
 
-    /* ── Header ── */
-    header {
-      border-bottom: 1px solid var(--border);
-      padding: 12px 24px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: var(--surface);
-      flex-shrink: 0;
-    }
-    header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
-    .badge {
-      font-size: 11px; padding: 2px 8px;
-      border-radius: 999px; border: 1px solid var(--border);
-      color: var(--text-muted); background: var(--tag-bg);
-    }
-    .badge.green { color: var(--green); border-color: #2ea04330; background: #2ea04310; }
-    #home-btn, #review-btn { background: var(--tag-bg); border: 1px solid var(--border); color: var(--text-muted);
-      border-radius: 6px; padding: 5px 12px; font-size: 12px; text-decoration: none;
-      transition: border-color 0.15s, color 0.15s; }
-    #home-btn:hover, #review-btn:hover { border-color: var(--accent); color: var(--text); }
-    .spacer { flex: 1; }
-    #chunk-count { font-size: 11px; color: var(--text-muted); font-family: 'SF Mono', monospace; }
-
-    /* ── Layout ── */
-    .layout { display: flex; flex: 1; overflow: hidden; }
-
-    /* ── Chat panel ── */
-    .chat-panel {
+    /* ── Messages area ───────────────────────────────────────────── */
+    .chat-main {
       flex: 1; display: flex; flex-direction: column;
-      overflow: hidden; border-right: 1px solid var(--border);
+      overflow: hidden; border-right: 1px solid var(--bg-2);
     }
-
     .messages {
       flex: 1; overflow-y: auto;
       padding: 24px; display: flex; flex-direction: column;
       gap: 24px; scroll-behavior: smooth;
+      max-width: 880px; width: 100%; align-self: center;
     }
     .messages::-webkit-scrollbar { width: 6px; }
-    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .messages::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
 
-    /* Welcome */
-    .welcome { margin: auto; text-align: center; max-width: 480px; }
-    .welcome h2 { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
-    .welcome p { color: var(--text-muted); margin-bottom: 24px; }
+    /* ── Welcome state ───────────────────────────────────────────── */
+    .welcome { margin: auto; text-align: center; max-width: 480px; padding: 40px 20px; }
+    .welcome h2 { font-size: 20px; font-weight: 600; margin-bottom: 8px; color: var(--fg-2); letter-spacing: -0.01em; }
+    .welcome p  { color: var(--gray-2); margin-bottom: 24px; font-size: 13px; line-height: 1.55; }
     .examples { display: flex; flex-direction: column; gap: 8px; }
     .example-btn {
-      background: var(--surface); border: 1px solid var(--border);
-      color: var(--text-muted); padding: 10px 16px;
-      border-radius: var(--radius); cursor: pointer;
-      text-align: left; font-size: 13px;
-      transition: border-color 0.15s, color 0.15s;
+      background: var(--bg-1); border: 1px solid var(--bg-2);
+      color: var(--gray-2); padding: 10px 16px;
+      border-radius: 6px; cursor: pointer; text-align: left;
+      font-size: 13px; font-family: var(--mono);
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
     }
-    .example-btn:hover { border-color: var(--accent); color: var(--text); }
+    .example-btn:hover { border-color: var(--blue); color: var(--fg-1); background: var(--bg-2); }
 
-    /* Exchange */
+    /* ── Message bubbles ─────────────────────────────────────────── */
     .exchange { display: flex; flex-direction: column; gap: 12px; }
 
     .user-msg {
-      align-self: flex-end; background: var(--user-bg);
-      border: 1px solid #2d4a6a; border-radius: var(--radius);
-      padding: 10px 14px; max-width: 75%;
-      color: var(--text); font-size: 13px; white-space: pre-wrap;
+      align-self: flex-end;
+      background: var(--bg-2); border: 1px solid rgba(125,174,163,0.3);
+      border-radius: 6px; padding: 10px 14px;
+      max-width: 75%; color: var(--fg-1); font-size: 13px; white-space: pre-wrap;
     }
 
     .assistant-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); overflow: hidden;
+      background: var(--bg-1); border: 1px solid var(--bg-2);
+      border-radius: 6px; overflow: hidden;
     }
 
+    /* ── Answer body (markdown) ──────────────────────────────────── */
     .answer-body {
-      padding: 16px; color: var(--text);
+      padding: 16px; color: var(--fg-1);
       font-size: 13.5px; line-height: 1.7;
     }
     .answer-body h1, .answer-body h2, .answer-body h3 {
-      font-size: 14px; font-weight: 600; margin: 12px 0 4px;
+      font-size: 14px; font-weight: 600; margin: 12px 0 4px; color: var(--fg-2);
     }
     .answer-body p { margin-bottom: 10px; }
     .answer-body p:last-child { margin-bottom: 0; }
-    .answer-body strong { font-weight: 600; }
-    .answer-body em { font-style: italic; color: var(--text-muted); }
+    .answer-body strong { font-weight: 600; color: var(--fg-2); }
+    .answer-body em { font-style: italic; color: var(--gray-2); }
     .answer-body code {
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      background: var(--code-bg); border: 1px solid var(--border);
-      border-radius: 4px; padding: 1px 5px; font-size: 12px; color: #e3b341;
+      background: var(--bg-0); border: 1px solid var(--bg-3);
+      border-radius: 3px; padding: 1px 5px;
+      font-size: 12px; color: var(--yellow); font-family: var(--mono);
     }
     .answer-body pre {
-      background: var(--code-bg); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 12px;
-      overflow-x: auto; margin: 10px 0;
+      background: var(--bg-0); border: 1px solid var(--bg-2);
+      border-radius: 6px; padding: 12px; overflow-x: auto; margin: 10px 0;
     }
-    .answer-body pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 12px; }
+    .answer-body pre code { background: none; border: none; padding: 0; color: var(--fg-1); font-size: 12px; }
     .answer-body ul, .answer-body ol { padding-left: 20px; margin-bottom: 10px; }
     .answer-body li { margin-bottom: 3px; }
     .answer-body blockquote {
-      border-left: 3px solid var(--border); padding-left: 12px;
-      color: var(--text-muted); margin: 8px 0;
+      border-left: 2px solid var(--bg-3); padding-left: 12px;
+      color: var(--gray-2); margin: 8px 0;
     }
 
-    /* Cursor blink while streaming */
+    /* Streaming cursor */
     .streaming-cursor::after {
       content: '▍'; animation: blink 0.8s step-end infinite;
-      color: var(--accent); font-size: 12px;
+      color: var(--yellow); font-size: 12px;
     }
     @keyframes blink { 50% { opacity: 0; } }
 
-    /* Card footer: sources + latency */
+    /* ── Card footer ─────────────────────────────────────────────── */
     .card-footer {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 16px; border-top: 1px solid var(--border);
-      font-size: 12px; color: var(--text-muted);
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 8px 16px; border-top: 1px solid var(--bg-2);
+      font-size: 12px; color: var(--gray-2);
     }
     .sources-toggle {
       display: flex; align-items: center; gap: 6px;
       cursor: pointer; user-select: none;
       transition: color 0.15s; flex: 1;
     }
-    .sources-toggle:hover { color: var(--text); }
+    .sources-toggle:hover { color: var(--fg-1); }
     .sources-toggle .chevron { transition: transform 0.2s; font-size: 10px; }
     .sources-toggle.open .chevron { transform: rotate(90deg); }
     .sources-count {
-      background: var(--tag-bg); border: 1px solid var(--border);
-      border-radius: 999px; padding: 1px 7px; font-size: 11px;
+      background: var(--bg-2); border: 1px solid var(--bg-3);
+      border-radius: 999px; padding: 1px 7px; font-size: 10px;
     }
     .source-chips { display: flex; gap: 4px; flex-wrap: wrap; }
     .chip {
-      font-size: 10px; padding: 1px 6px; border-radius: 999px;
-      background: var(--tag-bg); border: 1px solid var(--border);
-      color: var(--text-muted); max-width: 160px;
+      font-size: 10px; padding: 2px 8px; border-radius: 999px;
+      background: var(--aqua-dim); border: 1px solid rgba(137,180,130,0.3);
+      color: var(--aqua); max-width: 180px;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    .chip.todo   { background: var(--yellow-dim); border-color: rgba(216,166,87,0.3); color: var(--yellow); }
+    .chip.report { background: var(--purple-dim); border-color: rgba(211,134,155,0.3); color: var(--purple); }
     .latency {
-      font-size: 11px; color: var(--text-muted);
-      font-family: 'SF Mono', monospace; white-space: nowrap; flex-shrink: 0;
+      font-size: 11px; color: var(--gray-1); white-space: nowrap; flex-shrink: 0;
     }
-    .latency .phase { color: var(--accent); }
+    .latency .phase { color: var(--aqua); }
 
-    /* Chunks panel (inline) */
-    .chunks-panel {
-      display: none; flex-direction: column;
-      gap: 1px; background: var(--border);
-      border-top: 1px solid var(--border);
-    }
+    /* ── Chunks panel ────────────────────────────────────────────── */
+    .chunks-panel { display: none; flex-direction: column; gap: 1px; border-top: 1px solid var(--bg-2); }
     .chunks-panel.open { display: flex; }
 
-    .chunk { background: var(--surface2); overflow: hidden; }
+    .chunk { background: var(--bg-2); overflow: hidden; }
     .chunk-header {
       display: flex; align-items: center; gap: 8px;
       padding: 8px 16px; cursor: pointer; user-select: none;
     }
-    .chunk-header:hover { background: var(--surface); }
+    .chunk-header:hover { background: var(--bg-3); }
     .chunk-filename {
-      font-size: 11px; font-family: 'SF Mono', monospace;
-      color: var(--accent); flex: 1;
+      font-size: 11px; color: var(--aqua); flex: 1;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .score-bar { width: 40px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
-    .score-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; }
-    .chunk-score { font-size: 10px; color: var(--text-muted); font-family: monospace; }
-    .chunk-expand { color: var(--text-muted); font-size: 10px; transition: transform 0.15s; }
+    .score-bar { width: 40px; height: 3px; background: var(--bg-3); border-radius: 2px; overflow: hidden; }
+    .score-bar-fill { height: 100%; background: var(--yellow); border-radius: 2px; }
+    .chunk-score { font-size: 10px; color: var(--yellow); font-variant-numeric: tabular-nums; }
+    .chunk-expand { color: var(--gray-0); font-size: 10px; transition: transform 0.15s; }
     .chunk.expanded .chunk-expand { transform: rotate(90deg); }
     .chunk-content {
       display: none; padding: 0 16px 12px;
-      font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace;
-      color: var(--text-muted); line-height: 1.6;
+      font-size: 12px; color: var(--gray-2); line-height: 1.6;
       white-space: pre-wrap; word-break: break-word;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--bg-3);
     }
     .chunk.expanded .chunk-content { display: block; }
 
-    /* Loading */
+    /* ── Loading ─────────────────────────────────────────────────── */
     .loading-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 16px;
+      background: var(--bg-1); border: 1px solid var(--bg-2);
+      border-radius: 6px; padding: 16px;
       display: flex; align-items: center; gap: 10px;
-      color: var(--text-muted); font-size: 13px;
+      color: var(--gray-2); font-size: 13px;
     }
     .spinner {
       width: 14px; height: 14px;
-      border: 2px solid var(--border); border-top-color: var(--accent);
+      border: 2px solid var(--bg-3); border-top-color: var(--aqua);
       border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Sidebar ── */
+    /* ── Sidebar (sources panel) ─────────────────────────────────── */
     .sources-panel-side {
-      width: 340px; flex-shrink: 0; overflow-y: auto;
-      background: var(--surface); display: flex; flex-direction: column;
+      width: 320px; flex-shrink: 0; overflow-y: auto;
+      background: var(--bg-0); display: flex; flex-direction: column;
+      border-left: 1px solid var(--bg-2);
     }
     .sources-panel-side::-webkit-scrollbar { width: 6px; }
-    .sources-panel-side::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .sources-panel-side::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
     .side-header {
-      padding: 14px 16px 10px; font-size: 11px; font-weight: 600;
-      color: var(--text-muted); text-transform: uppercase;
-      letter-spacing: 0.6px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      padding: 14px 16px 10px;
+      font-size: 10px; font-weight: 600; color: var(--gray-1);
+      text-transform: uppercase; letter-spacing: 0.14em;
+      border-bottom: 1px solid var(--bg-2); flex-shrink: 0;
     }
-    .side-empty { padding: 24px 16px; color: var(--text-muted); font-size: 12px; text-align: center; }
+    .side-empty { padding: 24px 16px; color: var(--gray-1); font-size: 12px; text-align: center; }
 
-    .side-chunk { border-bottom: 1px solid var(--border); overflow: hidden; }
+    .side-chunk { border-bottom: 1px solid var(--bg-2); overflow: hidden; }
     .side-chunk-header { padding: 10px 16px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
-    .side-chunk-header:hover { background: var(--surface2); }
+    .side-chunk-header:hover { background: var(--bg-1); }
     .side-chunk-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .side-chunk-filename {
-      font-size: 11px; font-family: 'SF Mono', monospace;
-      color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .side-chunk-score { font-size: 10px; color: var(--text-muted); font-family: monospace; flex-shrink: 0; }
-    .side-score-bar { width: 100%; height: 2px; background: var(--border); border-radius: 2px; }
-    .side-score-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; opacity: 0.7; }
-    .side-chunk-preview {
-      font-size: 11px; color: var(--text-muted);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
+    .side-chunk-filename { font-size: 11px; color: var(--aqua); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .side-chunk-score { font-size: 10px; color: var(--yellow); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+    .side-score-bar { width: 100%; height: 2px; background: var(--bg-3); border-radius: 2px; }
+    .side-score-bar-fill { height: 100%; background: var(--yellow); border-radius: 2px; opacity: 0.7; }
+    .side-chunk-preview { font-size: 11px; color: var(--gray-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .side-chunk-body {
       display: none; padding: 0 16px 12px;
-      font-size: 11px; font-family: 'SF Mono', monospace;
-      color: var(--text-muted); white-space: pre-wrap;
+      font-size: 11px; color: var(--gray-2); white-space: pre-wrap;
       word-break: break-word; line-height: 1.6;
     }
     .side-chunk.expanded .side-chunk-body { display: block; }
-    .side-chunk.expanded .side-chunk-header { background: var(--surface2); }
+    .side-chunk.expanded .side-chunk-header { background: var(--bg-1); }
 
-    /* ── Input bar ── */
+    /* ── Composer ────────────────────────────────────────────────── */
     .input-bar {
-      border-top: 1px solid var(--border); padding: 12px 24px;
-      background: var(--surface); display: flex; gap: 10px;
+      border-top: 1px solid var(--bg-2); padding: 12px 24px;
+      background: var(--bg-0); display: flex; gap: 10px;
       align-items: flex-end; flex-shrink: 0;
+      max-width: 880px; width: 100%; align-self: center;
+      box-sizing: border-box;
     }
     .input-wrap {
-      flex: 1; background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--radius); display: flex; align-items: flex-end;
+      flex: 1; background: var(--bg-1); border: 1px solid var(--bg-3);
+      border-radius: 6px; display: flex; align-items: flex-end;
       transition: border-color 0.15s;
     }
-    .input-wrap:focus-within { border-color: var(--accent); }
+    .input-wrap:focus-within { border-color: var(--yellow); }
     textarea {
       flex: 1; background: transparent; border: none; outline: none;
-      color: var(--text); font-family: inherit; font-size: 13px;
+      color: var(--fg-1); font-family: var(--mono); font-size: 13px;
       padding: 10px 14px; resize: none; max-height: 120px; line-height: 1.5;
     }
-    textarea::placeholder { color: var(--text-muted); }
+    textarea::placeholder { color: var(--gray-0); }
     .send-btn {
-      background: var(--accent); color: #282828; border: none;
-      border-radius: 6px; padding: 8px 16px; cursor: pointer;
-      font-size: 13px; font-weight: 600; flex-shrink: 0;
+      background: var(--yellow); color: var(--bg-dim); border: none;
+      border-radius: 4px; padding: 8px 16px; cursor: pointer;
+      font-size: 12px; font-weight: 700; font-family: var(--mono); flex-shrink: 0;
       transition: opacity 0.15s; align-self: flex-end; margin: 6px 6px 6px 0;
     }
     .send-btn:hover { opacity: 0.85; }
     .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+    /* Wrapper for messages + input bar (centred column) */
+    .chat-column {
+      flex: 1; display: flex; flex-direction: column;
+      overflow: hidden; align-items: center;
+    }
+
     @media (max-width: 768px) {
       .sources-panel-side { display: none; }
-      .chat-panel { border-right: none; }
+      .chat-main { border-right: none; }
     }
   </style>
 </head>
 <body>
 
-<header>
-  <h1>Chat</h1>
-  <span class="badge green">● live</span>
-  <a href="/" id="home-btn">← Home</a>
-  <a href="/review" id="review-btn">Review Notes</a>
-  <span class="spacer"></span>
-</header>
+<!-- ── Top nav ── -->
+<nav class="gv-top-bar">
+  <div class="gv-logo-area">
+    <div class="gv-logo-mark">w</div>
+    <span class="gv-breadcrumb-root">workspace</span>
+    <span class="gv-breadcrumb-sep">/</span>
+    <span class="gv-breadcrumb-page">chat</span>
+  </div>
+  <div class="gv-nav">
+    <a href="/"        class="gv-nav-pill">workspace</a>
+    <a href="/new"     class="gv-nav-pill">new</a>
+    <a href="/notes"   class="gv-nav-pill">search</a>
+    <a href="/chat"    class="gv-nav-pill active">chat</a>
+    <a href="/review" class="gv-nav-pill">reports</a>
+    <a href="/kanban"  class="gv-nav-pill">kanban</a>
+    <a href="/projects" class="gv-nav-pill">projects</a>
+  </div>
+  <div class="gv-top-right">
+    <span class="gv-pill green" id="chunk-pill">● live</span>
+  </div>
+</nav>
 
-<div class="layout">
-  <div class="chat-panel">
+<!-- ── Main layout ── -->
+<div class="chat-layout" style="flex:1;overflow:hidden">
+  <div class="chat-column">
     <div class="messages" id="messages">
       <div class="welcome" id="welcome">
         <h2>Ask your workspace</h2>
@@ -323,9 +287,9 @@
     </div>
     <div class="input-bar">
       <div class="input-wrap">
-        <textarea id="query" placeholder="Ask your workspace..." rows="1"></textarea>
+        <textarea id="query" placeholder="Ask your workspace…" rows="1"></textarea>
       </div>
-      <button class="send-btn" id="send">Send</button>
+      <button class="send-btn" id="send">↵ send</button>
     </div>
   </div>
 
@@ -335,6 +299,18 @@
   </div>
 </div>
 
+<!-- ── Bottom bar ── -->
+<div class="gv-bottom-bar">
+  <span style="color:var(--blue)">●</span> chat
+  <span class="sep">│</span>
+  <span id="bb-chunks">— chunks</span>
+  <span class="sep">│</span>
+  <span>llm synthesised</span>
+  <div style="flex:1"></div>
+  <span class="gv-kbd">↵</span> send &nbsp;
+  <span class="gv-kbd">⇧↵</span> newline
+</div>
+
 <script>
   const messagesEl = document.getElementById('messages');
   const queryEl    = document.getElementById('query');
@@ -342,20 +318,23 @@
   const sidePanel  = document.getElementById('side-panel');
   const sideEmpty  = document.getElementById('side-empty');
 
-  // Stats loaded but not displayed
+  // Load chunk count
+  fetch('/api/stats').then(r => r.json()).then(d => {
+    if (d.chunk_count) {
+      document.getElementById('bb-chunks').textContent = d.chunk_count.toLocaleString() + ' chunks';
+      document.getElementById('chunk-pill').textContent = '● ' + d.chunk_count.toLocaleString() + ' chunks';
+    }
+  }).catch(() => {});
 
   // Auto-resize textarea
   queryEl.addEventListener('input', () => {
     queryEl.style.height = 'auto';
     queryEl.style.height = Math.min(queryEl.scrollHeight, 120) + 'px';
   });
-
   queryEl.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
   });
-
   sendBtn.addEventListener('click', submit);
-
   document.querySelectorAll('.example-btn').forEach(btn => {
     btn.addEventListener('click', () => { queryEl.value = btn.textContent; submit(); });
   });
@@ -370,8 +349,6 @@
     sendBtn.disabled = true;
 
     const startTime = Date.now();
-
-    // Build exchange
     const exchange = document.createElement('div');
     exchange.className = 'exchange';
 
@@ -396,11 +373,9 @@
       });
 
       const reader = response.body.getReader();
-
       const decoder = new TextDecoder();
       let buffer = '';
 
-      // Elements built as events arrive
       const card = document.createElement('div');
       card.className = 'assistant-card';
 
@@ -435,49 +410,30 @@
 
           if (event.type === 'retrieved') {
             retrievalMs = Date.now() - startTime;
-
-            // Swap loading card for answer card
             loadingCard.remove();
-            if (!cardAdded) {
-              exchange.appendChild(card);
-              cardAdded = true;
-            }
-
-            // Update loading label while LLM generates
-            loadingCard.querySelector('span').textContent = 'Generating…';
-
-            // Populate sidebar immediately
+            if (!cardAdded) { exchange.appendChild(card); cardAdded = true; }
             updateSidebar(event.chunks);
-
-            // Build inline chunks
             buildChunksPanel(chunksPanel, event.chunks, event.sources, cardFooter);
           }
-
           if (event.type === 'token') {
             answerText += event.content;
             answerBody.innerHTML = renderMarkdown(answerText);
             scrollToBottom();
           }
-
           if (event.type === 'done') {
             answerBody.classList.remove('streaming-cursor');
-            const totalMs = Date.now() - startTime;
-            updateLatency(cardFooter, retrievalMs, totalMs);
+            updateLatency(cardFooter, retrievalMs, Date.now() - startTime);
           }
         }
       }
 
-      // Fallback if card wasn't added (empty response)
-      if (!cardAdded) {
-        loadingCard.remove();
-        exchange.appendChild(card);
-      }
+      if (!cardAdded) { loadingCard.remove(); exchange.appendChild(card); }
 
     } catch (err) {
       loadingCard.remove();
       const errCard = document.createElement('div');
       errCard.className = 'assistant-card';
-      errCard.innerHTML = `<div class="answer-body" style="color:#fb4934">Error: ${escHtml(err.message)}</div>`;
+      errCard.innerHTML = `<div class="answer-body" style="color:var(--red)">Error: ${escHtml(err.message)}</div>`;
       exchange.appendChild(errCard);
     } finally {
       sendBtn.disabled = false;
@@ -487,29 +443,24 @@
   }
 
   function buildChunksPanel(chunksPanel, chunks, sources, cardFooter) {
-    if (!chunks || chunks.length === 0) return;
-
+    if (!chunks || !chunks.length) return;
     const maxScore = Math.max(...chunks.map(c => c.score), 0.001);
 
-    // Footer: toggle + source chips + latency placeholder
     const toggle = document.createElement('div');
     toggle.className = 'sources-toggle';
     toggle.innerHTML = `
       <span class="chevron">▶</span>
+      sources
       <span class="sources-count">${chunks.length}</span>
-      <span>sources</span>
       <div class="source-chips">
         ${[...new Set(sources)].slice(0, 4).map(s =>
           `<span class="chip" title="${escHtml(s)}">${escHtml(s)}</span>`
         ).join('')}
       </div>`;
-
     toggle.addEventListener('click', () => {
       toggle.classList.toggle('open');
       chunksPanel.classList.toggle('open');
     });
-
-    // Insert toggle before latency slot
     cardFooter.appendChild(toggle);
 
     chunks.forEach(chunk => {
@@ -518,10 +469,10 @@
       el.className = 'chunk';
       el.innerHTML = `
         <div class="chunk-header">
+          <span class="chunk-expand">▶</span>
           <span class="chunk-filename">${escHtml(chunk.source)}</span>
           <div class="score-bar"><div class="score-bar-fill" style="width:${pct}%"></div></div>
-          <span class="chunk-score">${chunk.score.toFixed(5)}</span>
-          <span class="chunk-expand">▶</span>
+          <span class="chunk-score">${chunk.score.toFixed(2)}</span>
         </div>
         <div class="chunk-content">${escHtml(chunk.content)}</div>`;
       el.querySelector('.chunk-header').addEventListener('click', () => el.classList.toggle('expanded'));
@@ -533,18 +484,16 @@
     const el = document.createElement('div');
     el.className = 'latency';
     el.innerHTML =
-      `<span class="phase">retrieved</span> ${retrievalMs}ms · ` +
-      `<span class="phase">total</span> ${(totalMs / 1000).toFixed(1)}s`;
+      `<span class="phase">retrieve</span> ${retrievalMs}ms · ` +
+      `<span class="phase">total</span> ${(totalMs/1000).toFixed(1)}s`;
     cardFooter.appendChild(el);
   }
 
   function updateSidebar(chunks) {
     sidePanel.querySelectorAll('.side-chunk').forEach(el => el.remove());
     sideEmpty.style.display = 'none';
-    if (!chunks || chunks.length === 0) { sideEmpty.style.display = ''; return; }
-
+    if (!chunks || !chunks.length) { sideEmpty.style.display = ''; return; }
     const maxScore = Math.max(...chunks.map(c => c.score), 0.001);
-
     chunks.forEach(chunk => {
       const pct = Math.round((chunk.score / maxScore) * 100);
       const preview = chunk.content.replace(/\n/g, ' ').slice(0, 80);
@@ -554,7 +503,7 @@
         <div class="side-chunk-header">
           <div class="side-chunk-meta">
             <span class="side-chunk-filename">${escHtml(chunk.source)}</span>
-            <span class="side-chunk-score">${chunk.score.toFixed(5)}</span>
+            <span class="side-chunk-score">${chunk.score.toFixed(2)}</span>
           </div>
           <div class="side-score-bar"><div class="side-score-bar-fill" style="width:${pct}%"></div></div>
           <div class="side-chunk-preview">${escHtml(preview)}…</div>
@@ -565,9 +514,7 @@
     });
   }
 
-  function scrollToBottom() {
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  }
+  function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 
   function escHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -604,9 +551,7 @@
   }
 </script>
 <script>
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js");
-  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 </script>
 </body>
 </html>
