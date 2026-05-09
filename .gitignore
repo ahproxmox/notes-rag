@@ -17,6 +17,7 @@ inbox-viewer/inbox-viewer
 
 # Tools
 .serena/
+Claude.md
 
 # Bench results (workspace-specific data)
 bench/results/
