@@ -4,225 +4,72 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1a1a1a">
+  <meta name="theme-color" content="#d8a657">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Notes RAG">
   <link rel="apple-touch-icon" href="/ui/icon.png">
-  <title>New — Workspace</title>
+  <link rel="stylesheet" href="/ui/theme.css">
+  <title>New — workspace</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg:        #1a1a1a;
-      --surface:   #32302f;
-      --surface2:  #3c3836;
-      --border:    #504945;
-      --text:      #ebdbb2;
+      --bg:        #1d2021;
+      --surface:   #2a2c2d;
+      --surface2:  #32363a;
+      --border:    #3c4043;
+      --text:      #d4be98;
       --text-muted:#a89984;
-      --accent:    #83a598;
-      --green:     #b8bb26;
-      --red:       #fb4934;
-      --yellow:    #fabd2f;
-      --tag-bg:    #3c3836;
+      --accent:    #7daea3;
+      --green:     #a9b665;
+      --red:       #ea6962;
+      --yellow:    #d8a657;
+      --tag-bg:    #32363a;
       --radius:    8px;
     }
 
-    html, body {
-      min-height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      font-size: 14px;
-      line-height: 1.5;
-    }
+    main { max-width: 680px; margin: 0 auto; padding: 28px 24px 48px; }
 
-    /* ── Header ── */
-    header {
-      border-bottom: 1px solid var(--border);
-      padding: 12px 24px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: var(--surface);
-      position: sticky; top: 0; z-index: 10;
-    }
-    .back-link {
-      color: var(--text-muted); text-decoration: none; font-size: 13px;
-      border: 1px solid var(--border); border-radius: 6px;
-      padding: 4px 10px; transition: border-color 0.15s, color 0.15s;
-    }
-    .back-link:hover { border-color: var(--accent); color: var(--text); }
-    header h1 { font-size: 15px; font-weight: 600; }
+    .type-select-wrap { margin-bottom: 16px; }
+    .type-select-wrap select { width: auto; min-width: 180px; font-weight: 600; font-size: 14px; padding: 9px 32px 9px 14px; }
 
-    /* ── Main ── */
-    main {
-      max-width: 680px;
-      margin: 0 auto;
-      padding: 28px 24px 48px;
-    }
-
-    /* ── Type select ── */
-    .type-select-wrap {
-      margin-bottom: 16px;
-    }
-    .type-select-wrap select {
-      width: auto;
-      min-width: 180px;
-      font-weight: 600;
-      font-size: 14px;
-      padding: 9px 32px 9px 14px;
-    }
-
-    /* ── Type description blurb ── */
     .type-blurb {
       display: none;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 16px;
-      margin-bottom: 24px;
-      font-size: 12.5px;
-      color: var(--text-muted);
-      line-height: 1.6;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 16px; margin-bottom: 24px;
+      font-size: 12.5px; color: var(--text-muted); line-height: 1.6;
     }
     .type-blurb.visible { display: block; }
     .type-blurb strong { color: var(--text); font-weight: 600; }
 
-    /* ── Form ── */
-    .form-group {
-      margin-bottom: 18px;
-    }
-    label {
-      display: block;
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-    }
-    .todo-id-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-    .todo-id-badge {
-      font-size: 13px;
-      font-family: 'SF Mono', monospace;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 7px 14px;
-      color: var(--accent);
-    }
-    .todo-id-label {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
 
-    .reminder-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-    .reminder-row input[type="datetime-local"] {
-      flex: 1;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-family: inherit;
-      font-size: 13px;
-      padding: 9px 12px;
-      outline: none;
-      transition: border-color 0.15s;
-      color-scheme: dark;
-    }
+    .todo-id-row { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+    .todo-id-badge { font-size: 13px; font-family: var(--mono); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 14px; color: var(--accent); }
+    .todo-id-label { font-size: 12px; color: var(--text-muted); }
+
+    .reminder-row { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+    .reminder-row input[type="datetime-local"] { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: var(--mono); font-size: 13px; padding: 9px 12px; outline: none; transition: border-color 0.15s; color-scheme: dark; }
     .reminder-row input[type="datetime-local"]:focus { border-color: var(--accent); }
-    .reminder-checkbox-wrap {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      white-space: nowrap;
-      font-size: 13px;
-      color: var(--text-muted);
-      cursor: pointer;
-    }
+    .reminder-checkbox-wrap { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 13px; color: var(--text-muted); cursor: pointer; }
     .reminder-checkbox-wrap input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
 
     input[type="text"], input[type="url"], select {
-      width: 100%;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-family: inherit;
-      font-size: 13px;
-      padding: 9px 12px;
-      outline: none;
-      transition: border-color 0.15s;
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text); font-family: var(--mono);
+      font-size: 13px; padding: 9px 12px; outline: none; transition: border-color 0.15s;
     }
-    input[type="text"]:focus, input[type="url"]:focus, select:focus,
-    .editor-wrap:focus-within { border-color: var(--accent); }
-    input[type="text"]::placeholder,
-    input[type="url"]::placeholder { color: var(--text-muted); }
+    input[type="text"]:focus, input[type="url"]:focus, select:focus, .editor-wrap:focus-within { border-color: var(--accent); }
+    input[type="text"]::placeholder, input[type="url"]::placeholder { color: var(--text-muted); }
     select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23a89984' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
 
-    /* ── Markdown editor ── */
-    .editor-wrap {
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      transition: border-color 0.15s;
-    }
-    .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 2px;
-      padding: 6px 8px;
-      background: var(--surface2);
-      border-bottom: 1px solid var(--border);
-    }
-    .tb-btn {
-      background: none;
-      border: 1px solid transparent;
-      border-radius: 4px;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 12px;
-      font-family: 'SF Mono', monospace;
-      padding: 3px 7px;
-      line-height: 1.4;
-      transition: background 0.12s, color 0.12s, border-color 0.12s;
-      font-weight: 500;
-    }
-    .tb-btn:hover {
-      background: var(--surface);
-      border-color: var(--border);
-      color: var(--text);
-    }
-    .tb-sep {
-      width: 1px;
-      background: var(--border);
-      margin: 3px 4px;
-      align-self: stretch;
-    }
-    textarea {
-      width: 100%;
-      background: var(--surface);
-      border: none;
-      color: var(--text);
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 12.5px;
-      line-height: 1.7;
-      padding: 12px 14px;
-      resize: vertical;
-      outline: none;
-    }
+    .editor-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.15s; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px 8px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+    .tb-btn { background: none; border: 1px solid transparent; border-radius: 4px; color: var(--text-muted); cursor: pointer; font-size: 12px; font-family: var(--mono); padding: 3px 7px; line-height: 1.4; transition: background 0.12s, color 0.12s, border-color 0.12s; font-weight: 500; }
+    .tb-btn:hover { background: var(--surface); border-color: var(--border); color: var(--text); }
+    .tb-sep { width: 1px; background: var(--border); margin: 3px 4px; align-self: stretch; }
+    textarea { width: 100%; background: var(--surface); border: none; color: var(--text); font-family: var(--mono); font-size: 12.5px; line-height: 1.7; padding: 12px 14px; resize: vertical; outline: none; }
     textarea::placeholder { color: var(--text-muted); }
     textarea.main-desc { min-height: 200px; }
     textarea.prompt-field { min-height: 100px; border: 1px solid var(--border); border-radius: var(--radius); }
@@ -230,132 +77,35 @@
     textarea.stash-desc { min-height: 72px; border: 1px solid var(--border); border-radius: var(--radius); }
     textarea.stash-desc:focus { border-color: var(--accent); }
 
-    /* ── Section visibility ── */
     .section { display: none; }
     .section.visible { display: block; }
 
-    /* ── Todo fields ── */
-    .field-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-    /* ── Status badge (research/forecast) ── */
-    .status-badge {
-      display: none;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 16px;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      background: var(--surface2);
-      margin-top: 18px;
-      font-size: 13px;
-    }
+    .status-badge { display: none; align-items: center; gap: 10px; padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface2); margin-top: 18px; font-size: 13px; }
     .status-badge.visible { display: flex; }
-    .status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      background: var(--text-muted);
-    }
-    .status-dot.queued  { background: var(--yellow); }
-    .status-dot.done    { background: var(--green); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--text-muted); }
+    .status-dot.queued { background: var(--yellow); }
+    .status-dot.done   { background: var(--green); }
     .status-text { flex: 1; color: var(--text-muted); }
     .status-text strong { color: var(--text); }
 
-    /* ── Stash queue list ── */
-    .stash-queue {
-      margin-top: 28px;
-    }
-    .stash-queue-header {
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      margin-bottom: 10px;
-    }
-    .stash-queue-empty {
-      font-size: 13px;
-      color: var(--text-muted);
-      padding: 10px 0;
-    }
-    .stash-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 9px 0;
-      border-top: 1px solid var(--border);
-      font-size: 13px;
-    }
-    .stash-dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--yellow);
-      flex-shrink: 0;
-    }
-    .stash-url {
-      flex: 1;
-      color: var(--accent);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-family: 'SF Mono', monospace;
-      font-size: 12px;
-    }
-    .stash-time {
-      font-size: 11px;
-      color: var(--text-muted);
-      white-space: nowrap;
-    }
+    .stash-queue { margin-top: 28px; }
+    .stash-queue-header { font-size: 12px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 10px; }
+    .stash-queue-empty { font-size: 13px; color: var(--text-muted); padding: 10px 0; }
+    .stash-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13px; }
+    .stash-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); flex-shrink: 0; }
+    .stash-url { flex: 1; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 12px; }
+    .stash-time { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 
-    /* ── Actions ── */
-    .form-actions {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      margin-top: 24px;
-    }
-    .btn-save {
-      background: var(--accent);
-      color: #282828;
-      border: none;
-      border-radius: var(--radius);
-      padding: 9px 22px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: inherit;
-      transition: opacity 0.15s;
-    }
+    .form-actions { display: flex; gap: 10px; align-items: center; margin-top: 24px; }
+    .btn-save { background: var(--yellow); color: var(--bg); border: none; border-radius: var(--radius); padding: 9px 22px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--mono); transition: opacity 0.15s; }
     .btn-save:hover { opacity: 0.85; }
     .btn-save:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-cancel {
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text-muted);
-      padding: 9px 18px;
-      font-size: 13px;
-      cursor: pointer;
-      font-family: inherit;
-      text-decoration: none;
-      transition: border-color 0.15s, color 0.15s;
-    }
+    .btn-cancel { background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-muted); padding: 9px 18px; font-size: 13px; cursor: pointer; font-family: var(--mono); text-decoration: none; transition: border-color 0.15s, color 0.15s; }
     .btn-cancel:hover { border-color: var(--accent); color: var(--text); }
 
-    /* ── Toast ── */
-    .toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 10px 18px;
-      font-size: 13px; color: var(--text);
-      display: flex; align-items: center; gap: 8px;
-      opacity: 0; transition: opacity 0.2s; pointer-events: none;
-      white-space: nowrap;
-    }
+    .toast { position: fixed; bottom: 44px; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 18px; font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 8px; opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; z-index: 200; }
     .toast.show { opacity: 1; }
     .toast.success { border-color: var(--green); }
     .toast.error   { border-color: var(--red); color: var(--red); }
@@ -368,202 +118,225 @@
 </head>
 <body>
 
-<header>
-  <a href="/" class="back-link">← Home</a>
-  <h1>New</h1>
-</header>
-
-<main>
-
-  <!-- Type select -->
-  <div class="type-select-wrap form-group">
-    <label for="type-select">Type</label>
-    <select id="type-select" onchange="setType(this.value)">
-      <option value="todo">Todo</option>
-      <option value="note">Note</option>
-      <option value="stash">Stash</option>
-      <option value="research">Research</option>
-      <option value="forecast">Forecast</option>
-    </select>
+<div class="gv-top-bar">
+  <div class="gv-logo-area">
+    <div class="gv-logo-mark">w</div>
+    <span class="gv-breadcrumb-root">workspace</span>
+    <span class="gv-breadcrumb-sep">/</span>
+    <span class="gv-breadcrumb-page">new</span>
   </div>
+  <nav class="gv-nav">
+    <a class="gv-nav-pill" href="/">workspace</a>
+    <a class="gv-nav-pill active" href="/new">new</a>
+    <a class="gv-nav-pill" href="/notes">search</a>
+    <a class="gv-nav-pill" href="/chat">chat</a>
+    <a class="gv-nav-pill" href="/review">reports</a>
+    <a class="gv-nav-pill" href="/kanban">kanban</a>
+    <a class="gv-nav-pill" href="/projects">projects</a>
+  </nav>
+  <div class="gv-top-right">
+    <div class="gv-cmd-hint">
+      <span>⌘↵ save</span>
+    </div>
+    <div class="gv-active-dot"></div>
+  </div>
+</div>
 
-  <!-- Type blurbs -->
-  <div class="type-blurb" id="blurb-stash">
-    <strong>Stash a link for later.</strong> Claude Code will fetch, summarise, and cross-reference it with your workspace when you next open a session. Add a description to give context for why you're saving it.
-  </div>
-  <div class="type-blurb" id="blurb-research">
-    <strong>Deep research report.</strong> Queued for Hermes — multi-source synthesis with citation tracking. Report is saved to Obsidian Inbox. Processing typically takes 5–15 minutes.
-  </div>
-  <div class="type-blurb" id="blurb-forecast">
-    <strong>Full forecast pipeline.</strong> Deep research → MiroFish multi-agent simulation → four Claude analytical framings → swarm synthesis. Report saved to Obsidian Inbox. Expect 15–30 minutes.
-  </div>
+<div class="gv-content">
+  <main>
 
-  <!-- ── TODO section ── -->
-  <div class="section visible" id="section-todo">
-    <div class="todo-id-row">
-      <span class="todo-id-badge" id="todo-id-badge">#—</span>
-      <span class="todo-id-label">Next todo ID</span>
-    </div>
-    <div class="form-group">
-      <label for="todo-title">Title</label>
-      <input type="text" id="todo-title" placeholder="What needs doing?" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <label>Description</label>
-      <div class="editor-wrap">
-        <div class="toolbar">
-          <button class="tb-btn" onclick="insert('# ', '')"    title="Heading 1">H1</button>
-          <button class="tb-btn" onclick="insert('## ', '')"   title="Heading 2">H2</button>
-          <button class="tb-btn" onclick="insert('### ', '')"  title="Heading 3">H3</button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" onclick="wrap('**', '**')"    title="Bold"><b>B</b></button>
-          <button class="tb-btn" onclick="wrap('*', '*')"      title="Italic"><em>I</em></button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" onclick="insertList('- ')"    title="Bullet list">• List</button>
-          <button class="tb-btn" onclick="insertList('1. ')"   title="Numbered list">1. List</button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" onclick="insert('`', '`')"    title="Inline code">&#96;code&#96;</button>
-        </div>
-        <textarea id="description" class="main-desc" placeholder="Add details (markdown supported)…" rows="8"></textarea>
-      </div>
-    </div>
-    <div class="field-row">
-      <div class="form-group">
-        <label for="priority">Priority</label>
-        <select id="priority">
-          <option value="high">High</option>
-          <option value="medium" selected>Medium</option>
-          <option value="low">Low</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="swimlane">Swimlane</label>
-        <select id="swimlane">
-          <option value="Dev" selected>Dev</option>
-          <option value="Infra">Infra</option>
-          <option value="Design">Design</option>
-          <option value="Personal">Personal</option>
-        </select>
-      </div>
-    </div>
-    <div class="field-row">
-      <div class="form-group">
-        <label for="assignee">Assignee <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
-        <select id="assignee">
-          <option value="">— unassigned —</option>
-          <option value="claude-code">claude-code</option>
-          <option value="hermes">hermes</option>
-          <option value="openclaw">openclaw</option>
-          <option value="user">user</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="complexity">Complexity <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
-        <select id="complexity">
-          <option value="">— unset —</option>
-          <option value="small">Small</option>
-          <option value="medium">Medium</option>
-          <option value="large">Large</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="todo-project">Project <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
-      <select id="todo-project">
-        <option value="">— no project —</option>
+    <div class="type-select-wrap form-group">
+      <label for="type-select">Type</label>
+      <select id="type-select" onchange="setType(this.value)">
+        <option value="todo">Todo</option>
+        <option value="note">Note</option>
+        <option value="stash">Stash</option>
+        <option value="research">Research</option>
+        <option value="forecast">Forecast</option>
       </select>
     </div>
-    <div class="reminder-row">
-      <input type="datetime-local" id="todo-due" title="Due date (Melbourne time)">
-      <label class="reminder-checkbox-wrap" title="Create an Apple Reminder on save">
-        <input type="checkbox" id="todo-reminder">
-        Apple Reminder
-      </label>
-    </div>
-  </div>
 
-  <!-- ── NOTE section ── -->
-  <div class="section" id="section-note">
-    <div class="form-group">
-      <label for="note-title">Title</label>
-      <input type="text" id="note-title" placeholder="Note title…" autocomplete="off">
+    <div class="type-blurb" id="blurb-stash">
+      <strong>Stash a link for later.</strong> Claude Code will fetch, summarise, and cross-reference it with your workspace when you next open a session. Add a description to give context for why you're saving it.
     </div>
-    <div class="form-group">
-      <label for="note-project">Project <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
-      <select id="note-project">
-        <option value="">— no project —</option>
-      </select>
+    <div class="type-blurb" id="blurb-research">
+      <strong>Deep research report.</strong> Queued for Hermes — multi-source synthesis with citation tracking. Report is saved to Obsidian Inbox. Processing typically takes 5–15 minutes.
     </div>
-    <div class="form-group">
-      <label>Body</label>
-      <div class="editor-wrap">
-        <div class="toolbar">
-          <button class="tb-btn" onclick="insert('# ', '')"    title="Heading 1">H1</button>
-          <button class="tb-btn" onclick="insert('## ', '')"   title="Heading 2">H2</button>
-          <button class="tb-btn" onclick="insert('### ', '')"  title="Heading 3">H3</button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" onclick="wrap('**', '**')"    title="Bold"><b>B</b></button>
-          <button class="tb-btn" onclick="wrap('*', '*')"      title="Italic"><em>I</em></button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" onclick="insertList('- ')"    title="Bullet list">• List</button>
-          <button class="tb-btn" onclick="insertList('1. ')"   title="Numbered list">1. List</button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" onclick="insert('`', '`')"    title="Inline code">&#96;code&#96;</button>
+    <div class="type-blurb" id="blurb-forecast">
+      <strong>Full forecast pipeline.</strong> Deep research → MiroFish multi-agent simulation → four Claude analytical framings → swarm synthesis. Report saved to Obsidian Inbox. Expect 15–30 minutes.
+    </div>
+
+    <!-- ── TODO section ── -->
+    <div class="section visible" id="section-todo">
+      <div class="todo-id-row">
+        <span class="todo-id-badge" id="todo-id-badge">#—</span>
+        <span class="todo-id-label">Next todo ID</span>
+      </div>
+      <div class="form-group">
+        <label for="todo-title">Title</label>
+        <input type="text" id="todo-title" placeholder="What needs doing?" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <div class="editor-wrap">
+          <div class="toolbar">
+            <button class="tb-btn" onclick="insert('# ', '')"    title="Heading 1">H1</button>
+            <button class="tb-btn" onclick="insert('## ', '')"   title="Heading 2">H2</button>
+            <button class="tb-btn" onclick="insert('### ', '')"  title="Heading 3">H3</button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" onclick="wrap('**', '**')"    title="Bold"><b>B</b></button>
+            <button class="tb-btn" onclick="wrap('*', '*')"      title="Italic"><em>I</em></button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" onclick="insertList('- ')"    title="Bullet list">• List</button>
+            <button class="tb-btn" onclick="insertList('1. ')"   title="Numbered list">1. List</button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" onclick="insert('`', '`')"    title="Inline code">&#96;code&#96;</button>
+          </div>
+          <textarea id="description" class="main-desc" placeholder="Add details (markdown supported)…" rows="8"></textarea>
         </div>
-        <textarea id="note-description" class="main-desc" placeholder="Add details (markdown supported)…" rows="8"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="form-group">
+          <label for="priority">Priority</label>
+          <select id="priority">
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="swimlane">Swimlane</label>
+          <select id="swimlane">
+            <option value="Dev" selected>Dev</option>
+            <option value="Infra">Infra</option>
+            <option value="Design">Design</option>
+            <option value="Personal">Personal</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="form-group">
+          <label for="assignee">Assignee <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+          <select id="assignee">
+            <option value="">— unassigned —</option>
+            <option value="claude-code">claude-code</option>
+            <option value="hermes">hermes</option>
+            <option value="openclaw">openclaw</option>
+            <option value="user">user</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="complexity">Complexity <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+          <select id="complexity">
+            <option value="">— unset —</option>
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="todo-project">Project <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+        <select id="todo-project">
+          <option value="">— no project —</option>
+        </select>
+      </div>
+      <div class="reminder-row">
+        <input type="datetime-local" id="todo-due" title="Due date (Melbourne time)">
+        <label class="reminder-checkbox-wrap" title="Create an Apple Reminder on save">
+          <input type="checkbox" id="todo-reminder">
+          Apple Reminder
+        </label>
       </div>
     </div>
-  </div>
 
-  <!-- ── STASH section ── -->
-  <div class="section" id="section-stash">
-    <div class="form-group">
-      <label for="stash-url">Link</label>
-      <input type="url" id="stash-url" placeholder="https://…" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <label for="stash-desc">Description <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
-      <textarea id="stash-desc" class="stash-desc" placeholder="Why are you saving this? What should Claude focus on?"></textarea>
+    <!-- ── NOTE section ── -->
+    <div class="section" id="section-note">
+      <div class="form-group">
+        <label for="note-title">Title</label>
+        <input type="text" id="note-title" placeholder="Note title…" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="note-project">Project <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+        <select id="note-project">
+          <option value="">— no project —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Body</label>
+        <div class="editor-wrap">
+          <div class="toolbar">
+            <button class="tb-btn" onclick="insert('# ', '')"    title="Heading 1">H1</button>
+            <button class="tb-btn" onclick="insert('## ', '')"   title="Heading 2">H2</button>
+            <button class="tb-btn" onclick="insert('### ', '')"  title="Heading 3">H3</button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" onclick="wrap('**', '**')"    title="Bold"><b>B</b></button>
+            <button class="tb-btn" onclick="wrap('*', '*')"      title="Italic"><em>I</em></button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" onclick="insertList('- ')"    title="Bullet list">• List</button>
+            <button class="tb-btn" onclick="insertList('1. ')"   title="Numbered list">1. List</button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" onclick="insert('`', '`')"    title="Inline code">&#96;code&#96;</button>
+          </div>
+          <textarea id="note-description" class="main-desc" placeholder="Add details (markdown supported)…" rows="8"></textarea>
+        </div>
+      </div>
     </div>
 
-    <!-- Pending stash queue -->
-    <div class="stash-queue" id="stash-queue">
-      <div class="stash-queue-header">Pending queue</div>
-      <div id="stash-queue-items"><div class="stash-queue-empty">Loading…</div></div>
+    <!-- ── STASH section ── -->
+    <div class="section" id="section-stash">
+      <div class="form-group">
+        <label for="stash-url">Link</label>
+        <input type="url" id="stash-url" placeholder="https://…" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="stash-desc">Description <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
+        <textarea id="stash-desc" class="stash-desc" placeholder="Why are you saving this? What should Claude focus on?"></textarea>
+      </div>
+      <div class="stash-queue" id="stash-queue">
+        <div class="stash-queue-header">Pending queue</div>
+        <div id="stash-queue-items"><div class="stash-queue-empty">Loading…</div></div>
+      </div>
     </div>
-  </div>
 
-  <!-- ── RESEARCH section ── -->
-  <div class="section" id="section-research">
-    <div class="form-group">
-      <label for="research-prompt">Prompt</label>
-      <textarea id="research-prompt" class="prompt-field" placeholder="What do you want researched?"></textarea>
+    <!-- ── RESEARCH section ── -->
+    <div class="section" id="section-research">
+      <div class="form-group">
+        <label for="research-prompt">Prompt</label>
+        <textarea id="research-prompt" class="prompt-field" placeholder="What do you want researched?"></textarea>
+      </div>
+      <div class="status-badge" id="research-status">
+        <div class="status-dot queued" id="research-dot"></div>
+        <div class="status-text" id="research-status-text"><strong>Queued</strong> — waiting for Hermes to pick up</div>
+      </div>
     </div>
-    <div class="status-badge" id="research-status">
-      <div class="status-dot queued" id="research-dot"></div>
-      <div class="status-text" id="research-status-text"><strong>Queued</strong> — waiting for Hermes to pick up</div>
-    </div>
-  </div>
 
-  <!-- ── FORECAST section ── -->
-  <div class="section" id="section-forecast">
-    <div class="form-group">
-      <label for="forecast-prompt">Prompt</label>
-      <textarea id="forecast-prompt" class="prompt-field" placeholder="What do you want a forecast on?"></textarea>
+    <!-- ── FORECAST section ── -->
+    <div class="section" id="section-forecast">
+      <div class="form-group">
+        <label for="forecast-prompt">Prompt</label>
+        <textarea id="forecast-prompt" class="prompt-field" placeholder="What do you want a forecast on?"></textarea>
+      </div>
+      <div class="status-badge" id="forecast-status">
+        <div class="status-dot queued" id="forecast-dot"></div>
+        <div class="status-text" id="forecast-status-text"><strong>Queued</strong> — waiting for Hermes to pick up</div>
+      </div>
     </div>
-    <div class="status-badge" id="forecast-status">
-      <div class="status-dot queued" id="forecast-dot"></div>
-      <div class="status-text" id="forecast-status-text"><strong>Queued</strong> — waiting for Hermes to pick up</div>
+
+    <div class="form-actions">
+      <button class="btn-save" id="save-btn" onclick="save()">Save</button>
+      <a href="/" class="btn-cancel">Cancel</a>
     </div>
-  </div>
 
-  <!-- Actions -->
-  <div class="form-actions">
-    <button class="btn-save" id="save-btn" onclick="save()">Save</button>
-    <a href="/" class="btn-cancel">Cancel</a>
-  </div>
+  </main>
+</div>
 
-</main>
+<div class="gv-bottom-bar">
+  <span style="color:var(--green-dim,rgba(169,182,101,0.6))">●</span>
+  <span>new</span>
+  <span class="sep">│</span>
+  <span>todo · note · stash · research · forecast</span>
+</div>
 
 <div class="toast" id="toast"></div>
 

@@ -4,35 +4,33 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1a1a1a">
+  <meta name="theme-color" content="#d8a657">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Notes RAG">
   <link rel="apple-touch-icon" href="/ui/icon.png">
-  <title>Review Notes</title>
+  <link rel="stylesheet" href="/ui/theme.css">
+  <title>Review — workspace</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg: #1a1a1a; --surface: #32302f; --surface2: #3c3836;
-      --border: #504945; --text: #ebdbb2; --text-muted: #a89984;
-      --accent: #83a598; --green: #b8bb26; --yellow: #fabd2f;
-      --red: #fb4934; --tag-bg: #3c3836; --radius: 8px;
+      --bg:        #1d2021;
+      --surface:   #2a2c2d;
+      --surface2:  #32363a;
+      --border:    #3c4043;
+      --text:      #d4be98;
+      --text-muted:#a89984;
+      --accent:    #7daea3;
+      --green:     #a9b665;
+      --yellow:    #d8a657;
+      --red:       #ea6962;
+      --tag-bg:    #32363a;
+      --radius:    8px;
     }
-    html, body { height: 100%; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg); color: var(--text);
-      display: flex; flex-direction: column; height: 100%; font-size: 14px; line-height: 1.6; }
 
-    header { border-bottom: 1px solid var(--border); padding: 12px 16px;
-      display: flex; align-items: center; gap: 10px;
-      background: var(--surface); flex-shrink: 0; }
-    header h1 { font-size: 15px; font-weight: 600; }
-    .back-link { color: var(--text-muted); text-decoration: none; font-size: 13px;
-      border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }
-    .back-link:hover { border-color: var(--accent); color: var(--text); }
-    .spacer { flex: 1; }
-    .queue-badge { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+    html, body { height: 100%; }
+    body { background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; height: 100%; font-size: 14px; line-height: 1.6; }
 
     .view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
     .view.active { display: flex; }
@@ -73,7 +71,7 @@
       border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 12px;
       transition: border-color 0.15s, color 0.15s; font-family: inherit; }
     .btn:hover { border-color: var(--accent); color: var(--text); }
-    .btn.primary { background: var(--accent); color: #282828; border-color: var(--accent); font-weight: 600; }
+    .btn.primary { background: var(--accent); color: #1d2021; border-color: var(--accent); font-weight: 600; }
     .btn.primary:hover { opacity: 0.85; }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -85,7 +83,7 @@
       background: var(--surface2); border: 1px solid var(--border); border-bottom: none;
       cursor: pointer; color: var(--text-muted); }
     .note-tab.active { background: var(--surface); color: var(--text); }
-    .note-body { padding: 12px 14px; font-size: 12px; font-family: 'SF Mono', monospace;
+    .note-body { padding: 12px 14px; font-size: 12px; font-family: var(--mono);
       white-space: pre-wrap; line-height: 1.6; color: var(--text-muted); }
     .note-body-wrap { display: none; }
     .note-body-wrap.active { display: block; }
@@ -140,16 +138,16 @@
     .scan-card .title a:hover { color: var(--accent); text-decoration: underline; }
     .scan-card .reason { font-size: 11px; color: var(--text-muted); line-height: 1.45; }
     .scan-card .meta { display: flex; align-items: center; gap: 6px; }
-    .scan-card .sim { font-size: 10px; font-family: 'SF Mono', monospace;
+    .scan-card .sim { font-size: 10px; font-family: var(--mono);
       background: var(--tag-bg); padding: 1px 5px; border-radius: 999px; color: var(--text-muted); }
     .scan-card-actions { display: flex; gap: 6px; margin-top: 2px; }
     .scan-card-actions .btn { padding: 3px 10px; font-size: 11px; }
     .scan-empty { font-size: 12px; color: var(--text-muted); padding: 10px 0; text-align: center; }
     .scan-banner { font-size: 12px; color: var(--green); padding: 6px 10px;
-      background: rgba(63, 185, 80, 0.08); border: 1px solid rgba(63, 185, 80, 0.3);
+      background: rgba(169,182,101,0.08); border: 1px solid rgba(169,182,101,0.3);
       border-radius: 6px; }
-    .scan-banner.error { color: var(--red); background: rgba(248, 81, 73, 0.08);
-      border-color: rgba(248, 81, 73, 0.3); }
+    .scan-banner.error { color: var(--red); background: rgba(234,105,98,0.08);
+      border-color: rgba(234,105,98,0.3); }
 
     @media (min-width: 768px) {
       .triage-scroll { max-width: 700px; margin: 0 auto; width: 100%; padding: 16px; }
@@ -158,45 +156,71 @@
 </head>
 <body>
 
-<header>
-  <a href="/" class="back-link">← Home</a>
-  <h1>Review Notes</h1>
-  <span class="spacer"></span>
-  <span class="queue-badge" id="queue-badge"></span>
-</header>
-
-<!-- Triage View -->
-<div class="view active" id="triage-view">
-  <div class="triage-scroll" id="triage-scroll">
-    <div class="loading" id="loading"><div class="spinner"></div>Scanning for unreviewed notes…</div>
-    <div id="triage-list"></div>
-    <div class="empty" id="empty" style="display:none">
-      <h2>All caught up</h2>
-      <p>No unreviewed notes found.</p>
-    </div>
+<div class="gv-top-bar">
+  <div class="gv-logo-area">
+    <div class="gv-logo-mark">w</div>
+    <span class="gv-breadcrumb-root">workspace</span>
+    <span class="gv-breadcrumb-sep">/</span>
+    <span class="gv-breadcrumb-page">reports</span>
+  </div>
+  <nav class="gv-nav">
+    <a class="gv-nav-pill" href="/">workspace</a>
+    <a class="gv-nav-pill" href="/new">new</a>
+    <a class="gv-nav-pill" href="/notes">search</a>
+    <a class="gv-nav-pill" href="/chat">chat</a>
+    <a class="gv-nav-pill active" href="/review">reports</a>
+    <a class="gv-nav-pill" href="/kanban">kanban</a>
+    <a class="gv-nav-pill" href="/projects">projects</a>
+  </nav>
+  <div class="gv-top-right">
+    <div class="gv-active-dot"></div>
   </div>
 </div>
 
-<!-- Review View -->
-<div class="view" id="review-view">
-  <div class="note-panel" id="note-panel">
-    <div class="note-tabs" id="note-tabs"></div>
-    <div id="note-bodies"></div>
-  </div>
-  <div class="chat-panel">
-    <div class="chat-messages" id="chat-messages"></div>
-    <div class="chat-input-bar" id="chat-input-bar">
-      <div class="input-wrap">
-        <textarea id="chat-input" placeholder="Type your answer…" rows="1"></textarea>
+<!-- flex wrapper so views expand between top-bar and bottom-bar -->
+<div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+
+  <!-- Triage View -->
+  <div class="view active" id="triage-view">
+    <div class="triage-scroll" id="triage-scroll">
+      <div class="loading" id="loading"><div class="spinner"></div>Scanning for unreviewed notes…</div>
+      <div id="triage-list"></div>
+      <div class="empty" id="empty" style="display:none">
+        <h2>All caught up</h2>
+        <p>No unreviewed notes found.</p>
       </div>
-      <button class="btn primary" id="send-btn">Send</button>
-    </div>
-    <div class="review-actions">
-      <button class="btn" id="scan-btn">Scan for links</button>
-      <button class="btn" id="skip-btn">Skip</button>
-      <button class="btn primary" id="complete-btn">Complete Review</button>
     </div>
   </div>
+
+  <!-- Review View -->
+  <div class="view" id="review-view">
+    <div class="note-panel" id="note-panel">
+      <div class="note-tabs" id="note-tabs"></div>
+      <div id="note-bodies"></div>
+    </div>
+    <div class="chat-panel">
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-bar" id="chat-input-bar">
+        <div class="input-wrap">
+          <textarea id="chat-input" placeholder="Type your answer…" rows="1"></textarea>
+        </div>
+        <button class="btn primary" id="send-btn">Send</button>
+      </div>
+      <div class="review-actions">
+        <button class="btn" id="scan-btn">Scan for links</button>
+        <button class="btn" id="skip-btn">Skip</button>
+        <button class="btn primary" id="complete-btn">Complete Review</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="gv-bottom-bar">
+  <span style="color:var(--green-dim,rgba(169,182,101,0.6))">●</span>
+  <span>reports</span>
+  <span class="sep">│</span>
+  <span id="queue-badge"></span>
 </div>
 
 <script>
