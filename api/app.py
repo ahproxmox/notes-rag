@@ -168,6 +168,10 @@ def new_page():
 def review_page():
     return FileResponse(os.path.join(_ui_dir, 'review.html'))
 
+@app.get('/reports')
+def reports_page():
+    return FileResponse(os.path.join(_ui_dir, 'reports.html'))
+
 @app.get('/projects')
 def projects_page():
     return FileResponse(os.path.join(_ui_dir, 'projects.html'))
@@ -892,6 +896,57 @@ def notes_recent(n: int = Query(default=10, ge=1, le=50)):
     for r in results:
         del r['mtime']
     return {'results': results[:n]}
+
+
+@api.get('/reports/list')
+def reports_list(n: int = Query(default=100, ge=1, le=500)):
+    """List research and forecast reports from Obsidian Inbox, newest first."""
+    results = []
+    if _inbox_dir.is_dir():
+        for p in sorted(_inbox_dir.glob('*.md'), key=lambda f: f.stat().st_mtime, reverse=True):
+            try:
+                content = p.read_text(encoding='utf-8', errors='replace')
+                title = p.stem
+                category = ''
+                date_str = ''
+                if content.startswith('---'):
+                    end = content.find('---', 3)
+                    if end != -1:
+                        for line in content[3:end].splitlines():
+                            k, _, v = line.partition(':')
+                            k = k.strip(); v = v.strip().strip('"\' ')
+                            if k == 'title':
+                                title = v
+                            elif k in ('category', 'type'):
+                                category = v
+                            elif k == 'date':
+                                date_str = v
+                if category.lower() in ('research', 'forecast', 'report', 'deep-research', 'analysis'):
+                    results.append({'filename': p.name, 'title': title, 'category': category, 'date': date_str})
+            except OSError:
+                continue
+    # Also include pending queue items
+    pending = []
+    if _queue_dir.is_dir():
+        for p in sorted(_queue_dir.glob('*.md'), key=lambda f: f.stat().st_mtime, reverse=True):
+            try:
+                content = p.read_text(encoding='utf-8', errors='replace')
+                topic = ''; rtype = ''
+                if content.startswith('---'):
+                    end = content.find('---', 3)
+                    if end != -1:
+                        for line in content[3:end].splitlines():
+                            k, _, v = line.partition(':')
+                            k = k.strip(); v = v.strip().strip('"\' ')
+                            if k == 'topic':
+                                topic = v
+                            elif k == 'type':
+                                rtype = v
+                if rtype in ('research', 'forecast'):
+                    pending.append({'filename': p.name, 'title': topic or p.stem, 'category': rtype, 'date': '', 'status': 'queued'})
+            except OSError:
+                continue
+    return {'results': results[:n], 'pending': pending}
 
 
 @api.get('/notes/{filename:path}')

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#d8a657">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Notes RAG">
+  <link rel="apple-touch-icon" href="/ui/icon.png">
+  <link rel="stylesheet" href="/ui/theme.css">
+  <title>Reports — workspace</title>
+  <style>
+    :root {
+      --bg:        #1d2021;
+      --surface:   #2a2c2d;
+      --surface2:  #32363a;
+      --border:    #3c4043;
+      --text:      #d4be98;
+      --text-muted:#a89984;
+      --accent:    #7daea3;
+      --green:     #a9b665;
+      --yellow:    #d8a657;
+      --red:       #ea6962;
+      --purple:    #d3869b;
+      --tag-bg:    #32363a;
+      --radius:    8px;
+    }
+
+    .gv-content { flex: 1; overflow-y: auto; }
+
+    main { max-width: 800px; margin: 0 auto; padding: 28px 24px 48px; }
+
+    .page-header {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
+    }
+    .page-title { font-size: 18px; font-weight: 700; letter-spacing: -0.4px; }
+
+    .section-label {
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+    }
+
+    .pending-section { margin-bottom: 28px; }
+    .pending-section .section-label { color: var(--yellow); }
+
+    .report-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .report-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+      display: flex; align-items: center; gap: 12px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .report-card:hover { border-color: var(--accent); background: var(--surface2); }
+
+    .report-type-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .report-type-dot.research  { background: var(--accent); }
+    .report-type-dot.forecast  { background: var(--purple); }
+    .report-type-dot.report    { background: var(--green); }
+    .report-type-dot.queued    { background: var(--yellow); animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .report-body { flex: 1; min-width: 0; }
+    .report-title {
+      font-size: 13px; font-weight: 500; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-bottom: 3px;
+    }
+    .report-meta {
+      display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--text-muted);
+    }
+    .report-badge {
+      font-size: 10px; padding: 1px 7px; border-radius: 999px; font-weight: 600;
+      border: 1px solid;
+    }
+    .report-badge.research  { color: var(--accent);  border-color: var(--accent);  background: rgba(125,174,163,0.1); }
+    .report-badge.forecast  { color: var(--purple);  border-color: var(--purple);  background: rgba(211,134,155,0.1); }
+    .report-badge.report    { color: var(--green);   border-color: var(--green);   background: rgba(169,182,101,0.1); }
+    .report-badge.queued    { color: var(--yellow);  border-color: var(--yellow);  background: rgba(216,166,87,0.1); }
+
+    .report-filename {
+      font-family: var(--mono); font-size: 10px; color: var(--text-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;
+    }
+
+    .empty { padding: 48px 0; text-align: center; color: var(--text-muted); }
+    .empty h2 { font-size: 15px; color: var(--text); margin-bottom: 6px; }
+
+    .review-cta {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 32px; font-size: 12px; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 8px 14px; text-decoration: none;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .review-cta:hover { border-color: var(--accent); color: var(--text); }
+
+    .loading { padding: 48px 0; text-align: center; color: var(--text-muted); }
+    .spinner { width: 18px; height: 18px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div class="gv-top-bar">
+  <div class="gv-logo-area">
+    <div class="gv-logo-mark">w</div>
+    <span class="gv-breadcrumb-root">workspace</span>
+    <span class="gv-breadcrumb-sep">/</span>
+    <span class="gv-breadcrumb-page">reports</span>
+  </div>
+    <nav class="gv-nav">
+    <a class="gv-nav-pill" href="/">workspace</a>
+    <a class="gv-nav-pill" href="/new">new</a>
+    <a class="gv-nav-pill" href="/notes">search</a>
+    <a class="gv-nav-pill" href="/chat">chat</a>
+    <a class="gv-nav-pill active" href="/reports">reports</a>
+    <a class="gv-nav-pill" href="/review">review</a>
+    <a class="gv-nav-pill" href="/kanban">kanban</a>
+    <a class="gv-nav-pill" href="/projects">projects</a>
+  </nav>
+  <div class="gv-top-right">
+    <div class="gv-active-dot"></div>
+  </div>
+</div>
+
+<div class="gv-content">
+  <main>
+    <div class="page-header">
+      <span class="page-title">Reports</span>
+    </div>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      Loading reports…
+    </div>
+
+    <div id="pending-section" class="pending-section" style="display:none">
+      <div class="section-label">Queued</div>
+      <div class="report-list" id="pending-list"></div>
+    </div>
+
+    <div id="completed-section" style="display:none">
+      <div class="section-label">Completed</div>
+      <div class="report-list" id="completed-list"></div>
+    </div>
+
+    <div id="empty" class="empty" style="display:none">
+      <h2>No reports yet</h2>
+      <p>Submit a research or forecast job from the <a href="/new" style="color:var(--accent)">new</a> page.</p>
+    </div>
+
+    <a href="/review" class="review-cta">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <path d="M9 1H3a1 1 0 00-1 1v8a1 1 0 001 1h6a1 1 0 001-1V2a1 1 0 00-1-1z"/>
+        <path d="M4 4h4M4 6h4M4 8h2"/>
+      </svg>
+      Review notes queue →
+    </a>
+  </main>
+</div>
+
+<div class="gv-bottom-bar">
+  <span style="color:var(--green-dim,rgba(169,182,101,0.6))">●</span>
+  <span>reports</span>
+  <span class="sep">│</span>
+  <span id="count-label">—</span>
+</div>
+
+<script>
+async function load() {
+  try {
+    const res = await fetch('/api/reports/list');
+    const data = await res.json();
+    render(data.results || [], data.pending || []);
+  } catch (e) {
+    document.getElementById('loading').innerHTML =
+      '<span style="color:var(--red)">Failed to load: ' + esc(e.message) + '</span>';
+  }
+}
+
+function render(results, pending) {
+  document.getElementById('loading').style.display = 'none';
+
+  if (pending.length) {
+    document.getElementById('pending-section').style.display = '';
+    document.getElementById('pending-list').innerHTML = pending.map(r => cardHtml(r, 'queued')).join('');
+  }
+
+  if (results.length) {
+    document.getElementById('completed-section').style.display = '';
+    document.getElementById('completed-list').innerHTML = results.map(r => cardHtml(r, r.category)).join('');
+  }
+
+  if (!results.length && !pending.length) {
+    document.getElementById('empty').style.display = '';
+  }
+
+  const total = results.length + pending.length;
+  document.getElementById('count-label').textContent =
+    total ? `${total} report${total !== 1 ? 's' : ''}` : 'empty';
+}
+
+function cardHtml(r, type) {
+  const cls = type.toLowerCase().replace(/[^a-z]/g, '') || 'report';
+  const label = cls === 'queued' ? 'queued' : cls;
+  const date = r.date ? `<span>${esc(r.date)}</span>` : '';
+  return `<div class="report-card">
+    <div class="report-type-dot ${cls}"></div>
+    <div class="report-body">
+      <div class="report-title">${esc(r.title || r.filename)}</div>
+      <div class="report-meta">
+        <span class="report-badge ${cls}">${label}</span>
+        ${date}
+        <span class="report-filename">${esc(r.filename)}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+load();
+</script>
+<script>if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
+</body>
+</html>
