@@ -110,6 +110,18 @@
     }
     .review-cta:hover { border-color: var(--accent); color: var(--text); }
 
+    .filter-row {
+      display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .filter-btn {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; color: var(--text-muted); font-size: 12px;
+      padding: 4px 12px; cursor: pointer; font-family: var(--mono);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .filter-btn.active { border-color: var(--accent); color: var(--accent); }
+
     .loading { padding: 48px 0; text-align: center; color: var(--text-muted); }
     .spinner { width: 18px; height: 18px; border: 2px solid var(--border);
       border-top-color: var(--accent); border-radius: 50%;
@@ -152,13 +164,15 @@
       Loading reports…
     </div>
 
+    <div id="filter-row" class="filter-row" style="display:none"></div>
+
     <div id="pending-section" class="pending-section" style="display:none">
       <div class="section-label">Queued</div>
       <div class="report-list" id="pending-list"></div>
     </div>
 
     <div id="completed-section" style="display:none">
-      <div class="section-label">Inbox</div>
+      <div class="section-label" id="inbox-label">Inbox</div>
       <div class="report-list" id="completed-list"></div>
     </div>
 
@@ -185,42 +199,91 @@
 </div>
 
 <script>
+let _allResults = [];
+let _activeFilter = 'all';
+
 async function load() {
   try {
     const res = await fetch('/api/reports/list');
     const data = await res.json();
-    render(data.results || [], data.pending || []);
+    _allResults = data.results || [];
+    const pending = data.pending || [];
+    buildFilters(_allResults);
+    renderPending(pending);
+    applyFilter();
   } catch (e) {
     document.getElementById('loading').innerHTML =
       '<span style="color:var(--red)">Failed to load: ' + esc(e.message) + '</span>';
   }
 }
 
-function render(results, pending) {
+function buildFilters(results) {
+  // Collect unique categories from data, preserving original casing for display
+  const counts = {};
+  for (const r of results) {
+    const key = (r.category || '').toLowerCase().replace(/[^a-z]/g, '') || 'note';
+    const label = r.category || 'note';
+    if (!counts[key]) counts[key] = { label, n: 0 };
+    counts[key].n++;
+  }
+
+  const filterRow = document.getElementById('filter-row');
+  let html = `<button class="filter-btn active" data-filter="all" onclick="setFilter('all',this)">all (${results.length})</button>`;
+  // Sort by count descending
+  const sorted = Object.entries(counts).sort((a, b) => b[1].n - a[1].n);
+  for (const [key, { label, n }] of sorted) {
+    html += `<button class="filter-btn" data-filter="${key}" onclick="setFilter('${key}',this)">${esc(label)} (${n})</button>`;
+  }
+  filterRow.innerHTML = html;
+  filterRow.style.display = results.length ? '' : 'none';
+}
+
+function setFilter(filter, btn) {
+  _activeFilter = filter;
+  document.querySelectorAll('#filter-row .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+}
+
+function applyFilter() {
   document.getElementById('loading').style.display = 'none';
+  const filtered = _activeFilter === 'all'
+    ? _allResults
+    : _allResults.filter(r => {
+        const key = (r.category || '').toLowerCase().replace(/[^a-z]/g, '') || 'note';
+        return key === _activeFilter;
+      });
 
-  if (pending.length) {
-    document.getElementById('pending-section').style.display = '';
-    document.getElementById('pending-list').innerHTML = pending.map(r => cardHtml(r, 'queued')).join('');
+  const section = document.getElementById('completed-section');
+  const label = document.getElementById('inbox-label');
+  const empty = document.getElementById('empty');
+
+  if (filtered.length) {
+    section.style.display = '';
+    label.textContent = _activeFilter === 'all' ? 'Inbox' : _activeFilter;
+    document.getElementById('completed-list').innerHTML =
+      filtered.map(r => cardHtml(r, r.category, r.tags || [])).join('');
+    empty.style.display = 'none';
+  } else {
+    section.style.display = 'none';
+    empty.style.display = _allResults.length ? '' : 'none';
   }
 
-  if (results.length) {
-    document.getElementById('completed-section').style.display = '';
-    document.getElementById('completed-list').innerHTML = results.map(r => cardHtml(r, r.category, r.tags || [])).join('');
-  }
-
-  if (!results.length && !pending.length) {
-    document.getElementById('empty').style.display = '';
-  }
-
-  const total = results.length + pending.length;
   document.getElementById('count-label').textContent =
-    total ? `${total} item${total !== 1 ? 's' : ''}` : 'empty';
+    filtered.length !== _allResults.length
+      ? `${filtered.length} of ${_allResults.length}`
+      : `${_allResults.length} item${_allResults.length !== 1 ? 's' : ''}`;
+}
+
+function renderPending(pending) {
+  if (!pending.length) return;
+  document.getElementById('pending-section').style.display = '';
+  document.getElementById('pending-list').innerHTML =
+    pending.map(r => cardHtml(r, 'queued', [])).join('');
 }
 
 function cardHtml(r, type, tags) {
   const cls = (type || '').toLowerCase().replace(/[^a-z]/g, '') || 'note';
-  const label = cls || 'note';
   const date = r.date ? `<span>${esc(r.date)}</span>` : '';
   const tagPills = (tags || []).slice(0, 4).map(t =>
     `<span class="report-tag">${esc(t)}</span>`).join('');
@@ -229,7 +292,7 @@ function cardHtml(r, type, tags) {
     <div class="report-body">
       <div class="report-title">${esc(r.title || r.filename)}</div>
       <div class="report-meta">
-        ${label ? `<span class="report-badge ${cls}">${label}</span>` : ''}
+        <span class="report-badge ${cls}">${esc(r.category || cls)}</span>
         ${date}
         ${tagPills}
         <span class="report-filename">${esc(r.filename)}</span>
