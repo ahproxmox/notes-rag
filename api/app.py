@@ -173,6 +173,42 @@ def reports_page():
     return FileResponse(os.path.join(_ui_dir, 'reports.html'))
 
 
+_NOTE_PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title}</title>
+<link rel="stylesheet" href="/ui/theme.css">
+<style>
+.note-wrap{{max-width:860px;margin:0 auto;padding:24px 16px}}
+.md-body pre{{background:var(--surface2);padding:12px;border-radius:4px;overflow-x:auto;font-size:12px}}
+.md-body h1,.md-body h2,.md-body h3{{margin:20px 0 8px;color:var(--text)}}
+.md-body p{{margin:8px 0;color:var(--text-muted);line-height:1.6}}
+.md-body table{{border-collapse:collapse;width:100%;font-size:13px;margin:12px 0}}
+.md-body th,.md-body td{{border:1px solid var(--border);padding:7px 12px;text-align:left}}
+.md-body th{{background:var(--surface2)}}
+.md-body code{{background:var(--surface2);padding:2px 5px;border-radius:3px;font-size:12px}}
+.md-body ul,.md-body ol{{padding-left:24px;margin:8px 0;color:var(--text-muted)}}
+</style>
+</head>
+<body>
+<nav class="gv-nav"><div class="gv-nav-inner">
+<a class="gv-nav-pill" href="/">workspace</a>
+<a class="gv-nav-pill" href="/reports">reports</a>
+<span class="gv-nav-pill active">{title}</span>
+</div></nav>
+<div class="note-wrap">
+<h1 style="margin-bottom:20px">{title}</h1>
+<div class="md-body" id="content"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
+<script>
+const raw = {body_json};
+document.getElementById('content').innerHTML = marked.parse(raw);
+</script>
+</body></html>"""
+
+
 _SERIES_PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -236,6 +272,28 @@ def report_series_page(slug: str):
     series_name = parts[0]
     series_dir = _inbox_dir / 'reports' / series_name
     if not series_dir.is_dir():
+        # If slug looks like a note, find and render the latest matching file
+        filename = parts[-1] if parts[-1].endswith('.md') else parts[-1] + '.md'
+        def _sort_key(p):
+            # ISO date dirs sort highest; non-date dirs sort lowest
+            m = re.match(r'^(\d{4}-\d{2}-\d{2})$', p.parent.name)
+            return m.group(1) if m else ''
+        matches = sorted(_inbox_dir.rglob(filename), key=_sort_key, reverse=True)
+        if matches:
+            note_path = matches[0]
+            text = note_path.read_text(encoding='utf-8', errors='replace')
+            note_title = filename.removesuffix('.md').replace('-', ' ').title()
+            body = text
+            if text.startswith('---'):
+                end = text.find('---', 3)
+                if end != -1:
+                    for ln in text[3:end].splitlines():
+                        if ln.startswith('title:'):
+                            note_title = ln.partition(':')[2].strip().strip('\"\' ')
+                    body = text[end + 3:].lstrip('\n')
+            import json as _json
+            return HTMLResponse(_NOTE_PAGE_TEMPLATE.format(
+                title=note_title, body_json=_json.dumps(body)))
         return FileResponse(os.path.join(_ui_dir, 'reports.html'))
     title = series_name.replace('-', ' ').title()
     runs_html = ''
