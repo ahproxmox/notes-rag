@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Query, HTTPException, APIRouter, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from core.search import search, search_filtered, search_with_weights, search_stream, similar, get_stats, retrieve_hybrid
@@ -171,6 +171,95 @@ def review_page():
 @app.get('/reports')
 def reports_page():
     return FileResponse(os.path.join(_ui_dir, 'reports.html'))
+
+
+_SERIES_PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title}</title>
+<link rel="stylesheet" href="/ui/theme.css">
+<style>
+.run-block{{margin:16px 0;border:1px solid var(--border);border-radius:6px;overflow:hidden}}
+.run-header{{background:var(--surface2);padding:10px 16px;font-weight:600;font-size:13px;color:var(--text-muted);letter-spacing:.5px}}
+.section-btns{{display:flex;gap:8px;padding:10px 16px;flex-wrap:wrap;border-bottom:1px solid var(--border)}}
+.section-btn{{padding:4px 12px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text-muted);cursor:pointer;font-size:12px;font-family:inherit}}
+.section-btn:hover,.section-btn.active{{background:var(--accent);color:#fff;border-color:var(--accent)}}
+.run-content{{padding:20px;display:none}}
+.run-content.open{{display:block}}
+.md-body pre{{background:var(--surface2);padding:12px;border-radius:4px;overflow-x:auto;font-size:12px}}
+.md-body h1,.md-body h2,.md-body h3{{margin:16px 0 8px;color:var(--text)}}
+.md-body p{{margin:8px 0;color:var(--text-muted)}}
+.md-body table{{border-collapse:collapse;width:100%;font-size:12px}}
+.md-body th,.md-body td{{border:1px solid var(--border);padding:6px 10px;text-align:left}}
+.md-body th{{background:var(--surface2)}}
+</style>
+</head>
+<body>
+<nav class="gv-nav"><div class="gv-nav-inner">
+<a class="gv-nav-pill" href="/">workspace</a>
+<a class="gv-nav-pill" href="/reports">reports</a>
+<span class="gv-nav-pill active">{series}</span>
+</div></nav>
+<div class="gv-container" style="max-width:900px;margin:0 auto;padding:24px 16px">
+<h1 style="margin-bottom:20px">{title}</h1>
+<div id="runs">{runs_html}</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
+<script>
+async function loadSection(name, run, section, btn, contentEl) {{
+  document.querySelectorAll('[data-run="'+run+'"] .section-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  contentEl.classList.add('open');
+  contentEl.innerHTML = '<em style="color:var(--text-muted)">Loading...</em>';
+  try {{
+    const r = await fetch('/api/reports/series/'+encodeURIComponent(name)+'/'+encodeURIComponent(run)+'/'+encodeURIComponent(section));
+    const d = await r.json();
+    contentEl.innerHTML = '<div class="md-body">'+marked.parse(d.body)+'</div>';
+  }} catch(e) {{
+    contentEl.innerHTML = '<span style="color:var(--red)">Failed: '+e.message+'</span>';
+  }}
+}}
+// Auto-open latest run index
+document.addEventListener('DOMContentLoaded', () => {{
+  const first = document.querySelector('.section-btn[data-section="index"]');
+  if (first) first.click();
+}});
+</script>
+</body></html>"""
+
+@app.get('/reports/{slug:path}')
+def report_series_page(slug: str):
+    parts = [p for p in slug.split('/') if p and p != '..']
+    if not parts:
+        return FileResponse(os.path.join(_ui_dir, 'reports.html'))
+    series_name = parts[0]
+    series_dir = _inbox_dir / 'reports' / series_name
+    if not series_dir.is_dir():
+        return FileResponse(os.path.join(_ui_dir, 'reports.html'))
+    title = series_name.replace('-', ' ').title()
+    runs_html = ''
+    for run_dir in sorted(series_dir.iterdir(), reverse=True):
+        if not run_dir.is_dir():
+            continue
+        sections = sorted(run_dir.glob('*.md'))
+        if not sections:
+            continue
+        btns = ''.join(
+            f'<button class="section-btn" data-section="{s.stem}" '
+            f'onclick="loadSection({repr(series_name)},{repr(run_dir.name)},{repr(s.name)},this,document.getElementById(\'c-{run_dir.name}\'))">'
+            f'{s.stem}</button>'
+            for s in sections
+        )
+        runs_html += (
+            f'<div class="run-block" data-run="{run_dir.name}">'
+            f'<div class="run-header">{run_dir.name}</div>'
+            f'<div class="section-btns">{btns}</div>'
+            f'<div class="run-content" id="c-{run_dir.name}"></div>'
+            f'</div>'
+        )
+    html = _SERIES_PAGE_TEMPLATE.format(title=title, series=series_name, runs_html=runs_html)
+    return HTMLResponse(html)
 
 @app.get('/projects')
 def projects_page():
@@ -897,6 +986,31 @@ def notes_recent(n: int = Query(default=10, ge=1, le=50)):
         del r['mtime']
     return {'results': results[:n]}
 
+
+
+@api.get('/reports/series/{name}/{run}/{section}')
+def reports_series_section(name: str, run: str, section: str):
+    """Fetch a single section from a named infra report series run."""
+    if not section.endswith('.md'):
+        section += '.md'
+    # Sanitise path components
+    for part in (name, run, section):
+        if '/' in part or '..' in part:
+            raise HTTPException(status_code=400, detail='Invalid path component')
+    path = _inbox_dir / 'reports' / name / run / section
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail='Section not found')
+    text = path.read_text(encoding='utf-8', errors='replace')
+    title = section.removesuffix('.md').replace('-', ' ').title()
+    body = text
+    if text.startswith('---'):
+        end = text.find('---', 3)
+        if end != -1:
+            for line in text[3:end].splitlines():
+                if line.startswith('title:'):
+                    title = line.partition(':')[2].strip().strip('"\'')
+            body = text[end + 3:].lstrip('\n')
+    return {'title': title, 'body': body}
 
 @api.get('/reports/list')
 def reports_list(n: int = Query(default=200, ge=1, le=500)):
