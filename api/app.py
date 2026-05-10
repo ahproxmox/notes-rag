@@ -297,7 +297,10 @@ def report_series_page(slug: str):
         return FileResponse(os.path.join(_ui_dir, 'reports.html'))
     title = series_name.replace('-', ' ').title()
     runs_html = ''
-    for run_dir in sorted(series_dir.iterdir(), reverse=True):
+    def _run_sort_key(d):
+        m = re.match(r'^(\d{4}-\d{2}-\d{2})$', d.name)
+        return (1, m.group(1)) if m else (0, d.name)
+    for run_dir in sorted(series_dir.iterdir(), key=_run_sort_key, reverse=True):
         if not run_dir.is_dir():
             continue
         sections = sorted(run_dir.glob('*.md'))
