@@ -903,7 +903,7 @@ def reports_list(n: int = Query(default=200, ge=1, le=500)):
     """List all Obsidian Inbox notes newest-first, plus any pending queue jobs."""
     results = []
     if _inbox_dir.is_dir():
-        for p in sorted(_inbox_dir.glob('*.md'), key=lambda f: f.stat().st_mtime, reverse=True):
+        for p in sorted(_inbox_dir.rglob('*.md'), key=lambda f: f.stat().st_mtime, reverse=True):
             try:
                 content = p.read_text(encoding='utf-8', errors='replace')
                 title = p.stem.replace('-', ' ').replace('_', ' ').title()
