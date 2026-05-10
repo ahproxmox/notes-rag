@@ -372,7 +372,7 @@ const manifestJSON = `{
   "icons": []
 }`
 
-const serviceWorkerJS = `const CACHE = 'reports-v5';
+const serviceWorkerJS = `const CACHE = 'reports-cf17951';
 const OFFLINE = '/reports/offline.html';
 
 self.addEventListener('install', e => {
