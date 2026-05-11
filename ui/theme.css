@@ -86,6 +86,12 @@ body > * { position: relative; z-index: 1; }
   flex-shrink: 0;
 }
 
+.gv-home-link {
+  display: flex; align-items: center; gap: 8px;
+  text-decoration: none; color: inherit;
+}
+.gv-home-link:hover .gv-breadcrumb-root { color: var(--fg-1); }
+
 .gv-logo-mark {
   width: 22px; height: 22px; border-radius: 4px;
   background: var(--yellow); color: var(--bg-dim);
