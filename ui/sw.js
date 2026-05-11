@@ -1,4 +1,4 @@
-const CACHE = "notes-rag-962bc41";
+const CACHE = "notes-rag-88fbb19";
 const SHELL = ["/", "/notes", "/chat", "/review", "/reports", "/new", "/projects", "/kanban"];
 
 self.addEventListener("install", e => {

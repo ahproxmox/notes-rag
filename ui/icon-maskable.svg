@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="darkbg" cx="50%" cy="40%" r="72%">
+      <stop offset="0%" stop-color="#2a2c2d"/>
+      <stop offset="100%" stop-color="#1d2021"/>
+    </radialGradient>
+    <radialGradient id="grain1" cx="80%" cy="-10%" r="80%">
+      <stop offset="0%" stop-color="rgba(216,166,87,0.07)"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Solid square background (no rx — no transparent corners) -->
+  <rect width="1024" height="1024" fill="url(#darkbg)"/>
+  <rect width="1024" height="1024" fill="url(#grain1)"/>
+
+  <!-- Amber circle ring -->
+  <circle cx="512" cy="494" r="258" fill="none" stroke="#d8a657" stroke-width="42"/>
+
+  <!-- Three cream text lines inside the ring -->
+  <line x1="384" y1="448" x2="640" y2="448" stroke="#d4be98" stroke-width="34" stroke-linecap="round"/>
+  <line x1="384" y1="508" x2="640" y2="508" stroke="#d4be98" stroke-width="34" stroke-linecap="round"/>
+  <line x1="384" y1="568" x2="516" y2="568" stroke="#d4be98" stroke-width="34" stroke-linecap="round"/>
+</svg>
