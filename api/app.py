@@ -1395,6 +1395,26 @@ def queue_status(filename: str):
     return {'status': 'done', 'filename': filename}
 
 
+
+@api.get('/queue/triage')
+def queue_triage_list():
+    """List pending triage queue files written by Hermes after processing stash items."""
+    if not _queue_dir.exists():
+        return {'items': []}
+    items = []
+    for p in sorted(_queue_dir.glob('triage-*.md')):
+        text = p.read_text(encoding='utf-8', errors='replace')
+        fields = {'title': '', 'source': '', 'url': '', 'one_liner': '', 'connections': '', 'obsidian_note': '', 'processed_at': ''}
+        if text.startswith('---'):
+            end = text.find('---', 3)
+            if end != -1:
+                for line in text[3:end].splitlines():
+                    for key in fields:
+                        if line.startswith(f'{key}:'):
+                            fields[key] = line.partition(':')[2].strip().strip('"')
+        items.append({'filename': p.name, **fields})
+    return {'items': items}
+
 # ── API: review ───────────────────────────────────────────────────────────────
 
 import json
