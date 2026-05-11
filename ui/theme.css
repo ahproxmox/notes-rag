@@ -70,8 +70,8 @@ body > * { position: relative; z-index: 1; }
 .gv-top-bar {
   display: flex;
   align-items: center;
-  height: 44px;
-  padding: 0 24px;
+  height: calc(44px + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 24px 0;
   background: var(--bg-dim);
   border-bottom: 1px solid var(--bg-2);
   flex: 0 0 auto;
@@ -290,7 +290,7 @@ body > * { position: relative; z-index: 1; }
 }
 
 @media (max-width: 719px) {
-  .gv-top-bar { padding: 0 16px; height: 48px; }
+  .gv-top-bar { padding: env(safe-area-inset-top, 0px) 16px 0; height: calc(48px + env(safe-area-inset-top, 0px)); }
   .gv-nav { display: none; }
   .gv-content { padding: 12px 14px; overflow-x: hidden; }
   .gv-bottom-bar { gap: 10px; font-size: 9px; }
