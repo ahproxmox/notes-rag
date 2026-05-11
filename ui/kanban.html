@@ -182,33 +182,6 @@
     .form-submit:hover { background: var(--purple-deep); }
     .form-submit:disabled { opacity: 0.5; cursor: default; }
 
-    /* ── Terminal ── */
-    .term-toggle { position: fixed; bottom: 44px; right: 20px; z-index: 150; background: var(--accent-border); border: 1px solid var(--accent); color: var(--accent); font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.15s; font-family: var(--mono); }
-    .term-toggle:hover { background: var(--surface2); }
-    .term-toggle .term-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
-    .term-panel { position: fixed; bottom: 24px; left: 0; right: 0; height: 360px; background: var(--bg); border-top: 1px solid var(--border); z-index: 140; display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.25s ease; }
-    .term-panel.open { transform: translateY(0); }
-    .term-header { padding: 9px 16px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-    .term-header-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
-    .term-title { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; flex: 1; }
-    .term-close { color: var(--text-dim); font-size: 18px; cursor: pointer; line-height: 1; }
-    .term-close:hover { color: var(--text-muted); }
-    .term-messages { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
-    .term-msg { display: flex; flex-direction: column; gap: 2px; max-width: 85%; }
-    .term-msg.user { align-self: flex-end; align-items: flex-end; }
-    .term-msg.agent { align-self: flex-start; }
-    .term-msg-label { font-size: 10px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-    .term-msg-bubble { font-size: 12px; font-family: var(--mono); line-height: 1.5; padding: 7px 11px; border-radius: 7px; white-space: pre-wrap; word-break: break-word; }
-    .term-msg.user .term-msg-bubble { background: var(--accent-border); color: var(--accent); border: 1px solid var(--accent); }
-    .term-msg.agent .term-msg-bubble { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); }
-    .term-msg.agent.thinking .term-msg-bubble { color: var(--text-dim); font-style: italic; }
-    .term-input-row { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-shrink: 0; background: var(--bg); }
-    .term-input { flex: 1; background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 13px; font-family: var(--mono); padding: 7px 11px; border-radius: 6px; outline: none; }
-    .term-input:focus { border-color: var(--accent); }
-    .term-input::placeholder { color: var(--border); }
-    .term-send { background: var(--accent-border); border: 1px solid var(--accent); color: var(--accent); font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-family: var(--mono); }
-    .term-send:hover { background: var(--surface2); }
-    .term-send:disabled { opacity: 0.4; cursor: default; }
 
     /* ── Settings panel ── */
     .settings-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 110; }
@@ -993,97 +966,6 @@
     if (e.key === 'Escape') { closeModal(); closeCreatePanel(); closeSettingsPanel(); }
   });
 
-  // ── Terminal ─────────────────────────────────────────────────────────────────
-  let termSessionId = localStorage.getItem('term-session-id') || null;
-  let termOpen = false;
-  let termHistory = [];
-  let termHistoryIdx = -1;
-
-  function toggleTerminal() {
-    termOpen = !termOpen;
-    document.getElementById('term-panel').classList.toggle('open', termOpen);
-    if (termOpen) {
-      document.getElementById('term-input').focus();
-      termScrollBottom();
-    }
-  }
-
-  function termScrollBottom() {
-    const el = document.getElementById('term-messages');
-    setTimeout(() => { el.scrollTop = el.scrollHeight; }, 50);
-  }
-
-  function termAddMsg(role, text, extra) {
-    const wrap = document.getElementById('term-messages');
-    const div = document.createElement('div');
-    div.className = 'term-msg ' + role + (extra || '');
-    div.innerHTML =
-      '<span class="term-msg-label">' + (role === 'user' ? 'You' : 'Todo Creator') + '</span>' +
-      '<span class="term-msg-bubble">' + esc(text) + '</span>';
-    wrap.appendChild(div);
-    termScrollBottom();
-    return div;
-  }
-
-  async function termSend() {
-    const input = document.getElementById('term-input');
-    const btn = document.getElementById('term-send');
-    const msg = input.value.trim();
-    if (!msg) return;
-
-    termHistory.unshift(msg);
-    termHistoryIdx = -1;
-    input.value = '';
-
-    termAddMsg('user', msg);
-    const thinking = termAddMsg('agent', 'Thinking…', ' thinking');
-    btn.disabled = true;
-    input.disabled = true;
-
-    try {
-      const res = await fetch('/api/kanban/agent/turn', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, sessionId: termSessionId }),
-      });
-      const data = await res.json();
-      thinking.remove();
-      if (data.error) {
-        termAddMsg('agent', 'Error: ' + data.error);
-      } else {
-        termAddMsg('agent', data.text);
-        if (data.sessionId) {
-          termSessionId = data.sessionId;
-          localStorage.setItem('term-session-id', termSessionId);
-        }
-      }
-      // Refresh board in case a todo was created/updated
-      load();
-    } catch (e) {
-      thinking.remove();
-      termAddMsg('agent', 'Request failed. Is the indexer running?');
-    }
-
-    btn.disabled = false;
-    input.disabled = false;
-    input.focus();
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    const input = document.getElementById('term-input');
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); termSend(); }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (termHistoryIdx < termHistory.length - 1) { termHistoryIdx++; input.value = termHistory[termHistoryIdx]; }
-      }
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        if (termHistoryIdx > 0) { termHistoryIdx--; input.value = termHistory[termHistoryIdx]; }
-        else { termHistoryIdx = -1; input.value = ''; }
-      }
-    });
-  });
 
 
   // ── Settings panel ────────────────────────────────────────────────────────
@@ -1164,27 +1046,6 @@
   setInterval(load, 30000);
 </script>
 
-<button class="term-toggle" id="term-toggle" onclick="toggleTerminal()" style="display:none">
-  <span class="term-dot"></span> Todo Assistant
-</button>
-
-<div class="term-panel" id="term-panel">
-  <div class="term-header">
-    <span class="term-header-dot"></span>
-    <span class="term-title">Todo Creator</span>
-    <span class="term-close" onclick="toggleTerminal()">×</span>
-  </div>
-  <div class="term-messages" id="term-messages">
-    <div class="term-msg agent">
-      <span class="term-msg-label">Todo Creator</span>
-      <span class="term-msg-bubble">Hey! I can create todos, list what's pending, update statuses, or search the workspace. What do you need?</span>
-    </div>
-  </div>
-  <div class="term-input-row">
-    <input class="term-input" id="term-input" placeholder="e.g. create a todo: fix login bug, high priority, Dev" autocomplete="off" />
-    <button class="term-send" id="term-send" onclick="termSend()">Send</button>
-  </div>
-</div>
 
 </body>
 </html>
