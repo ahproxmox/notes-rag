@@ -8,11 +8,12 @@ WorkingDirectory=/opt/rag
 ExecStart=/opt/rag/venv/bin/python /opt/rag/main.py
 Restart=on-failure
 RestartSec=10
+StartLimitIntervalSec=120
 Environment=PYTHONUNBUFFERED=1
-# Uncomment and set if using Vault:
-# Environment=VAULT_ADDR=http://192.168.88.65:8200
+Environment=VAULT_ADDR=http://192.168.88.65:8200
 StandardOutput=journal
 StandardError=journal
+MemoryMax=2500M
 
 [Install]
 WantedBy=multi-user.target
