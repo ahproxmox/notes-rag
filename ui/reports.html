@@ -323,8 +323,8 @@ function cardHtml(r, type, tags) {
   const date = r.date ? `<span>${esc(r.date)}</span>` : '';
   const tagPills = (tags || []).slice(0, 4).map(t =>
     `<span class="report-tag">${esc(t)}</span>`).join('');
-  const filenameAttr = esc(r.filename).replace(/'/g, '&#39;');
-  const titleAttr = esc(r.title || r.filename).replace(/'/g, '&#39;');
+  const filenameAttr = esc(r.filename).replace(/'/g, "\\'");
+  const titleAttr = esc(r.title || r.filename).replace(/'/g, "\\'");
   return `<div class="report-card" onclick="openReport('${filenameAttr}','${titleAttr}')">
     <div class="report-type-dot ${cls}"></div>
     <div class="report-body">
