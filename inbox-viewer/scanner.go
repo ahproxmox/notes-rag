@@ -28,6 +28,7 @@ func scanAll() []ContentItem {
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox", "inbox")...)
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Research", "research")...)
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Reviews", "review")...)
+	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Forecasts", "forecast")...)
 	items = append(items, scanInboxDir("/mnt/Obsidian/Inbox/Recipes", "recipe")...)
 	items = append(items, scanInboxDir("/mnt/Obsidian/Trading", "trading")...)
 	items = append(items, scanReports("/mnt/Claude/reports")...)
