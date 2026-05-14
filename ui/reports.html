@@ -162,6 +162,19 @@
       border-top-color: var(--accent); border-radius: 50%;
       animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .pagination {
+      display: flex; gap: 4px; flex-wrap: wrap; margin-top: 16px; align-items: center;
+    }
+    .page-btn {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text-muted); font-size: 11px;
+      padding: 4px 10px; cursor: pointer; font-family: var(--mono);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .page-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .page-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(125,174,163,0.1); }
+    .page-ellipsis { color: var(--text-muted); font-size: 11px; padding: 4px 2px; }
   </style>
 </head>
 <body>
@@ -207,6 +220,7 @@
     <div id="completed-section" style="display:none">
       <div class="section-label" id="inbox-label">Inbox</div>
       <div class="report-list" id="completed-list"></div>
+      <div id="pagination"></div>
     </div>
 
     <div id="empty" class="empty" style="display:none">
@@ -234,8 +248,11 @@
 </div>
 
 <script>
+const PAGE_SIZE = 10;
 let _allResults = [];
 let _activeFilter = 'all';
+let _filteredResults = [];
+let _currentPage = 1;
 
 async function load() {
   try {
@@ -253,7 +270,6 @@ async function load() {
 }
 
 function buildFilters(results) {
-  // Collect unique categories from data, preserving original casing for display
   const counts = {};
   for (const r of results) {
     const key = (r.category || '').toLowerCase().replace(/[^a-z]/g, '') || 'note';
@@ -264,7 +280,6 @@ function buildFilters(results) {
 
   const filterRow = document.getElementById('filter-row');
   let html = `<button class="filter-btn active" data-filter="all" onclick="setFilter('all',this)">all (${results.length})</button>`;
-  // Sort by count descending
   const sorted = Object.entries(counts).sort((a, b) => b[1].n - a[1].n);
   for (const [key, { label, n }] of sorted) {
     html += `<button class="filter-btn" data-filter="${key}" onclick="setFilter('${key}',this)">${esc(label)} (${n})</button>`;
@@ -282,32 +297,72 @@ function setFilter(filter, btn) {
 
 function applyFilter() {
   document.getElementById('loading').style.display = 'none';
-  const filtered = _activeFilter === 'all'
+  _filteredResults = _activeFilter === 'all'
     ? _allResults
     : _allResults.filter(r => {
         const key = (r.category || '').toLowerCase().replace(/[^a-z]/g, '') || 'note';
         return key === _activeFilter;
       });
+  _currentPage = 1;
+  renderPage();
+}
 
+function setPage(n) {
+  _currentPage = n;
+  renderPage();
+  document.getElementById('completed-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderPage() {
   const section = document.getElementById('completed-section');
   const label = document.getElementById('inbox-label');
   const empty = document.getElementById('empty');
 
-  if (filtered.length) {
+  if (_filteredResults.length) {
     section.style.display = '';
     label.textContent = _activeFilter === 'all' ? 'Inbox' : _activeFilter;
+
+    const start = (_currentPage - 1) * PAGE_SIZE;
+    const pageItems = _filteredResults.slice(start, start + PAGE_SIZE);
     document.getElementById('completed-list').innerHTML =
-      filtered.map(r => cardHtml(r, r.category, r.tags || [])).join('');
+      pageItems.map(r => cardHtml(r, r.category, r.tags || [])).join('');
+
+    const totalPages = Math.ceil(_filteredResults.length / PAGE_SIZE);
+    document.getElementById('pagination').innerHTML = buildPagination(totalPages);
     empty.style.display = 'none';
   } else {
     section.style.display = 'none';
+    document.getElementById('pagination').innerHTML = '';
     empty.style.display = _allResults.length ? '' : 'none';
   }
 
+  const end = Math.min(_currentPage * PAGE_SIZE, _filteredResults.length);
+  const start = (_currentPage - 1) * PAGE_SIZE + 1;
+  const pageInfo = _filteredResults.length > PAGE_SIZE
+    ? ` · ${start}–${end} of ${_filteredResults.length}`
+    : '';
   document.getElementById('count-label').textContent =
-    filtered.length !== _allResults.length
-      ? `${filtered.length} of ${_allResults.length}`
-      : `${_allResults.length} item${_allResults.length !== 1 ? 's' : ''}`;
+    _filteredResults.length !== _allResults.length
+      ? `${_filteredResults.length} of ${_allResults.length}${pageInfo}`
+      : `${_allResults.length} item${_allResults.length !== 1 ? 's' : ''}${pageInfo}`;
+}
+
+function buildPagination(totalPages) {
+  if (totalPages <= 1) return '';
+  let html = '<div class="pagination">';
+  if (_currentPage > 1)
+    html += `<button class="page-btn" onclick="setPage(${_currentPage - 1})">← prev</button>`;
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || Math.abs(i - _currentPage) <= 1) {
+      html += `<button class="page-btn${i === _currentPage ? ' active' : ''}" onclick="setPage(${i})">${i}</button>`;
+    } else if (Math.abs(i - _currentPage) === 2) {
+      html += `<span class="page-ellipsis">…</span>`;
+    }
+  }
+  if (_currentPage < totalPages)
+    html += `<button class="page-btn" onclick="setPage(${_currentPage + 1})">next →</button>`;
+  html += '</div>';
+  return html;
 }
 
 function renderPending(pending) {
