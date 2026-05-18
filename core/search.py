@@ -100,6 +100,7 @@ def _get_llm():
         base_url=os.environ.get('LLM_BASE_URL', 'https://openrouter.ai/api/v1'),
         api_key=os.environ['OPENROUTER_API_KEY'],
         model=_get_model_name(),
+        timeout=30,
     )
 
 
