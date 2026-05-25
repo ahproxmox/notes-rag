@@ -132,6 +132,11 @@ class PaperlessIngestRequest(BaseModel):
     tags: list[str] = []
     created: str = ''
 
+
+class IngestRequest(BaseModel):
+    path: str    # e.g. "news/2026/01/15/mock-aapl-slug.md"
+    content: str  # full markdown including YAML frontmatter
+
 class ProjectCreateRequest(BaseModel):
     title: str
     goal: str = ''
@@ -1239,6 +1244,39 @@ def ingest_paperless(req: PaperlessIngestRequest):
 
     store.upsert_file(source, docs)
     return {'ok': True, 'source': source, 'chunks_stored': len(docs)}
+
+
+@api.post('/ingest')
+def ingest_doc(req: IngestRequest):
+    """Generic markdown ingest for trading-enrich (news articles, filing sections).
+
+    Uses req.path as the stable source key — re-ingesting the same path replaces
+    existing chunks (idempotent). Returns doc_id = path so callers can back-write
+    it into their DB.
+    """
+    from core.search import get_store
+    from langchain_core.documents import Document
+
+    store = get_store()
+    folder = req.path.split('/')[0]  # "news" or "filings"
+    filename = req.path.rsplit('/', 1)[-1]
+
+    chunk_size, overlap = 2000, 200
+    text = req.content.strip()
+    docs = []
+    start = 0
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        docs.append(Document(
+            page_content=text[start:end],
+            metadata={'filename': filename, 'folder': folder, 'headers': req.path},
+        ))
+        if end == len(text):
+            break
+        start = end - overlap
+
+    store.upsert_file(req.path, docs)
+    return {'doc_id': req.path, 'chunks_stored': len(docs)}
 
 
 @api.delete('/ingest/paperless/{paperless_id}')
