@@ -1695,23 +1695,28 @@ def _parse_todo_file(filename: str, filepath: Path) -> dict | None:
         id_m = re.match(r'^(\d+)', filename)
         todo_id = int(id_m.group(1)) if id_m else None
 
-        title = (_get_fm_field(content, [
-            r'^title:\s*\"?([^\"\n]+)\"?\s*$',
-            r'^#\s+(.+)',
-        ]) or filename.replace('.md', '').lstrip('0123456789-'))
+        # Scan only the frontmatter block — body text starting with e.g.
+        # 'status:' at column 0 must never leak into card metadata.
+        fm_m = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
+        fm = fm_m.group(1) if fm_m else content
+        body = content[fm_m.end():] if fm_m else content
 
-        _raw_status = _get_fm_field(content, [r'^status:\s*([a-zA-Z0-9_-]+)\s*$']) or 'pending'
+        title = (_get_fm_field(fm, [r'^title:\s*\"?([^\"\n]+)\"?\s*$'])
+                 or _get_fm_field(body, [r'^#\s+(.+)'])
+                 or filename.replace('.md', '').lstrip('0123456789-'))
+
+        _raw_status = _get_fm_field(fm, [r'^status:\s*([a-zA-Z0-9_-]+)\s*$']) or 'pending'
         status = 'pending' if _raw_status == 'todo' else _raw_status
-        priority   = _get_fm_field(content, [r'^priority:\s*(high|medium|low)\s*$']) or 'medium'
-        created    = _get_fm_field(content, [r'^created:\s*([\d-]+)\s*$']) or ''
-        completed  = _get_fm_field(content, [r'^completed:\s*([\d-]+)\s*$'])
-        swimlane   = _get_fm_field(content, [r'^swimlane:\s*\"?([^\"\n]+)\"?\s*$'])
-        assignee   = _get_fm_field(content, [r'^assignee:\s*([^\n]+)\s*$'])
-        project    = _get_fm_field(content, [r'^project:\s*([^\n]+)\s*$'])
-        complexity = _get_fm_field(content, [r'^complexity:\s*(small|medium|large)\s*$'])
+        priority   = _get_fm_field(fm, [r'^priority:\s*(high|medium|low)\s*$']) or 'medium'
+        created    = _get_fm_field(fm, [r'^created:\s*([\d-]+)\s*$']) or ''
+        completed  = _get_fm_field(fm, [r'^completed:\s*([\d-]+)\s*$'])
+        swimlane   = _get_fm_field(fm, [r'^swimlane:\s*\"?([^\"\n]+)\"?\s*$'])
+        assignee   = _get_fm_field(fm, [r'^assignee:\s*([^\n]+)\s*$'])
+        project    = _get_fm_field(fm, [r'^project:\s*([^\n]+)\s*$'])
+        complexity = _get_fm_field(fm, [r'^complexity:\s*(small|medium|large)\s*$'])
 
         prereq_ids: list[str] = []
-        ym = re.search(r'^(?:prereqs|prereqIds):\s*\[([^\]]*)\]\s*$', content,
+        ym = re.search(r'^(?:prereqs|prereqIds):\s*\[([^\]]*)\]\s*$', fm,
                        re.IGNORECASE | re.MULTILINE)
         if ym:
             prereq_ids = [s.strip().strip('"\'') for s in ym.group(1).split(',') if s.strip()]
@@ -1735,9 +1740,17 @@ def _find_todo_path(todo_id: int) -> Path | None:
 
 
 def _set_fm_field(content: str, field: str, value: str) -> str:
+    # Rewrite within the frontmatter block only — a matching line in the body
+    # (e.g. a 'swimlane:' note under ## Deviations) must never be touched.
     pattern = re.compile(rf'^({re.escape(field)}:\s*).*$', re.IGNORECASE | re.MULTILINE)
-    if pattern.search(content):
-        return pattern.sub(f'{field}: {value}', content, count=1)
+    fm_m = re.match(r'^---\n(.*?\n)---', content, re.DOTALL)
+    if fm_m:
+        fm = fm_m.group(1)
+        if pattern.search(fm):
+            new_fm = pattern.sub(lambda m: f'{field}: {value}', fm, count=1)
+        else:
+            new_fm = fm + f'{field}: {value}\n'
+        return content[:fm_m.start(1)] + new_fm + content[fm_m.end(1):]
     return content.replace('---\n', f'---\n{field}: {value}\n', 1)
 
 
