@@ -22,15 +22,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up venv + install deps
-        # venv/ is gitignored; reused across runs on a persistent self-hosted
-        # runner, rebuilt from scratch on an ephemeral one. requirements-dev.txt
-        # pulls in requirements.txt plus pytest + httpx (TestClient).
+        # Venv lives OUTSIDE the workspace: actions/checkout@v4 defaults to
+        # clean:true (git clean -ffdx), which would wipe a gitignored in-tree
+        # venv/ on every run. On a persistent self-hosted runner ~/.cache
+        # survives, so pip only does real work when requirements-dev.txt changes.
+        # requirements-dev.txt pulls in requirements.txt plus pytest + httpx.
         run: |
-          python3 -m venv venv
-          ./venv/bin/pip install -q --upgrade pip
-          ./venv/bin/pip install -q -r requirements-dev.txt
+          VENV="$HOME/.cache/notes-rag-ci-venv"
+          test -d "$VENV" || python3 -m venv "$VENV"
+          "$VENV/bin/pip" install -q --upgrade pip
+          "$VENV/bin/pip" install -q -r requirements-dev.txt
+          echo "VENV=$VENV" >> "$GITHUB_ENV"
 
       - name: pytest
         env:
           OPENROUTER_API_KEY: test
-        run: ./venv/bin/python -m pytest tests/ -q
+        run: "$VENV/bin/python -m pytest tests/ -q"
