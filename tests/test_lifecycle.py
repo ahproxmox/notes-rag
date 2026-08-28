@@ -202,7 +202,7 @@ def test_lifecycle_multiplier_sets_lifecycle_score():
 
     doc = _make_doc(confidence=0.9, decay_factor=0.8)
 
-    with patch('search.get_store') as mock_gs:
+    with patch('core.search.get_store') as mock_gs:
         mock_store = MagicMock()
         mock_store.search_bm25.return_value = [doc]
         mock_store.search_vector.return_value = [doc]
@@ -220,7 +220,7 @@ def test_lifecycle_multiplier_1_0_for_fresh_confident_doc():
 
     doc = _make_doc(confidence=1.0, decay_factor=1.0)
 
-    with patch('search.get_store') as mock_gs:
+    with patch('core.search.get_store') as mock_gs:
         mock_store = MagicMock()
         mock_store.search_bm25.return_value = [doc]
         mock_store.search_vector.return_value = [doc]
@@ -239,7 +239,7 @@ def test_lifecycle_multiplier_demotes_low_confidence():
     doc_low  = _make_doc(content='low confidence content',  confidence=0.7,
                          decay_factor=1.0, source='low.md')
 
-    with patch('search.get_store') as mock_gs:
+    with patch('core.search.get_store') as mock_gs:
         mock_store = MagicMock()
         mock_store.search_bm25.return_value  = [doc_high, doc_low]
         mock_store.search_vector.return_value = [doc_high, doc_low]
@@ -259,7 +259,7 @@ def test_lifecycle_multiplier_demotes_old_docs():
     doc_old   = _make_doc(content='old document text',   confidence=1.0,
                           decay_factor=0.4, source='old.md')
 
-    with patch('search.get_store') as mock_gs:
+    with patch('core.search.get_store') as mock_gs:
         mock_store = MagicMock()
         mock_store.search_bm25.return_value  = [doc_fresh, doc_old]
         mock_store.search_vector.return_value = [doc_fresh, doc_old]
@@ -282,7 +282,7 @@ def test_lifecycle_multiplier_missing_fields_default_to_1():
                   'headers': '', 'wing': None, 'room': None, 'project': None},
     )
 
-    with patch('search.get_store') as mock_gs:
+    with patch('core.search.get_store') as mock_gs:
         mock_store = MagicMock()
         mock_store.search_bm25.return_value = [doc]
         mock_store.search_vector.return_value = []

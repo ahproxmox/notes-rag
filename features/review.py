@@ -241,7 +241,7 @@ def _detect_note_style(body: str) -> str:
     lines_ = [l for l in body.strip().split(chr(10)) if l.strip() and not l.strip().startswith('#')]
     if len(lines_) <= 2:
         return 'sparse'
-    list_lines = [l for l in lines_ if re.match(r'^\s*[-*\d]+[.)]\s', l)]
+    list_lines = [l for l in lines_ if re.match(r'^\s*(?:[-*+]|\d+[.)])\s', l)]
     if list_lines and len(list_lines) >= len(lines_) * 0.6:
         return 'list'
     return 'normal'
@@ -275,7 +275,7 @@ def _detect_note_intent(filename: str, body: str) -> str:
     }
 
     lines_ = [l for l in body.strip().split('\n') if l.strip() and not l.strip().startswith('#')]
-    list_lines = [l for l in lines_ if re.match(r'^\s*[-*\d]+[.)]\s', l)]
+    list_lines = [l for l in lines_ if re.match(r'^\s*(?:[-*+]|\d+[.)])\s', l)]
     if list_lines and len(list_lines) >= len(lines_) * 0.6 and max(scores.values(), default=0) < 2:
         return 'list'
 

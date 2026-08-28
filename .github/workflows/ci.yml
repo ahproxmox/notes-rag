@@ -15,3 +15,22 @@ jobs:
 
       - name: Bench suite syntax check
         run: python3 -m py_compile bench/run_bench.py bench/score.py
+
+  tests:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up venv + install deps
+        # venv/ is gitignored; reused across runs on a persistent self-hosted
+        # runner, rebuilt from scratch on an ephemeral one. requirements-dev.txt
+        # pulls in requirements.txt plus pytest + httpx (TestClient).
+        run: |
+          python3 -m venv venv
+          ./venv/bin/pip install -q --upgrade pip
+          ./venv/bin/pip install -q -r requirements-dev.txt
+
+      - name: pytest
+        env:
+          OPENROUTER_API_KEY: test
+        run: ./venv/bin/python -m pytest tests/ -q

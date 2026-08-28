@@ -264,7 +264,7 @@ def test_atomic_write_pair_rolls_back_a_on_b_failure(tmp_path):
         if call_count[0] == 2:
             raise OSError('simulated failure on B')
         return original_replace(src_, dst_)
-    with patch('links.os.replace', side_effect=fail_second):
+    with patch('features.links.os.replace', side_effect=fail_second):
         with pytest.raises(OSError):
             links.atomic_write_pair(a, 'A-NEW', b, 'B-NEW')
     assert a.read_text() == 'A-ORIGINAL'
@@ -282,12 +282,12 @@ def note_env(tmp_path):
         p = tmp_path / os.path.basename(fname)
         return p if p.exists() else None
 
-    with patch('api._find_note', side_effect=_find):
+    with patch('api.app._find_note', side_effect=_find):
         yield tmp_path
 
 
 def test_confirm_supersedes_endpoint(note_env):
-    with patch('api._reindex_paths'):
+    with patch('api.app._reindex_paths'):
         resp = client.post('/api/links/confirm', json={
             'type': 'supersedes', 'source': 'src.md', 'target': 'tgt.md',
         })
@@ -301,7 +301,7 @@ def test_confirm_supersedes_conflict(note_env):
     # Pre-seed target as already superseded
     (note_env / 'tgt.md').write_text(
         _note('Tgt', 'body', extra_fm={'superseded_by': 'other.md'}), encoding='utf-8')
-    with patch('api._reindex_paths'):
+    with patch('api.app._reindex_paths'):
         resp = client.post('/api/links/confirm', json={
             'type': 'supersedes', 'source': 'src.md', 'target': 'tgt.md',
         })
@@ -309,7 +309,7 @@ def test_confirm_supersedes_conflict(note_env):
 
 
 def test_confirm_related_endpoint(note_env):
-    with patch('api._reindex_paths'):
+    with patch('api.app._reindex_paths'):
         resp = client.post('/api/links/confirm', json={
             'type': 'related', 'source': 'src.md', 'target': 'tgt.md',
         })
@@ -320,7 +320,7 @@ def test_confirm_related_endpoint(note_env):
 
 
 def test_confirm_rejects_unknown_type(note_env):
-    with patch('api._reindex_paths'):
+    with patch('api.app._reindex_paths'):
         resp = client.post('/api/links/confirm', json={
             'type': 'bogus', 'source': 'src.md', 'target': 'tgt.md',
         })
@@ -336,7 +336,7 @@ def test_reject_endpoint_persists(note_env):
 
 
 def test_reject_endpoint_404_on_missing_source(tmp_path):
-    with patch('api._find_note', return_value=None):
+    with patch('api.app._find_note', return_value=None):
         resp = client.post('/api/links/reject',
                            json={'source': 'missing.md', 'target': 'x.md'})
     assert resp.status_code == 404
