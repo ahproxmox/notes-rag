@@ -1010,7 +1010,7 @@ def notes_create(req: NoteCreateRequest):
 @api.post('/notes/search')
 def notes_search(req: NoteSearchRequest):
     """Keyword+vector search returning deduplicated note-level results."""
-    _, _, chunks = search(req.query)
+    chunks = retrieve(req.query, k=8, scope='notes')  # chunks only; no LLM synthesis
     note_map: dict[str, dict] = {}
     for chunk in chunks:
         src = chunk['source']
@@ -1557,7 +1557,7 @@ async def review_start(req: ReviewStartRequest):
         seen_sources: set[str] = set()
         best_chunks: list[dict] = []
         for query in [combined_text, filename_query]:
-            _, _, chunks = search(query)
+            chunks = retrieve(query, k=8, scope='notes')
             for c in chunks:
                 src = c.get('source', '')
                 # Exclude the notes being reviewed from their own RAG context
@@ -1679,7 +1679,7 @@ async def review_auto_tag(note_id: str):
     review_num = fm.get('review_count', 0) + 1
     rag_context = ''
     try:
-        _, _, chunks = search(body[:200])
+        chunks = retrieve(body[:200], k=8, scope='notes')
         rag_context = '\n'.join(f"[{c['source']}] {c['content'][:200]}" for c in chunks[:3])
     except Exception:
         pass

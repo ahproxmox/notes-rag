@@ -37,7 +37,7 @@ def test_note_search_deduplicates_chunks(tmp_path):
         {'source': 'note-a.md', 'content': 'Second chunk of note A', 'score': 0.7},
         {'source': 'note-b.md', 'content': 'Only chunk of note B', 'score': 0.8},
     ]
-    with patch('api.app.search', return_value=('', ['note-a.md', 'note-b.md'], fake_chunks)):
+    with patch('api.app.retrieve', return_value=fake_chunks):
         with patch('api.app._obsidian_root', tmp_path):
             resp = client.post('/api/notes/search', json={'query': 'test query'})
     assert resp.status_code == 200
@@ -52,7 +52,7 @@ def test_note_search_ranks_by_best_chunk_score(tmp_path):
         {'source': 'low.md',  'content': 'low relevance', 'score': 0.3},
         {'source': 'high.md', 'content': 'high relevance', 'score': 0.95},
     ]
-    with patch('api.app.search', return_value=('', ['low.md', 'high.md'], fake_chunks)):
+    with patch('api.app.retrieve', return_value=fake_chunks):
         with patch('api.app._obsidian_root', tmp_path):
             resp = client.post('/api/notes/search', json={'query': 'anything'})
     results = resp.json()['results']
@@ -63,7 +63,7 @@ def test_note_search_ranks_by_best_chunk_score(tmp_path):
 def test_note_search_extracts_title_from_frontmatter(tmp_path):
     _write_note(tmp_path / 'my-note.md', NOTE_CONTENT)
     fake_chunks = [{'source': 'my-note.md', 'content': 'body text', 'score': 0.8}]
-    with patch('api.app.search', return_value=('', ['my-note.md'], fake_chunks)):
+    with patch('api.app.retrieve', return_value=fake_chunks):
         with patch('api.app._obsidian_root', tmp_path):
             resp = client.post('/api/notes/search', json={'query': 'body'})
     results = resp.json()['results']
