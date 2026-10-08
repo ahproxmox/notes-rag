@@ -1,0 +1,179 @@
+# Notes RAG — refreshed eval set (2026-10, todo 533). DRAFT: review before relying on it.
+#
+# Same format as queries.yaml. IDs start at 101 so the two sets can be scored together.
+# expected_sources are filenames that exist in the workspace as of 2026-10-08; queries
+# are phrased the way you'd actually ask, not copied from headings.
+# `expected` terms are only filled where the fact is unambiguous; IR metrics
+# (retrieve_bench.py) only use expected_sources.
+
+queries:
+
+  # ── Infra: recent incidents / decisions ──────────────────────────────────
+
+  - id: 101
+    category: reasoning
+    query: "Why did the Proxmox backups silently stop working?"
+    expected: ["192.168.88.83"]
+    expected_sources: ["2026-10-05-15-pbs-backups-fix.md", "507-fix-pbs-backups-storage.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 102
+    category: factual
+    query: "Where does PBS run now and what's the long-term plan for it?"
+    expected: ["CT 141"]
+    expected_sources: ["518-pbs-mini-pc-offsite-alerting.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 103
+    category: factual
+    query: "How long does search_memory cache results and where?"
+    expected: ["300"]
+    expected_sources: ["054-wire-redis-to-rag-caching.md", "rag-architecture.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 104
+    category: factual
+    query: "what to do after a power cut to get everything back up"
+    expected: []
+    expected_sources: ["power-outage-recovery.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 105
+    category: edge-case
+    query: "tailscale routes breaking LAN access"
+    expected: []
+    expected_sources: ["tailscale-accept-routes-gotcha.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 106
+    category: reasoning
+    query: "Are the Proxmox firewall rules actually doing anything?"
+    expected: []
+    expected_sources: ["reference_proxmox_firewall_inert.md"]
+    max_score: 2
+    scoring: contains
+
+  # ── Identity / RAG gateway ───────────────────────────────────────────────
+
+  - id: 107
+    category: multi-hop
+    query: "How does Hermes get a token to call the RAG gateway?"
+    expected: []
+    expected_sources: ["2026-10-05-17-identity-lesson3-hermes-client.md", "identity.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 108
+    category: reasoning
+    query: "Why can callers still skip the rag-gateway and hit CT 111 directly?"
+    expected: []
+    expected_sources: ["526-restrict-ct111-search-to-rag-gateway.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 109
+    category: temporal
+    query: "what did lesson 4 of the identity lab cover"
+    expected: []
+    expected_sources: ["2026-10-07-10-identity-lesson4-fine-grained.md"]
+    max_score: 2
+    scoring: contains
+
+  # ── Notes RAG itself ─────────────────────────────────────────────────────
+
+  - id: 110
+    category: reasoning
+    query: "Why did renamed notes show up twice in search results?"
+    expected: []
+    expected_sources: ["530-rag-watcher-moves-deletes-reconcile.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 111
+    category: factual
+    query: "which MCP tools can run without asking permission"
+    expected: []
+    expected_sources: ["mcp-permissions.md"]
+    max_score: 2
+    scoring: contains
+
+  # ── Trading ──────────────────────────────────────────────────────────────
+
+  - id: 112
+    category: factual
+    query: "How do trading services get deployed to their containers?"
+    expected: []
+    expected_sources: ["trading-auto-deploy.md", "trading.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 113
+    category: reasoning
+    query: "What changes for capital gains tax on the trading platform in 2027?"
+    expected: []
+    expected_sources: ["2027-cgt-transition-trading-platform.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 114
+    category: factual
+    query: "What did the SOL Markov transition analysis find?"
+    expected: []
+    expected_sources: ["128-sol-markov-transition-finding.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 115
+    category: temporal
+    query: "what went wrong with the trading runner watchdog"
+    expected: []
+    expected_sources: ["2026-10-06-08-trading-runner-watchdog-failure.md"]
+    max_score: 2
+    scoring: contains
+
+  # ── Projects / personal ──────────────────────────────────────────────────
+
+  - id: 116
+    category: factual
+    query: "How was the biz-coins tracker deployed?"
+    expected: []
+    expected_sources: ["2026-10-05-10-biz-coins-deploy.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 117
+    category: factual
+    query: "What does the train departure board show and how does it get its data?"
+    expected: []
+    expected_sources: ["ptv-display.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 118
+    category: factual
+    query: "how are pickleball court costs split"
+    expected: []
+    expected_sources: ["pickleball.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 119
+    category: temporal
+    query: "Which job did I apply for at Cbus?"
+    expected: []
+    expected_sources: ["2026-10-07-21-cbus-risk-data-manager.md"]
+    max_score: 2
+    scoring: contains
+
+  - id: 120
+    category: multi-hop
+    query: "options for syncing Obsidian to my phone and where LiveSync setup is at"
+    expected: []
+    expected_sources: ["obsidian-ios-sync-options.md", "livesync-setup-status.md"]
+    max_score: 2
+    scoring: contains
