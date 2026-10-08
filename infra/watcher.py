@@ -6,12 +6,13 @@ from datetime import date
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from core.indexer import load_config, get_embeddings, get_store, index_file, chunk_file, reconcile
+from core.indexer import load_config, get_embeddings, get_store, index_file, chunk_file, maintenance
 from core.search import get_store as search_get_store
 from core.health import health
 
 NOTES_SUBDIR = 'Notes'
 REVIEWS_PARTS = ('Inbox', 'Reviews')
+MAINTENANCE_INTERVAL = 3600.0  # seconds between reconcile/retention passes
 
 
 def _parse_frontmatter(text):
@@ -362,9 +363,16 @@ def start_watcher():
         else:
             print(f'[watcher] {extra} not found, skipping', flush=True)
 
-    # Drop chunks for files deleted/moved while the watcher was down. Queued so
-    # it runs after the startup indexing and never overlaps with a store write.
-    index_queue.submit(reconcile, store, cfg)
+    # Drop chunks for files deleted/moved while the watcher was down (and expire
+    # old news if configured). Queued so it runs after the startup indexing and
+    # never overlaps with a store write; repeated hourly to catch missed events
+    # (inotify overflow on bind mounts, bulk LiveSync changes).
+    def _schedule_maintenance():
+        index_queue.submit(maintenance, store, cfg)
+        timer = threading.Timer(MAINTENANCE_INTERVAL, _schedule_maintenance)
+        timer.daemon = True
+        timer.start()
+    _schedule_maintenance()
 
     observer.start()
     try:

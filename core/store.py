@@ -21,6 +21,29 @@ from langchain_core.documents import Document
 import sqlite_vec
 
 
+# Folders produced by POST /ingest from the trading-enrich pipeline.
+NEWS_FOLDERS = ('news', 'filings')
+SCOPES = ('notes', 'news', 'all')
+
+# sqlite-vec rejects k above 4096.
+VEC_MAX_K = 4096
+
+
+def _scope_clause(scope: str | None, folder: str | None):
+    """SQL fragment + params restricting chunks by scope.
+
+    An explicit `folder` filter wins over scope.
+    """
+    if scope is None or scope == 'all' or folder:
+        return None, []
+    if scope not in SCOPES:
+        raise ValueError(f'invalid scope {scope!r}; expected one of {SCOPES}')
+    marks = ','.join('?' * len(NEWS_FOLDERS))
+    if scope == 'news':
+        return f'c.folder IN ({marks})', list(NEWS_FOLDERS)
+    return f'c.folder NOT IN ({marks})', list(NEWS_FOLDERS)
+
+
 def _serialize_f32(vec: list[float]) -> bytes:
     """Serialize a float32 vector for sqlite-vec."""
     return struct.pack(f'{len(vec)}f', *vec)
@@ -185,8 +208,9 @@ class Store:
 
     def search_bm25(self, query: str, k: int = 20, folder: str | None = None,
                     wing: str | None = None, room: str | None = None,
-                    project: str | None = None, include_superseded: bool = False) -> list[Document]:
-        """BM25-ranked keyword search with optional folder/wing/room/project filters."""
+                    project: str | None = None, include_superseded: bool = False,
+                    scope: str | None = None) -> list[Document]:
+        """BM25-ranked keyword search with optional folder/wing/room/project/scope filters."""
         fts_query = self._fts_query(query)
         where = ['chunks_fts MATCH ?']
         params: list = [fts_query]
@@ -204,6 +228,10 @@ class Store:
             params.append(project)
         if not include_superseded:
             where.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
+        scope_sql, scope_params = _scope_clause(scope, folder)
+        if scope_sql:
+            where.append(scope_sql)
+            params.extend(scope_params)
         sql = f'''
             SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project,
                    c.confidence, c.decay_factor, c.superseded_by, c.last_updated
@@ -229,11 +257,14 @@ class Store:
 
     def search_vector(self, query: str, k: int = 20, folder: str | None = None,
                       wing: str | None = None, room: str | None = None,
-                      project: str | None = None, include_superseded: bool = False) -> list[Document]:
-        """Vector similarity search with optional folder/wing/room/project filters.
+                      project: str | None = None, include_superseded: bool = False,
+                      scope: str | None = None) -> list[Document]:
+        """Vector similarity search with optional folder/wing/room/project/scope filters.
 
         sqlite-vec's k param is pre-filter — applied before our metadata WHERE
-        clauses. To preserve top-k after filtering we over-fetch and trim.
+        clauses. To still return k results after filtering we over-fetch, and if
+        the filter leaves fewer than k we retry with a larger fetch until k are
+        found, the whole index has been scanned, or VEC_MAX_K is reached.
 
         Returned Documents include `similarity` in metadata (1 - cosine distance).
         """
@@ -242,37 +273,49 @@ class Store:
         query_vec = self._embed_fn.embed_query(query)
         query_bytes = _serialize_f32(query_vec)
 
-        where = ['v.embedding MATCH ?', 'k = ?']
-        params: list = [query_bytes]
-        has_filter = bool(folder or wing or room or project) or not include_superseded
-        # Over-fetch when filtering post-vec so trimmed result still yields k
-        fetch_k = k * 3 if has_filter else k
-        params.append(fetch_k)
+        filters: list[str] = []
+        fparams: list = []
         if folder:
-            where.append('c.folder = ?')
-            params.append(folder)
+            filters.append('c.folder = ?')
+            fparams.append(folder)
         if wing:
-            where.append('c.wing = ?')
-            params.append(wing)
+            filters.append('c.wing = ?')
+            fparams.append(wing)
         if room:
-            where.append('c.room = ?')
-            params.append(room)
+            filters.append('c.room = ?')
+            fparams.append(room)
         if project:
-            where.append('c.project = ?')
-            params.append(project)
+            filters.append('c.project = ?')
+            fparams.append(project)
         if not include_superseded:
-            where.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
+            filters.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
+        scope_sql, scope_params = _scope_clause(scope, folder)
+        if scope_sql:
+            filters.append(scope_sql)
+            fparams.extend(scope_params)
 
         sql = f'''
             SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project,
                    c.confidence, c.decay_factor, c.superseded_by, c.last_updated, v.distance
             FROM chunks_vec v
             JOIN chunks c ON c.id = v.chunk_id
-            WHERE {' AND '.join(where)}
+            WHERE {' AND '.join(['v.embedding MATCH ?', 'k = ?'] + filters)}
             ORDER BY v.distance
         '''
-        rows = self._conn.execute(sql, params).fetchall()
-        if has_filter:
+        if not filters:
+            rows = self._conn.execute(sql, [query_bytes, k]).fetchall()
+        else:
+            fetch_k = min(k * 3, VEC_MAX_K)
+            total = None
+            while True:
+                rows = self._conn.execute(sql, [query_bytes, fetch_k, *fparams]).fetchall()
+                if len(rows) >= k or fetch_k >= VEC_MAX_K:
+                    break
+                if total is None:
+                    total = self._conn.execute('SELECT COUNT(*) FROM chunks_vec').fetchone()[0]
+                if fetch_k >= total:
+                    break  # scanned every vector; fewer than k matches exist
+                fetch_k = min(fetch_k * 4, VEC_MAX_K)
             rows = rows[:k]
         return [
             Document(
@@ -286,6 +329,23 @@ class Store:
             )
             for r in rows
         ]
+
+    def prune_older_than(self, folders: tuple[str, ...], days: int) -> int:
+        """Delete every source in `folders` whose newest chunk is older than `days`.
+
+        Sources with no last_updated are kept (age unknown). Returns files removed.
+        """
+        from datetime import date, timedelta
+        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        marks = ','.join('?' * len(folders))
+        rows = self._conn.execute(
+            f'SELECT source FROM chunks WHERE folder IN ({marks}) '
+            'GROUP BY source HAVING MAX(last_updated) IS NOT NULL AND MAX(last_updated) < ?',
+            [*folders, cutoff],
+        ).fetchall()
+        for (source,) in rows:
+            self.delete_file(source)
+        return len(rows)
 
     def count(self) -> int:
         return self._conn.execute('SELECT COUNT(*) FROM chunks').fetchone()[0]

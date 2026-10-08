@@ -6,7 +6,7 @@ from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
 from .embeddings import ONNXEmbeddings
-from .store import Store
+from .store import Store, NEWS_FOLDERS
 from .wings import classify_document
 from .health import health
 
@@ -214,6 +214,19 @@ def reconcile(store, cfg):
             break
     print(f'[indexer] reconcile: removed {removed} stale file(s)', flush=True)
     return removed
+
+def news_retention_days(cfg):
+    """Days to keep ingested news/filings, or None when retention is off."""
+    raw = os.environ.get('RAG_NEWS_RETENTION_DAYS') or cfg.get('news_retention_days')
+    return int(raw) if raw else None
+
+def maintenance(store, cfg):
+    """Reconcile deleted/moved files and, if configured, expire old news."""
+    reconcile(store, cfg)
+    days = news_retention_days(cfg)
+    if days:
+        removed = store.prune_older_than(NEWS_FOLDERS, days)
+        print(f'[indexer] news retention ({days}d): removed {removed} source(s)', flush=True)
 
 def build_index():
     cfg = load_config()

@@ -2,8 +2,9 @@ from fastapi import FastAPI, Query, HTTPException, APIRouter, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from typing import Literal
 from core.health import health as health_state
-from core.search import search, search_filtered, search_with_weights, search_stream, similar, get_stats, retrieve_hybrid
+from core.search import search, search_filtered, search_with_weights, search_stream, similar, get_stats, retrieve_hybrid, retrieve
 from features.research import research
 from features.entities import EntityStore
 from features import links
@@ -56,6 +57,19 @@ class SearchRequest(BaseModel):
     room: str | None = None
     project: str | None = None
     include_superseded: bool = False
+    scope: Literal['notes', 'news', 'all'] | None = None
+
+
+class RetrieveRequest(BaseModel):
+    query: str
+    k: int = 8
+    folder: str | None = None
+    wing: str | None = None
+    room: str | None = None
+    project: str | None = None
+    include_superseded: bool = False
+    scope: Literal['notes', 'news', 'all'] = 'notes'
+    rerank: bool = True
 
 
 class SimilarRequest(BaseModel):
@@ -697,26 +711,38 @@ sources:
 def search_endpoint(req: SearchRequest):
     if req.bm25_weight is not None and req.vector_weight is not None:
         answer, sources, chunks = search_with_weights(req.query, req.bm25_weight, req.vector_weight,
-                                                      include_superseded=req.include_superseded)
+                                                      include_superseded=req.include_superseded,
+                                                      scope=req.scope)
     elif req.exclude_sources:
         answer, sources, chunks = search_filtered(req.query, req.exclude_sources,
                                                   folder=req.folder, wing=req.wing, room=req.room,
                                                   project=req.project,
-                                                  include_superseded=req.include_superseded)
+                                                  include_superseded=req.include_superseded,
+                                                  scope=req.scope)
     else:
         answer, sources, chunks = search(req.query, folder=req.folder, wing=req.wing, room=req.room,
                                          project=req.project,
-                                         include_superseded=req.include_superseded)
+                                         include_superseded=req.include_superseded,
+                                         scope=req.scope)
     return {'answer': answer, 'sources': sources, 'chunks': chunks}
 
 @api.post('/search/stream')
 async def search_stream_endpoint(req: SearchRequest):
     return StreamingResponse(
         search_stream(req.query, folder=req.folder, wing=req.wing, room=req.room,
-                      project=req.project, include_superseded=req.include_superseded),
+                      project=req.project, include_superseded=req.include_superseded,
+                      scope=req.scope),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
     )
+
+@api.post('/retrieve')
+def retrieve_endpoint(req: RetrieveRequest):
+    """Hybrid retrieval only — no LLM synthesis. For agents that just need the chunks."""
+    chunks = retrieve(req.query, k=req.k, folder=req.folder, wing=req.wing, room=req.room,
+                      project=req.project, include_superseded=req.include_superseded,
+                      scope=req.scope, rerank=req.rerank)
+    return {'chunks': chunks}
 
 @api.post('/similar')
 def similar_endpoint(req: SimilarRequest):
@@ -1271,7 +1297,8 @@ def ingest_doc(req: IngestRequest):
         end = min(start + chunk_size, len(text))
         docs.append(Document(
             page_content=text[start:end],
-            metadata={'filename': filename, 'folder': folder, 'headers': req.path},
+            metadata={'filename': filename, 'folder': folder, 'headers': req.path,
+                      'last_updated': date.today().isoformat()},
         ))
         if end == len(text):
             break
@@ -2181,6 +2208,7 @@ app.add_api_route('/stats',             stats,                  methods=['GET'])
 app.add_api_route('/search',            search_endpoint,        methods=['POST'])
 app.add_api_route('/search/stream',     search_stream_endpoint, methods=['POST'])
 app.add_api_route('/similar',           similar_endpoint,       methods=['POST'])
+app.add_api_route('/retrieve',          retrieve_endpoint,      methods=['POST'])
 app.add_api_route('/research',          research_endpoint,      methods=['POST'])
 app.add_api_route('/wiki',              wiki_list,              methods=['GET'])
 app.add_api_route('/wiki/save',         wiki_save,              methods=['POST'])

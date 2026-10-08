@@ -209,9 +209,19 @@ def _search_recent(query: str) -> tuple[str, list[str], list[dict]]:
 # Retrieval
 # ---------------------------------------------------------------------------
 
+def _default_scope() -> str:
+    """Scope applied by /search when the caller doesn't pass one.
+
+    Defaults to 'all' so existing callers (incl. trading, which reads news) keep
+    working; set RAG_SEARCH_DEFAULT_SCOPE=notes once callers pass scope explicitly.
+    """
+    return os.environ.get('RAG_SEARCH_DEFAULT_SCOPE', 'all')
+
+
 def _retrieve(query: str, k: int = 30, bm25_weight: float = 0.4, vector_weight: float = 0.6,
               folder: str | None = None, wing: str | None = None, room: str | None = None,
-              project: str | None = None, include_superseded: bool = False) -> list[Document]:
+              project: str | None = None, include_superseded: bool = False,
+              scope: str | None = None) -> list[Document]:
     """Hybrid retrieval: FTS5 keyword + sqlite-vec vector, merged via RRF.
 
     Retrieves k candidates from each source, then merges with weighted
@@ -222,9 +232,11 @@ def _retrieve(query: str, k: int = 30, bm25_weight: float = 0.4, vector_weight: 
     store = get_store()
 
     bm25_docs = store.search_bm25(query, k=k, folder=folder, wing=wing, room=room,
-                                  project=project, include_superseded=include_superseded)
+                                  project=project, include_superseded=include_superseded,
+                                  scope=scope)
     vector_docs = store.search_vector(query, k=k, folder=folder, wing=wing, room=room,
-                                      project=project, include_superseded=include_superseded)
+                                      project=project, include_superseded=include_superseded,
+                                      scope=scope)
 
     # Reciprocal rank fusion — merge by content identity
     scores: dict[str, float] = {}
@@ -301,7 +313,8 @@ def _docs_to_chunks(docs: list[Document]) -> list[dict]:
 def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
            final_k: int = 8, folder: str | None = None,
            wing: str | None = None, room: str | None = None,
-           project: str | None = None, include_superseded: bool = False) -> tuple[str, list[str], list[dict]]:
+           project: str | None = None, include_superseded: bool = False,
+           scope: str | None = None) -> tuple[str, list[str], list[dict]]:
     """Full RAG search with intent-aware routing.
 
     When called with default weights (0.4/0.6), classifies query intent and
@@ -327,7 +340,7 @@ def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
 
     docs = _retrieve(query, k=20, bm25_weight=bm25_weight, vector_weight=vector_weight,
                      folder=folder, wing=wing, room=room, project=project,
-                     include_superseded=include_superseded)
+                     include_superseded=include_superseded, scope=scope or _default_scope())
     if not docs:
         return 'No relevant context found in the workspace.', [], []
 
@@ -343,16 +356,18 @@ def search(query: str, bm25_weight: float = 0.4, vector_weight: float = 0.6,
 
 
 def search_with_weights(query: str, bm25_weight: float, vector_weight: float,
-                        include_superseded: bool = False) -> tuple[str, list[str], list[dict]]:
+                        include_superseded: bool = False,
+                        scope: str | None = None) -> tuple[str, list[str], list[dict]]:
     """Run a search with explicit weights — bypasses intent routing."""
     return search(query, bm25_weight=bm25_weight, vector_weight=vector_weight,
-                  include_superseded=include_superseded)
+                  include_superseded=include_superseded, scope=scope)
 
 
 def search_filtered(query: str, exclude_sources: list[str], folder: str | None = None,
                     wing: str | None = None, room: str | None = None,
                     project: str | None = None,
-                    include_superseded: bool = False) -> tuple[str, list[str], list[dict]]:
+                    include_superseded: bool = False,
+                    scope: str | None = None) -> tuple[str, list[str], list[dict]]:
     """Retrieve docs, filter out excluded source files, rerank, then synthesise."""
     lookup = _try_todo_lookup(query)
     if lookup:
@@ -360,7 +375,7 @@ def search_filtered(query: str, exclude_sources: list[str], folder: str | None =
         return answer, sources, []
 
     docs = _retrieve(query, k=20, folder=folder, wing=wing, room=room, project=project,
-                     include_superseded=include_superseded)
+                     include_superseded=include_superseded, scope=scope or _default_scope())
     docs = [d for d in docs if d.metadata.get('filename', '') not in exclude_sources]
     if not docs:
         return 'No relevant context found in the workspace.', [], []
@@ -374,6 +389,41 @@ def search_filtered(query: str, exclude_sources: list[str], folder: str | None =
     answer = _synthesise(query, docs)
     sources = list(dict.fromkeys(d.metadata.get('filename', 'unknown') for d in docs))
     return answer, sources, _docs_to_chunks(docs)
+
+
+def retrieve(query: str, k: int = 8, folder: str | None = None, wing: str | None = None,
+             room: str | None = None, project: str | None = None,
+             include_superseded: bool = False, scope: str = 'notes',
+             rerank: bool = True) -> list[dict]:
+    """Hybrid BM25 + vector + RRF (+ rerank) retrieval with no LLM call.
+
+    Same intent-based weighting as search(); the 'recent' intent is not special-cased
+    here because it would need LLM synthesis. Returns chunks with path and headers.
+    """
+    bm25_weight, vector_weight = 0.4, 0.6
+    intent = _classify_intent(query)
+    if intent == 'keyword':
+        bm25_weight, vector_weight = 0.7, 0.3
+    elif intent == 'synthesis':
+        bm25_weight, vector_weight = 0.2, 0.8
+
+    docs = _retrieve(query, k=max(20, k * 2), bm25_weight=bm25_weight, vector_weight=vector_weight,
+                     folder=folder, wing=wing, room=room, project=project,
+                     include_superseded=include_superseded, scope=scope)
+    reranker = _get_reranker() if rerank else None
+    docs = reranker.rerank(query, docs, top_k=k) if reranker else docs[:k]
+    return [
+        {
+            'content': d.page_content,
+            'source': d.metadata.get('filename', 'unknown'),
+            'path': d.metadata.get('source', ''),
+            'headers': d.metadata.get('headers', ''),
+            'folder': d.metadata.get('folder', ''),
+            'score': round(d.metadata.get('rrf_score', 0.0), 6),
+            'lifecycle_score': round(d.metadata.get('lifecycle_score', 1.0), 4),
+        }
+        for d in docs
+    ]
 
 
 def get_stats() -> dict:
@@ -395,6 +445,7 @@ async def search_stream(
     room: str | None = None,
     project: str | None = None,
     include_superseded: bool = False,
+    scope: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Streaming RAG search with intent routing — yields SSE-formatted events."""
     def sse(obj: dict) -> str:
@@ -426,7 +477,7 @@ async def search_stream(
 
     docs = _retrieve(query, k=30, bm25_weight=bm25_weight, vector_weight=vector_weight,
                      folder=folder, wing=wing, room=room, project=project,
-                     include_superseded=include_superseded)
+                     include_superseded=include_superseded, scope=scope or _default_scope())
     if not docs:
         yield sse({'type': 'retrieved', 'chunks': [], 'sources': []})
         yield sse({'type': 'token', 'content': 'No relevant context found in the workspace.'})
