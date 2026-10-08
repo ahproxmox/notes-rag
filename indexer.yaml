@@ -12,16 +12,14 @@ exclude:
 
 chunk_size: 500
 chunk_overlap: 100
-embedding_model: all-MiniLM-L6-v2
+# bge-small (todo 533): same 384 dims as MiniLM, better retrieval. Embedded text is
+# "file | headers | project\ncontent" (embed_prefix). Changing either requires a full
+# re-embed (scripts/reembed.py); the service refuses to start against a mismatched DB.
+embedding_model: BAAI/bge-small-en-v1.5
+embed_prefix: true
+embedding_query_prefix: "Represent this sentence for searching relevant passages: "
 db_path: /opt/rag/rag.db
 rerank: true
-
-# Embedding upgrade (todo 533) — changing either of these requires a full re-embed
-# (scripts/reembed.py); the service refuses to start against a DB built differently.
-#   embed_prefix: true                       # embed "file | headers | project\ncontent"; also used by the reranker
-#   embedding_model: BAAI/bge-small-en-v1.5  # 384-d, same schema as MiniLM
-#   embedding_query_prefix: "Represent this sentence for searching relevant passages: "
-#   reranker_model: Xenova/ms-marco-MiniLM-L-6-v2
 
 watch_extra:
   - /mnt/Obsidian
