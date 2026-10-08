@@ -14,6 +14,7 @@ Usage:
 
 import struct
 import sqlite3
+import threading
 from pathlib import Path
 from langchain_core.documents import Document
 
@@ -32,12 +33,23 @@ class Store:
         self._db_path = db_path
         self._embed_fn = embed_fn
         self._vec_dim = vec_dim
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.enable_load_extension(True)
-        sqlite_vec.load(self._conn)
-        self._conn.enable_load_extension(False)
-        self._conn.execute('PRAGMA journal_mode=WAL')
+        # One connection per thread: sqlite3 connections aren't safe for concurrent
+        # use, and the watcher's index thread writes while API threads read.
+        # WAL lets readers proceed during a write.
+        self._local = threading.local()
         self._init_tables()
+
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        conn = getattr(self._local, 'conn', None)
+        if conn is None:
+            conn = sqlite3.connect(self._db_path, timeout=30)
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
+            conn.execute('PRAGMA journal_mode=WAL')
+            self._local.conn = conn
+        return conn
 
     def _init_tables(self):
         self._conn.executescript(f'''
@@ -94,7 +106,18 @@ class Store:
             texts = [c.page_content for c in chunks]
             embeddings = self._embed_fn.embed_documents(texts)
 
-        cur = self._conn.cursor()
+        conn = self._conn
+        cur = conn.cursor()
+        # Single write transaction so readers never see a half-replaced file.
+        cur.execute('BEGIN IMMEDIATE')
+        try:
+            self._replace_file(cur, source, chunks, embeddings)
+        except BaseException:
+            conn.rollback()
+            raise
+        conn.commit()
+
+    def _replace_file(self, cur, source, chunks, embeddings):
         # Delete old data for this source (chunks, FTS, and vectors)
         old_ids = [r[0] for r in cur.execute('SELECT id FROM chunks WHERE source = ?', (source,)).fetchall()]
         if old_ids:
@@ -126,19 +149,23 @@ class Store:
                     'INSERT INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)',
                     (chunk_id, _serialize_f32(embeddings[i])),
                 )
-        self._conn.commit()
 
     def delete_file(self, source: str) -> int:
         """Remove all chunks for a source file."""
-        cur = self._conn.cursor()
-        old_ids = [r[0] for r in cur.execute('SELECT id FROM chunks WHERE source = ?', (source,)).fetchall()]
-        if not old_ids:
-            return 0
-        placeholders = ','.join('?' * len(old_ids))
-        cur.execute(f'DELETE FROM chunks_fts WHERE rowid IN ({placeholders})', old_ids)
-        cur.execute(f'DELETE FROM chunks_vec WHERE chunk_id IN ({placeholders})', old_ids)
-        cur.execute('DELETE FROM chunks WHERE source = ?', (source,))
-        self._conn.commit()
+        conn = self._conn
+        cur = conn.cursor()
+        cur.execute('BEGIN IMMEDIATE')
+        try:
+            old_ids = [r[0] for r in cur.execute('SELECT id FROM chunks WHERE source = ?', (source,)).fetchall()]
+            if old_ids:
+                placeholders = ','.join('?' * len(old_ids))
+                cur.execute(f'DELETE FROM chunks_fts WHERE rowid IN ({placeholders})', old_ids)
+                cur.execute(f'DELETE FROM chunks_vec WHERE chunk_id IN ({placeholders})', old_ids)
+                cur.execute('DELETE FROM chunks WHERE source = ?', (source,))
+        except BaseException:
+            conn.rollback()
+            raise
+        conn.commit()
         return len(old_ids)
 
     def list_sources(self, prefixes: tuple[str, ...] | None = None) -> list[str]:
@@ -179,7 +206,7 @@ class Store:
             where.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
         sql = f'''
             SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project,
-                   c.confidence, c.decay_factor, c.superseded_by
+                   c.confidence, c.decay_factor, c.superseded_by, c.last_updated
             FROM chunks_fts
             JOIN chunks c ON c.id = chunks_fts.rowid
             WHERE {' AND '.join(where)}
@@ -195,7 +222,7 @@ class Store:
                           'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7],
                           'confidence': float(r[8]) if r[8] is not None else 1.0,
                           'decay_factor': float(r[9]) if r[9] is not None else 1.0,
-                          'superseded_by': r[10]},
+                          'superseded_by': r[10], 'last_updated': r[11]},
             )
             for r in rows
         ]
@@ -238,7 +265,7 @@ class Store:
 
         sql = f'''
             SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project,
-                   c.confidence, c.decay_factor, c.superseded_by, v.distance
+                   c.confidence, c.decay_factor, c.superseded_by, c.last_updated, v.distance
             FROM chunks_vec v
             JOIN chunks c ON c.id = v.chunk_id
             WHERE {' AND '.join(where)}
@@ -254,8 +281,8 @@ class Store:
                           'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7],
                           'confidence': float(r[8]) if r[8] is not None else 1.0,
                           'decay_factor': float(r[9]) if r[9] is not None else 1.0,
-                          'superseded_by': r[10],
-                          'similarity': 1.0 - float(r[11])},
+                          'superseded_by': r[10], 'last_updated': r[11],
+                          'similarity': 1.0 - float(r[12])},
             )
             for r in rows
         ]
@@ -278,4 +305,8 @@ class Store:
         return ' '.join(f'"{t}"' for t in tokens)
 
     def close(self):
-        self._conn.close()
+        """Close the calling thread's connection."""
+        conn = getattr(self._local, 'conn', None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None

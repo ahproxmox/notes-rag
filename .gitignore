@@ -5,6 +5,10 @@ __pycache__/
 
 # Data
 chroma/
+chroma_db/
+rag.db*
+reminders.db*
+fts.db*
 *.bak
 *.bak2
 *.bak3

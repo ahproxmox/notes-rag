@@ -2,7 +2,6 @@
 #
 # All paths can be overridden via environment variables:
 #   RAG_WORKSPACE    → workspace
-#   RAG_CHROMA_PATH  → chroma_path
 
 workspace: /mnt/Claude
 exclude:
@@ -14,7 +13,7 @@ exclude:
 chunk_size: 500
 chunk_overlap: 100
 embedding_model: all-MiniLM-L6-v2
-chroma_path: /opt/rag/chroma
+db_path: /opt/rag/rag.db
 rerank: true
 
 watch_extra:

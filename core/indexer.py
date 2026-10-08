@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from .embeddings import ONNXEmbeddings
 from .store import Store
 from .wings import classify_document
+from .health import health
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'indexer.yaml'))
 
@@ -19,7 +20,8 @@ def get_embeddings(cfg):
     return ONNXEmbeddings(model_name=f"sentence-transformers/{cfg['embedding_model']}")
 
 def get_store(cfg, embeddings) -> Store:
-    db_path = os.path.join(os.path.dirname(cfg['chroma_path']), 'rag.db')
+    # `db_path` is canonical; `chroma_path` (legacy) only supplies the directory.
+    db_path = cfg.get('db_path') or os.path.join(os.path.dirname(cfg['chroma_path']), 'rag.db')
     return Store(db_path, embed_fn=embeddings)
 
 def get_md_files(workspace, exclude):
@@ -64,8 +66,8 @@ def chunk_file(path, workspace, cfg):
         sm = re.search(r'^superseded_by:\s*([^\n]+)', fm_match.group(1), re.MULTILINE)
         if sm:
             superseded_by = sm.group(1).strip().strip('"').strip("'")
-        # Extract date for lifecycle decay (priority: updated > date > date_created)
-        for date_field in ('updated', 'date', 'date_created'):
+        # Extract date for lifecycle decay (priority: updated > date > created > date_created)
+        for date_field in ('updated', 'date', 'created', 'date_created'):
             dm = re.search(rf'^{date_field}:\s*([^\n]+)', fm_match.group(1), re.MULTILINE)
             if dm:
                 candidate = dm.group(1).strip().strip('"').strip("'")
@@ -174,8 +176,12 @@ def index_file(path, cfg=None, embeddings=None, store=None):
             # File exists but is now empty — drop its stale chunks.
             store.delete_file(str(path))
         print(f'[indexer] {path} -> {len(chunks)} chunks', flush=True)
+        health.record_success(path)
     except Exception as e:
+        # Fail loud: record for /health + Pushgateway, then let the caller see it.
         print(f'[indexer] error {path}: {e}', flush=True)
+        health.record_failure(path, e)
+        raise
 
 def watched_roots(cfg):
     """Return [(root, exclude_set)] for the primary workspace and watch_extra dirs.
@@ -231,6 +237,7 @@ def build_index():
                 print(f'[indexer] {i + 1}/{len(md_files)} files indexed...', flush=True)
         except Exception as e:
             print(f'[indexer] skipping {path}: {e}', flush=True)
+            health.record_failure(path, e)
 
     reconcile(store, cfg)
     store.rebuild_fts()

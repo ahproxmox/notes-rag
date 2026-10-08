@@ -2,6 +2,7 @@ from fastapi import FastAPI, Query, HTTPException, APIRouter, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from core.health import health as health_state
 from core.search import search, search_filtered, search_with_weights, search_stream, similar, get_stats, retrieve_hybrid
 from features.research import research
 from features.entities import EntityStore
@@ -353,7 +354,8 @@ def service_worker():
 
 @api.get('/health')
 def health():
-    return {'status': 'ok'}
+    snap = health_state.snapshot()
+    return {'status': 'degraded' if snap['degraded'] else 'ok', 'indexing': snap}
 
 @api.get('/stats')
 def stats():

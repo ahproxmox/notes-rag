@@ -11,6 +11,8 @@ from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
 from .store import Store
 from .reranker import Reranker
+from .health import health
+from features.lifecycle import compute_decay_factor
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'indexer.yaml'))
 
@@ -249,19 +251,24 @@ def _retrieve(query: str, k: int = 30, bm25_weight: float = 0.4, vector_weight: 
         if '/wiki/' in source or source.startswith('wiki/'):
             scores[key] *= wiki_boost
 
-    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    result = []
-    for key, score in ranked[:k]:
+    # Lifecycle multiplier (confidence × decay) demotes old/low-quality chunks.
+    # Decay is computed now from last_updated so it ages without re-indexing;
+    # the stored decay_factor is only a fallback. Applied before the top-k cut
+    # so a chunk that would rank in after the multiplier isn't dropped first.
+    for key, score in scores.items():
         doc = doc_map[key]
-        # Lifecycle multiplier: confidence × decay_factor demotes old/low-quality chunks
         confidence = float(doc.metadata.get('confidence') or 1.0)
-        decay = float(doc.metadata.get('decay_factor') or 1.0)
+        last_updated = doc.metadata.get('last_updated')
+        if last_updated:
+            decay = compute_decay_factor(last_updated)
+        else:
+            decay = float(doc.metadata.get('decay_factor') or 1.0)
         lifecycle = round(confidence * decay, 4)
         doc.metadata['rrf_score'] = score * lifecycle
         doc.metadata['lifecycle_score'] = lifecycle
-        result.append(doc)
-    result.sort(key=lambda d: d.metadata.get('rrf_score', 0.0), reverse=True)
-    return result
+
+    ranked = sorted(doc_map.values(), key=lambda d: d.metadata['rrf_score'], reverse=True)
+    return ranked[:k]
 
 
 def _synthesise(query: str, docs: list[Document]) -> str:
@@ -374,7 +381,8 @@ def get_stats() -> dict:
     store = get_store()
     mtime = os.path.getmtime(store._db_path)
     last_indexed = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
-    return {'chunk_count': store.count(), 'last_indexed': last_indexed}
+    return {'chunk_count': store.count(), 'last_indexed': last_indexed,
+            'indexing': health.snapshot()}
 
 
 async def search_stream(

@@ -8,6 +8,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from core.indexer import load_config, get_embeddings, get_store, index_file, chunk_file, reconcile
 from core.search import get_store as search_get_store
+from core.health import health
 
 NOTES_SUBDIR = 'Notes'
 REVIEWS_PARTS = ('Inbox', 'Reviews')
@@ -137,6 +138,7 @@ class IndexQueue:
     """Serializes all indexing work onto a single background thread."""
     def __init__(self):
         self._q = queue.Queue()
+        health.set_queue_depth_fn(self._q.qsize)
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
@@ -150,6 +152,7 @@ class IndexQueue:
                 fn(*args)
             except Exception as e:
                 print(f'[indexer] unhandled error: {e}', flush=True)
+                health.record_failure(getattr(fn, '__name__', fn), e)
             finally:
                 self._q.task_done()
 
@@ -174,11 +177,16 @@ class MarkdownHandler(FileSystemEventHandler):
     def _do_index(self, path):
         try:
             index_file(path, self.cfg, self.embeddings, self.store)
+        except Exception as e:
+            print(f'[watcher] error indexing {path}: {e}', flush=True)  # already in health
+            return
+        try:
             # Run supersession sweep — detects if this file supersedes similar notes
             from features.lifecycle import supersession_sweep
             supersession_sweep(self.store, path)
         except Exception as e:
-            print(f'[watcher] error indexing {path}: {e}', flush=True)
+            print(f'[watcher] error in supersession sweep for {path}: {e}', flush=True)
+            health.record_failure(path, f'supersession_sweep: {e}')
 
     def _do_delete(self, path):
         try:
@@ -186,6 +194,7 @@ class MarkdownHandler(FileSystemEventHandler):
             print(f'[watcher] deleted: {path} ({n} chunks removed)', flush=True)
         except Exception as e:
             print(f'[watcher] error deleting {path}: {e}', flush=True)
+            health.record_failure(path, f'delete: {e}')
 
     def _do_relate(self, path):
         """Auto-fill related: frontmatter for a newly indexed review note.
