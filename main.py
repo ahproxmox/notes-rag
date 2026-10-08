@@ -47,6 +47,11 @@ def init_store():
     store = get_store(cfg, embeddings)
     search_init_store(store)
 
+    # Fail loud if the configured embedding model/format differs from the DB's vectors.
+    from core.indexer import embedding_meta
+    store.ensure_embedding_meta(embedding_meta(cfg))
+    store.set_meta('chunk_size', str(cfg['chunk_size']))
+
     if store.count() == 0:
         print('[main] store empty — running full index build...', flush=True)
         from core.indexer import build_index

@@ -5,9 +5,10 @@ from pathlib import Path
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
-from .embeddings import ONNXEmbeddings
-from .store import Store
+from .embeddings import ONNXEmbeddings, build_embed_text, EMBED_PREFIX_VERSION
+from .store import Store, NEWS_FOLDERS
 from .wings import classify_document
+from .health import health
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'indexer.yaml'))
 
@@ -15,11 +16,25 @@ def load_config():
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)
 
+def embedding_model_id(cfg):
+    """Full model id; bare names (all-MiniLM-L6-v2) default to sentence-transformers/."""
+    name = cfg['embedding_model']
+    return name if '/' in name else f'sentence-transformers/{name}'
+
 def get_embeddings(cfg):
-    return ONNXEmbeddings(model_name=f"sentence-transformers/{cfg['embedding_model']}")
+    return ONNXEmbeddings(model_name=embedding_model_id(cfg),
+                          query_prefix=cfg.get('embedding_query_prefix', ''))
+
+def embedding_meta(cfg):
+    """Values compared against the store's meta table at startup."""
+    return {
+        'embedding_model': embedding_model_id(cfg),
+        'embed_prefix_version': EMBED_PREFIX_VERSION if cfg.get('embed_prefix') else '0',
+    }
 
 def get_store(cfg, embeddings) -> Store:
-    db_path = os.path.join(os.path.dirname(cfg['chroma_path']), 'rag.db')
+    # `db_path` is canonical; `chroma_path` (legacy) only supplies the directory.
+    db_path = cfg.get('db_path') or os.path.join(os.path.dirname(cfg['chroma_path']), 'rag.db')
     return Store(db_path, embed_fn=embeddings)
 
 def get_md_files(workspace, exclude):
@@ -64,14 +79,18 @@ def chunk_file(path, workspace, cfg):
         sm = re.search(r'^superseded_by:\s*([^\n]+)', fm_match.group(1), re.MULTILINE)
         if sm:
             superseded_by = sm.group(1).strip().strip('"').strip("'")
-        # Extract date for lifecycle decay (priority: updated > date > date_created)
-        for date_field in ('updated', 'date', 'date_created'):
+        # Extract date for lifecycle decay (priority: updated > date > created > date_created)
+        for date_field in ('updated', 'date', 'created', 'date_created'):
             dm = re.search(rf'^{date_field}:\s*([^\n]+)', fm_match.group(1), re.MULTILINE)
             if dm:
                 candidate = dm.group(1).strip().strip('"').strip("'")
                 if re.match(r'^\d{4}-\d{2}-\d{2}', candidate):
                     last_updated = candidate[:10]
                     break
+
+    # Frontmatter is already parsed into metadata columns; as chunk text it is
+    # embedding noise. Everything below chunks the body only.
+    body = text[fm_match.end():].lstrip('\n') if fm_match else text
 
     # Fall back to file mtime if no date found in frontmatter
     if not last_updated:
@@ -92,7 +111,7 @@ def chunk_file(path, workspace, cfg):
         ],
         strip_headers=False,
     )
-    header_chunks = md_splitter.split_text(text)
+    header_chunks = md_splitter.split_text(body)
 
     # Pass 2: sub-split oversized sections
     sub_splitter = RecursiveCharacterTextSplitter(
@@ -140,7 +159,7 @@ def chunk_file(path, workspace, cfg):
             chunk_overlap=cfg['chunk_overlap'],
             separators=["\n\n", "\n", " ", ""],
         )
-        chunks = fallback.split_documents(raw)
+        chunks = fallback.create_documents([body]) if body.strip() else []
         for chunk in chunks:
             chunk.metadata.update({
                 'source': str(path),
@@ -156,6 +175,11 @@ def chunk_file(path, workspace, cfg):
                 'decay_factor': decay_factor,
             })
 
+    if cfg.get('embed_prefix'):
+        for chunk in chunks:
+            m = chunk.metadata
+            m['embed_text'] = build_embed_text(chunk.page_content, m['filename'], m['headers'], m['project'])
+
     return chunks
 
 def index_file(path, cfg=None, embeddings=None, store=None):
@@ -170,9 +194,61 @@ def index_file(path, cfg=None, embeddings=None, store=None):
         chunks = chunk_file(Path(path), Path(workspace), cfg)
         if chunks:
             store.upsert_file(str(path), chunks)
+        else:
+            # File exists but is now empty — drop its stale chunks.
+            store.delete_file(str(path))
         print(f'[indexer] {path} -> {len(chunks)} chunks', flush=True)
+        health.record_success(path)
     except Exception as e:
+        # Fail loud: record for /health + Pushgateway, then let the caller see it.
         print(f'[indexer] error {path}: {e}', flush=True)
+        health.record_failure(path, e)
+        raise
+
+def watched_roots(cfg):
+    """Return [(root, exclude_set)] for the primary workspace and watch_extra dirs.
+
+    Extra dirs use the same fixed exclude set the watcher applies to them.
+    """
+    roots = [(str(cfg['workspace']), set(cfg.get('exclude', [])))]
+    for extra in cfg.get('watch_extra', []):
+        roots.append((str(extra), {'.trash', 'trash'}))
+    return roots
+
+def reconcile(store, cfg):
+    """Delete chunks whose source file is gone or now sits under an excluded dir.
+
+    Only sources under a watched root are considered — `news/…`, `paperless:…`
+    and other non-file sources are never touched. Returns the number of
+    files removed.
+    """
+    roots = watched_roots(cfg)
+    prefixes = tuple(os.path.join(root, '') for root, _ in roots)
+    removed = 0
+    for source in store.list_sources(prefixes):
+        for root, exclude in roots:
+            if not source.startswith(os.path.join(root, '')):
+                continue
+            parts = Path(source).relative_to(root).parts
+            if not os.path.exists(source) or any(p in exclude for p in parts):
+                store.delete_file(source)
+                removed += 1
+            break
+    print(f'[indexer] reconcile: removed {removed} stale file(s)', flush=True)
+    return removed
+
+def news_retention_days(cfg):
+    """Days to keep ingested news/filings, or None when retention is off."""
+    raw = os.environ.get('RAG_NEWS_RETENTION_DAYS') or cfg.get('news_retention_days')
+    return int(raw) if raw else None
+
+def maintenance(store, cfg):
+    """Reconcile deleted/moved files and, if configured, expire old news."""
+    reconcile(store, cfg)
+    days = news_retention_days(cfg)
+    if days:
+        removed = store.prune_older_than(NEWS_FOLDERS, days)
+        print(f'[indexer] news retention ({days}d): removed {removed} source(s)', flush=True)
 
 def build_index():
     cfg = load_config()
@@ -190,11 +266,15 @@ def build_index():
             chunks = chunk_file(path, Path(workspace), cfg)
             if chunks:
                 store.upsert_file(str(path), chunks)
+            else:
+                store.delete_file(str(path))
             if (i + 1) % 50 == 0:
                 print(f'[indexer] {i + 1}/{len(md_files)} files indexed...', flush=True)
         except Exception as e:
             print(f'[indexer] skipping {path}: {e}', flush=True)
+            health.record_failure(path, e)
 
+    reconcile(store, cfg)
     store.rebuild_fts()
     total = store.count()
     print(f'[indexer] done. {total} chunks in store.', flush=True)

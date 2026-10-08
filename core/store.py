@@ -14,15 +14,43 @@ Usage:
 
 import struct
 import sqlite3
+import threading
 from pathlib import Path
 from langchain_core.documents import Document
 
 import sqlite_vec
 
 
+# Folders produced by POST /ingest from the trading-enrich pipeline.
+NEWS_FOLDERS = ('news', 'filings')
+SCOPES = ('notes', 'news', 'all')
+
+# sqlite-vec rejects k above 4096.
+VEC_MAX_K = 4096
+
+
+def _scope_clause(scope: str | None, folder: str | None):
+    """SQL fragment + params restricting chunks by scope.
+
+    An explicit `folder` filter wins over scope.
+    """
+    if scope is None or scope == 'all' or folder:
+        return None, []
+    if scope not in SCOPES:
+        raise ValueError(f'invalid scope {scope!r}; expected one of {SCOPES}')
+    marks = ','.join('?' * len(NEWS_FOLDERS))
+    if scope == 'news':
+        return f'c.folder IN ({marks})', list(NEWS_FOLDERS)
+    return f'c.folder NOT IN ({marks})', list(NEWS_FOLDERS)
+
+
 def _serialize_f32(vec: list[float]) -> bytes:
     """Serialize a float32 vector for sqlite-vec."""
     return struct.pack(f'{len(vec)}f', *vec)
+
+
+class EmbeddingConfigMismatch(RuntimeError):
+    """The configured embedding model/format differs from what the DB was built with."""
 
 
 class Store:
@@ -32,12 +60,23 @@ class Store:
         self._db_path = db_path
         self._embed_fn = embed_fn
         self._vec_dim = vec_dim
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.enable_load_extension(True)
-        sqlite_vec.load(self._conn)
-        self._conn.enable_load_extension(False)
-        self._conn.execute('PRAGMA journal_mode=WAL')
+        # One connection per thread: sqlite3 connections aren't safe for concurrent
+        # use, and the watcher's index thread writes while API threads read.
+        # WAL lets readers proceed during a write.
+        self._local = threading.local()
         self._init_tables()
+
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        conn = getattr(self._local, 'conn', None)
+        if conn is None:
+            conn = sqlite3.connect(self._db_path, timeout=30)
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
+            conn.execute('PRAGMA journal_mode=WAL')
+            self._local.conn = conn
+        return conn
 
     def _init_tables(self):
         self._conn.executescript(f'''
@@ -86,15 +125,55 @@ class Store:
                 embedding float[{self._vec_dim}]
             )
         ''')
+        self._conn.execute('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
         self._conn.commit()
+
+    def get_meta(self, key: str) -> str | None:
+        row = self._conn.execute('SELECT value FROM meta WHERE key = ?', (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_meta(self, key: str, value: str):
+        self._conn.execute('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', (key, value))
+        self._conn.commit()
+
+    def ensure_embedding_meta(self, expected: dict[str, str]):
+        """Record what the vectors were built with; refuse to run against a different config.
+
+        On a fresh or pre-meta database nothing is recorded yet, so `expected` is
+        written as-is (assumes the current config matches the existing vectors).
+        """
+        current = {k: self.get_meta(k) for k in expected}
+        if all(v is None for v in current.values()):
+            for k, v in expected.items():
+                self.set_meta(k, v)
+            return
+        bad = {k: (current[k], v) for k, v in expected.items() if current[k] != v}
+        if bad:
+            detail = ', '.join(f'{k}: db={a!r} config={b!r}' for k, (a, b) in bad.items())
+            raise EmbeddingConfigMismatch(
+                f'embedding config does not match the database ({detail}); '
+                'run scripts/reembed.py and swap the DB, or revert the config'
+            )
 
     def upsert_file(self, source: str, chunks: list[Document], embeddings: list[list[float]] | None = None):
         """Replace all chunks for a source file. Embeds if embeddings not provided."""
         if embeddings is None and self._embed_fn is not None:
-            texts = [c.page_content for c in chunks]
+            # Contextual text (if the indexer built one) is embedded; page_content is what's stored.
+            texts = [c.metadata.get('embed_text') or c.page_content for c in chunks]
             embeddings = self._embed_fn.embed_documents(texts)
 
-        cur = self._conn.cursor()
+        conn = self._conn
+        cur = conn.cursor()
+        # Single write transaction so readers never see a half-replaced file.
+        cur.execute('BEGIN IMMEDIATE')
+        try:
+            self._replace_file(cur, source, chunks, embeddings)
+        except BaseException:
+            conn.rollback()
+            raise
+        conn.commit()
+
+    def _replace_file(self, cur, source, chunks, embeddings):
         # Delete old data for this source (chunks, FTS, and vectors)
         old_ids = [r[0] for r in cur.execute('SELECT id FROM chunks WHERE source = ?', (source,)).fetchall()]
         if old_ids:
@@ -126,25 +205,45 @@ class Store:
                     'INSERT INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)',
                     (chunk_id, _serialize_f32(embeddings[i])),
                 )
-        self._conn.commit()
 
     def delete_file(self, source: str) -> int:
         """Remove all chunks for a source file."""
-        cur = self._conn.cursor()
-        old_ids = [r[0] for r in cur.execute('SELECT id FROM chunks WHERE source = ?', (source,)).fetchall()]
-        if not old_ids:
-            return 0
-        placeholders = ','.join('?' * len(old_ids))
-        cur.execute(f'DELETE FROM chunks_fts WHERE rowid IN ({placeholders})', old_ids)
-        cur.execute(f'DELETE FROM chunks_vec WHERE chunk_id IN ({placeholders})', old_ids)
-        cur.execute('DELETE FROM chunks WHERE source = ?', (source,))
-        self._conn.commit()
+        conn = self._conn
+        cur = conn.cursor()
+        cur.execute('BEGIN IMMEDIATE')
+        try:
+            old_ids = [r[0] for r in cur.execute('SELECT id FROM chunks WHERE source = ?', (source,)).fetchall()]
+            if old_ids:
+                placeholders = ','.join('?' * len(old_ids))
+                cur.execute(f'DELETE FROM chunks_fts WHERE rowid IN ({placeholders})', old_ids)
+                cur.execute(f'DELETE FROM chunks_vec WHERE chunk_id IN ({placeholders})', old_ids)
+                cur.execute('DELETE FROM chunks WHERE source = ?', (source,))
+        except BaseException:
+            conn.rollback()
+            raise
+        conn.commit()
         return len(old_ids)
+
+    def list_sources(self, prefixes: tuple[str, ...] | None = None) -> list[str]:
+        """Distinct chunk sources, optionally limited to those starting with a prefix."""
+        if not prefixes:
+            rows = self._conn.execute('SELECT DISTINCT source FROM chunks').fetchall()
+            return [r[0] for r in rows]
+        sources = []
+        for prefix in prefixes:
+            # substr comparison instead of LIKE so '_' / '%' in paths aren't wildcards
+            rows = self._conn.execute(
+                'SELECT DISTINCT source FROM chunks WHERE substr(source, 1, ?) = ?',
+                (len(prefix), prefix),
+            ).fetchall()
+            sources.extend(r[0] for r in rows)
+        return sources
 
     def search_bm25(self, query: str, k: int = 20, folder: str | None = None,
                     wing: str | None = None, room: str | None = None,
-                    project: str | None = None, include_superseded: bool = False) -> list[Document]:
-        """BM25-ranked keyword search with optional folder/wing/room/project filters."""
+                    project: str | None = None, include_superseded: bool = False,
+                    scope: str | None = None) -> list[Document]:
+        """BM25-ranked keyword search with optional folder/wing/room/project/scope filters."""
         fts_query = self._fts_query(query)
         where = ['chunks_fts MATCH ?']
         params: list = [fts_query]
@@ -162,9 +261,13 @@ class Store:
             params.append(project)
         if not include_superseded:
             where.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
+        scope_sql, scope_params = _scope_clause(scope, folder)
+        if scope_sql:
+            where.append(scope_sql)
+            params.extend(scope_params)
         sql = f'''
             SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project,
-                   c.confidence, c.decay_factor, c.superseded_by
+                   c.confidence, c.decay_factor, c.superseded_by, c.last_updated
             FROM chunks_fts
             JOIN chunks c ON c.id = chunks_fts.rowid
             WHERE {' AND '.join(where)}
@@ -180,18 +283,21 @@ class Store:
                           'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7],
                           'confidence': float(r[8]) if r[8] is not None else 1.0,
                           'decay_factor': float(r[9]) if r[9] is not None else 1.0,
-                          'superseded_by': r[10]},
+                          'superseded_by': r[10], 'last_updated': r[11]},
             )
             for r in rows
         ]
 
     def search_vector(self, query: str, k: int = 20, folder: str | None = None,
                       wing: str | None = None, room: str | None = None,
-                      project: str | None = None, include_superseded: bool = False) -> list[Document]:
-        """Vector similarity search with optional folder/wing/room/project filters.
+                      project: str | None = None, include_superseded: bool = False,
+                      scope: str | None = None) -> list[Document]:
+        """Vector similarity search with optional folder/wing/room/project/scope filters.
 
         sqlite-vec's k param is pre-filter — applied before our metadata WHERE
-        clauses. To preserve top-k after filtering we over-fetch and trim.
+        clauses. To still return k results after filtering we over-fetch, and if
+        the filter leaves fewer than k we retry with a larger fetch until k are
+        found, the whole index has been scanned, or VEC_MAX_K is reached.
 
         Returned Documents include `similarity` in metadata (1 - cosine distance).
         """
@@ -200,37 +306,49 @@ class Store:
         query_vec = self._embed_fn.embed_query(query)
         query_bytes = _serialize_f32(query_vec)
 
-        where = ['v.embedding MATCH ?', 'k = ?']
-        params: list = [query_bytes]
-        has_filter = bool(folder or wing or room or project) or not include_superseded
-        # Over-fetch when filtering post-vec so trimmed result still yields k
-        fetch_k = k * 3 if has_filter else k
-        params.append(fetch_k)
+        filters: list[str] = []
+        fparams: list = []
         if folder:
-            where.append('c.folder = ?')
-            params.append(folder)
+            filters.append('c.folder = ?')
+            fparams.append(folder)
         if wing:
-            where.append('c.wing = ?')
-            params.append(wing)
+            filters.append('c.wing = ?')
+            fparams.append(wing)
         if room:
-            where.append('c.room = ?')
-            params.append(room)
+            filters.append('c.room = ?')
+            fparams.append(room)
         if project:
-            where.append('c.project = ?')
-            params.append(project)
+            filters.append('c.project = ?')
+            fparams.append(project)
         if not include_superseded:
-            where.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
+            filters.append("(c.superseded_by IS NULL OR c.superseded_by = '')")
+        scope_sql, scope_params = _scope_clause(scope, folder)
+        if scope_sql:
+            filters.append(scope_sql)
+            fparams.extend(scope_params)
 
         sql = f'''
             SELECT c.content, c.source, c.filename, c.folder, c.headers, c.wing, c.room, c.project,
-                   c.confidence, c.decay_factor, c.superseded_by, v.distance
+                   c.confidence, c.decay_factor, c.superseded_by, c.last_updated, v.distance
             FROM chunks_vec v
             JOIN chunks c ON c.id = v.chunk_id
-            WHERE {' AND '.join(where)}
+            WHERE {' AND '.join(['v.embedding MATCH ?', 'k = ?'] + filters)}
             ORDER BY v.distance
         '''
-        rows = self._conn.execute(sql, params).fetchall()
-        if has_filter:
+        if not filters:
+            rows = self._conn.execute(sql, [query_bytes, k]).fetchall()
+        else:
+            fetch_k = min(k * 3, VEC_MAX_K)
+            total = None
+            while True:
+                rows = self._conn.execute(sql, [query_bytes, fetch_k, *fparams]).fetchall()
+                if len(rows) >= k or fetch_k >= VEC_MAX_K:
+                    break
+                if total is None:
+                    total = self._conn.execute('SELECT COUNT(*) FROM chunks_vec').fetchone()[0]
+                if fetch_k >= total:
+                    break  # scanned every vector; fewer than k matches exist
+                fetch_k = min(fetch_k * 4, VEC_MAX_K)
             rows = rows[:k]
         return [
             Document(
@@ -239,11 +357,28 @@ class Store:
                           'headers': r[4], 'wing': r[5], 'room': r[6], 'project': r[7],
                           'confidence': float(r[8]) if r[8] is not None else 1.0,
                           'decay_factor': float(r[9]) if r[9] is not None else 1.0,
-                          'superseded_by': r[10],
-                          'similarity': 1.0 - float(r[11])},
+                          'superseded_by': r[10], 'last_updated': r[11],
+                          'similarity': 1.0 - float(r[12])},
             )
             for r in rows
         ]
+
+    def prune_older_than(self, folders: tuple[str, ...], days: int) -> int:
+        """Delete every source in `folders` whose newest chunk is older than `days`.
+
+        Sources with no last_updated are kept (age unknown). Returns files removed.
+        """
+        from datetime import date, timedelta
+        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        marks = ','.join('?' * len(folders))
+        rows = self._conn.execute(
+            f'SELECT source FROM chunks WHERE folder IN ({marks}) '
+            'GROUP BY source HAVING MAX(last_updated) IS NOT NULL AND MAX(last_updated) < ?',
+            [*folders, cutoff],
+        ).fetchall()
+        for (source,) in rows:
+            self.delete_file(source)
+        return len(rows)
 
     def count(self) -> int:
         return self._conn.execute('SELECT COUNT(*) FROM chunks').fetchone()[0]
@@ -263,4 +398,8 @@ class Store:
         return ' '.join(f'"{t}"' for t in tokens)
 
     def close(self):
-        self._conn.close()
+        """Close the calling thread's connection."""
+        conn = getattr(self._local, 'conn', None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None

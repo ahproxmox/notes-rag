@@ -6,11 +6,13 @@ from datetime import date
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from core.indexer import load_config, get_embeddings, get_store, index_file, chunk_file
+from core.indexer import load_config, get_embeddings, get_store, index_file, chunk_file, maintenance
 from core.search import get_store as search_get_store
+from core.health import health
 
 NOTES_SUBDIR = 'Notes'
 REVIEWS_PARTS = ('Inbox', 'Reviews')
+MAINTENANCE_INTERVAL = 3600.0  # seconds between reconcile/retention passes
 
 
 def _parse_frontmatter(text):
@@ -137,6 +139,7 @@ class IndexQueue:
     """Serializes all indexing work onto a single background thread."""
     def __init__(self):
         self._q = queue.Queue()
+        health.set_queue_depth_fn(self._q.qsize)
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
@@ -150,6 +153,7 @@ class IndexQueue:
                 fn(*args)
             except Exception as e:
                 print(f'[indexer] unhandled error: {e}', flush=True)
+                health.record_failure(getattr(fn, '__name__', fn), e)
             finally:
                 self._q.task_done()
 
@@ -174,11 +178,16 @@ class MarkdownHandler(FileSystemEventHandler):
     def _do_index(self, path):
         try:
             index_file(path, self.cfg, self.embeddings, self.store)
+        except Exception as e:
+            print(f'[watcher] error indexing {path}: {e}', flush=True)  # already in health
+            return
+        try:
             # Run supersession sweep — detects if this file supersedes similar notes
             from features.lifecycle import supersession_sweep
             supersession_sweep(self.store, path)
         except Exception as e:
-            print(f'[watcher] error indexing {path}: {e}', flush=True)
+            print(f'[watcher] error in supersession sweep for {path}: {e}', flush=True)
+            health.record_failure(path, f'supersession_sweep: {e}')
 
     def _do_delete(self, path):
         try:
@@ -186,6 +195,7 @@ class MarkdownHandler(FileSystemEventHandler):
             print(f'[watcher] deleted: {path} ({n} chunks removed)', flush=True)
         except Exception as e:
             print(f'[watcher] error deleting {path}: {e}', flush=True)
+            health.record_failure(path, f'delete: {e}')
 
     def _do_relate(self, path):
         """Auto-fill related: frontmatter for a newly indexed review note.
@@ -289,6 +299,11 @@ class MarkdownHandler(FileSystemEventHandler):
         print(f'[watcher] modified: {path}', flush=True)
         self._queue.submit(self._do_index, path)
 
+    def _cancel_debounce(self, path):
+        timer = self._debounce_timers.pop(path, None)
+        if timer:
+            timer.cancel()
+
     def on_deleted(self, event):
         if event.is_directory or not event.src_path.endswith('.md'):
             return
@@ -296,7 +311,28 @@ class MarkdownHandler(FileSystemEventHandler):
             return
         if self.is_excluded(event.src_path):
             return
+        self._cancel_debounce(event.src_path)
         self._queue.submit(self._do_delete, event.src_path)
+
+    def on_moved(self, event):
+        """Handle mv / rename / atomic-save: drop the old path, index the new one.
+
+        A move into an excluded dir (trash/tmp/archive) therefore reduces to a delete.
+        """
+        if event.is_directory:
+            return
+        src, dest = event.src_path, event.dest_path
+        if src.endswith('.md') and not Path(src).name.startswith('.') and not self.is_excluded(src):
+            self._cancel_debounce(src)
+            print(f'[watcher] moved from: {src}', flush=True)
+            self._queue.submit(self._do_delete, src)
+        if dest.endswith('.md') and not Path(dest).name.startswith('.') and not self.is_excluded(dest):
+            print(f'[watcher] moved to: {dest}', flush=True)
+            if is_in_notes_root(dest, self.workspace):
+                inject_frontmatter(dest)
+            self._queue.submit(self._do_index, dest)
+            if is_review_note(dest, self.workspace):
+                self._queue.submit(self._do_relate, dest)
 
 
 def start_watcher():
@@ -326,6 +362,17 @@ def start_watcher():
             startup_scan(extra_cfg, store, index_queue, extra_handler)
         else:
             print(f'[watcher] {extra} not found, skipping', flush=True)
+
+    # Drop chunks for files deleted/moved while the watcher was down (and expire
+    # old news if configured). Queued so it runs after the startup indexing and
+    # never overlaps with a store write; repeated hourly to catch missed events
+    # (inotify overflow on bind mounts, bulk LiveSync changes).
+    def _schedule_maintenance():
+        index_queue.submit(maintenance, store, cfg)
+        timer = threading.Timer(MAINTENANCE_INTERVAL, _schedule_maintenance)
+        timer.daemon = True
+        timer.start()
+    _schedule_maintenance()
 
     observer.start()
     try:
