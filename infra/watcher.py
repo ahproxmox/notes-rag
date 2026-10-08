@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from core.indexer import load_config, get_embeddings, get_store, index_file, chunk_file
+from core.indexer import load_config, get_embeddings, get_store, index_file, chunk_file, reconcile
 from core.search import get_store as search_get_store
 
 NOTES_SUBDIR = 'Notes'
@@ -289,6 +289,11 @@ class MarkdownHandler(FileSystemEventHandler):
         print(f'[watcher] modified: {path}', flush=True)
         self._queue.submit(self._do_index, path)
 
+    def _cancel_debounce(self, path):
+        timer = self._debounce_timers.pop(path, None)
+        if timer:
+            timer.cancel()
+
     def on_deleted(self, event):
         if event.is_directory or not event.src_path.endswith('.md'):
             return
@@ -296,7 +301,28 @@ class MarkdownHandler(FileSystemEventHandler):
             return
         if self.is_excluded(event.src_path):
             return
+        self._cancel_debounce(event.src_path)
         self._queue.submit(self._do_delete, event.src_path)
+
+    def on_moved(self, event):
+        """Handle mv / rename / atomic-save: drop the old path, index the new one.
+
+        A move into an excluded dir (trash/tmp/archive) therefore reduces to a delete.
+        """
+        if event.is_directory:
+            return
+        src, dest = event.src_path, event.dest_path
+        if src.endswith('.md') and not Path(src).name.startswith('.') and not self.is_excluded(src):
+            self._cancel_debounce(src)
+            print(f'[watcher] moved from: {src}', flush=True)
+            self._queue.submit(self._do_delete, src)
+        if dest.endswith('.md') and not Path(dest).name.startswith('.') and not self.is_excluded(dest):
+            print(f'[watcher] moved to: {dest}', flush=True)
+            if is_in_notes_root(dest, self.workspace):
+                inject_frontmatter(dest)
+            self._queue.submit(self._do_index, dest)
+            if is_review_note(dest, self.workspace):
+                self._queue.submit(self._do_relate, dest)
 
 
 def start_watcher():
@@ -326,6 +352,10 @@ def start_watcher():
             startup_scan(extra_cfg, store, index_queue, extra_handler)
         else:
             print(f'[watcher] {extra} not found, skipping', flush=True)
+
+    # Drop chunks for files deleted/moved while the watcher was down. Queued so
+    # it runs after the startup indexing and never overlaps with a store write.
+    index_queue.submit(reconcile, store, cfg)
 
     observer.start()
     try:

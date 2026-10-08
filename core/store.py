@@ -141,6 +141,21 @@ class Store:
         self._conn.commit()
         return len(old_ids)
 
+    def list_sources(self, prefixes: tuple[str, ...] | None = None) -> list[str]:
+        """Distinct chunk sources, optionally limited to those starting with a prefix."""
+        if not prefixes:
+            rows = self._conn.execute('SELECT DISTINCT source FROM chunks').fetchall()
+            return [r[0] for r in rows]
+        sources = []
+        for prefix in prefixes:
+            # substr comparison instead of LIKE so '_' / '%' in paths aren't wildcards
+            rows = self._conn.execute(
+                'SELECT DISTINCT source FROM chunks WHERE substr(source, 1, ?) = ?',
+                (len(prefix), prefix),
+            ).fetchall()
+            sources.extend(r[0] for r in rows)
+        return sources
+
     def search_bm25(self, query: str, k: int = 20, folder: str | None = None,
                     wing: str | None = None, room: str | None = None,
                     project: str | None = None, include_superseded: bool = False) -> list[Document]:

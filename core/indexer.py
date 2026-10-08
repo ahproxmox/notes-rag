@@ -170,9 +170,44 @@ def index_file(path, cfg=None, embeddings=None, store=None):
         chunks = chunk_file(Path(path), Path(workspace), cfg)
         if chunks:
             store.upsert_file(str(path), chunks)
+        else:
+            # File exists but is now empty — drop its stale chunks.
+            store.delete_file(str(path))
         print(f'[indexer] {path} -> {len(chunks)} chunks', flush=True)
     except Exception as e:
         print(f'[indexer] error {path}: {e}', flush=True)
+
+def watched_roots(cfg):
+    """Return [(root, exclude_set)] for the primary workspace and watch_extra dirs.
+
+    Extra dirs use the same fixed exclude set the watcher applies to them.
+    """
+    roots = [(str(cfg['workspace']), set(cfg.get('exclude', [])))]
+    for extra in cfg.get('watch_extra', []):
+        roots.append((str(extra), {'.trash', 'trash'}))
+    return roots
+
+def reconcile(store, cfg):
+    """Delete chunks whose source file is gone or now sits under an excluded dir.
+
+    Only sources under a watched root are considered — `news/…`, `paperless:…`
+    and other non-file sources are never touched. Returns the number of
+    files removed.
+    """
+    roots = watched_roots(cfg)
+    prefixes = tuple(os.path.join(root, '') for root, _ in roots)
+    removed = 0
+    for source in store.list_sources(prefixes):
+        for root, exclude in roots:
+            if not source.startswith(os.path.join(root, '')):
+                continue
+            parts = Path(source).relative_to(root).parts
+            if not os.path.exists(source) or any(p in exclude for p in parts):
+                store.delete_file(source)
+                removed += 1
+            break
+    print(f'[indexer] reconcile: removed {removed} stale file(s)', flush=True)
+    return removed
 
 def build_index():
     cfg = load_config()
@@ -190,11 +225,14 @@ def build_index():
             chunks = chunk_file(path, Path(workspace), cfg)
             if chunks:
                 store.upsert_file(str(path), chunks)
+            else:
+                store.delete_file(str(path))
             if (i + 1) % 50 == 0:
                 print(f'[indexer] {i + 1}/{len(md_files)} files indexed...', flush=True)
         except Exception as e:
             print(f'[indexer] skipping {path}: {e}', flush=True)
 
+    reconcile(store, cfg)
     store.rebuild_fts()
     total = store.count()
     print(f'[indexer] done. {total} chunks in store.', flush=True)
