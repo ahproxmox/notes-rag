@@ -49,6 +49,10 @@ def _serialize_f32(vec: list[float]) -> bytes:
     return struct.pack(f'{len(vec)}f', *vec)
 
 
+class EmbeddingConfigMismatch(RuntimeError):
+    """The configured embedding model/format differs from what the DB was built with."""
+
+
 class Store:
     """Unified SQLite store with FTS5 + sqlite-vec."""
 
@@ -121,12 +125,41 @@ class Store:
                 embedding float[{self._vec_dim}]
             )
         ''')
+        self._conn.execute('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
         self._conn.commit()
+
+    def get_meta(self, key: str) -> str | None:
+        row = self._conn.execute('SELECT value FROM meta WHERE key = ?', (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_meta(self, key: str, value: str):
+        self._conn.execute('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', (key, value))
+        self._conn.commit()
+
+    def ensure_embedding_meta(self, expected: dict[str, str]):
+        """Record what the vectors were built with; refuse to run against a different config.
+
+        On a fresh or pre-meta database nothing is recorded yet, so `expected` is
+        written as-is (assumes the current config matches the existing vectors).
+        """
+        current = {k: self.get_meta(k) for k in expected}
+        if all(v is None for v in current.values()):
+            for k, v in expected.items():
+                self.set_meta(k, v)
+            return
+        bad = {k: (current[k], v) for k, v in expected.items() if current[k] != v}
+        if bad:
+            detail = ', '.join(f'{k}: db={a!r} config={b!r}' for k, (a, b) in bad.items())
+            raise EmbeddingConfigMismatch(
+                f'embedding config does not match the database ({detail}); '
+                'run scripts/reembed.py and swap the DB, or revert the config'
+            )
 
     def upsert_file(self, source: str, chunks: list[Document], embeddings: list[list[float]] | None = None):
         """Replace all chunks for a source file. Embeds if embeddings not provided."""
         if embeddings is None and self._embed_fn is not None:
-            texts = [c.page_content for c in chunks]
+            # Contextual text (if the indexer built one) is embedded; page_content is what's stored.
+            texts = [c.metadata.get('embed_text') or c.page_content for c in chunks]
             embeddings = self._embed_fn.embed_documents(texts)
 
         conn = self._conn

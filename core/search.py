@@ -41,7 +41,10 @@ def _get_reranker() -> Reranker | None:
     if _reranker is None:
         cfg = yaml.safe_load(open(CONFIG_PATH))
         if cfg.get('rerank', True):
-            _reranker = Reranker()
+            _reranker = Reranker(
+                model_name=cfg.get('reranker_model', 'Xenova/ms-marco-MiniLM-L-6-v2'),
+                contextual=bool(cfg.get('embed_prefix', False)),
+            )
             print('[search] reranker loaded', flush=True)
     return _reranker
 

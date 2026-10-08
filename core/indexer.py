@@ -5,7 +5,7 @@ from pathlib import Path
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
-from .embeddings import ONNXEmbeddings
+from .embeddings import ONNXEmbeddings, build_embed_text, EMBED_PREFIX_VERSION
 from .store import Store, NEWS_FOLDERS
 from .wings import classify_document
 from .health import health
@@ -16,8 +16,21 @@ def load_config():
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)
 
+def embedding_model_id(cfg):
+    """Full model id; bare names (all-MiniLM-L6-v2) default to sentence-transformers/."""
+    name = cfg['embedding_model']
+    return name if '/' in name else f'sentence-transformers/{name}'
+
 def get_embeddings(cfg):
-    return ONNXEmbeddings(model_name=f"sentence-transformers/{cfg['embedding_model']}")
+    return ONNXEmbeddings(model_name=embedding_model_id(cfg),
+                          query_prefix=cfg.get('embedding_query_prefix', ''))
+
+def embedding_meta(cfg):
+    """Values compared against the store's meta table at startup."""
+    return {
+        'embedding_model': embedding_model_id(cfg),
+        'embed_prefix_version': EMBED_PREFIX_VERSION if cfg.get('embed_prefix') else '0',
+    }
 
 def get_store(cfg, embeddings) -> Store:
     # `db_path` is canonical; `chroma_path` (legacy) only supplies the directory.
@@ -75,6 +88,10 @@ def chunk_file(path, workspace, cfg):
                     last_updated = candidate[:10]
                     break
 
+    # Frontmatter is already parsed into metadata columns; as chunk text it is
+    # embedding noise. Everything below chunks the body only.
+    body = text[fm_match.end():].lstrip('\n') if fm_match else text
+
     # Fall back to file mtime if no date found in frontmatter
     if not last_updated:
         last_updated = _dt.date.fromtimestamp(path.stat().st_mtime).isoformat()
@@ -94,7 +111,7 @@ def chunk_file(path, workspace, cfg):
         ],
         strip_headers=False,
     )
-    header_chunks = md_splitter.split_text(text)
+    header_chunks = md_splitter.split_text(body)
 
     # Pass 2: sub-split oversized sections
     sub_splitter = RecursiveCharacterTextSplitter(
@@ -142,7 +159,7 @@ def chunk_file(path, workspace, cfg):
             chunk_overlap=cfg['chunk_overlap'],
             separators=["\n\n", "\n", " ", ""],
         )
-        chunks = fallback.split_documents(raw)
+        chunks = fallback.create_documents([body]) if body.strip() else []
         for chunk in chunks:
             chunk.metadata.update({
                 'source': str(path),
@@ -157,6 +174,11 @@ def chunk_file(path, workspace, cfg):
                 'confidence': confidence,
                 'decay_factor': decay_factor,
             })
+
+    if cfg.get('embed_prefix'):
+        for chunk in chunks:
+            m = chunk.metadata
+            m['embed_text'] = build_embed_text(chunk.page_content, m['filename'], m['headers'], m['project'])
 
     return chunks
 
