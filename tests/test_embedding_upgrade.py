@@ -153,7 +153,7 @@ def test_reembed_rechunks_files_carries_other_sources_and_drops_missing(ws, tmp_
     new_path = str(tmp_path / 'new.db')
     counts = reembed_script.reembed(old_path, new_path, new_cfg, emb, log=lambda *_: None)
 
-    assert counts == {'rechunked': 1, 'carried': 1, 'dropped': 1, 'failed': 0}
+    assert counts == {'rechunked': 1, 'carried': 1, 'dropped': 1, 'failed': 0, 'skipped': 0}
     new = Store(new_path)
     assert set(new.list_sources()) == {str(keep), 'news/2026/x.md'}
     assert new.get_meta('embed_prefix_version') == EMBED_PREFIX_VERSION
@@ -169,3 +169,54 @@ def test_reembed_refuses_to_overwrite_existing_db(ws, tmp_path):
     existing.write_text('x')
     with pytest.raises(FileExistsError):
         reembed_script.reembed(str(tmp_path / 'old.db'), str(existing), _cfg(ws), RecordingEmbed())
+
+
+def test_embed_documents_uses_bounded_batch_size(monkeypatch):
+    # Unbounded batches OOM-killed the 533 re-embed: 150 x 512-token chunks in one
+    # ONNX pass took +2.2 GB. Batches of EMBED_BATCH_SIZE keep it to ~0.5 GB.
+    from core import embeddings as emb_mod
+    seen = {}
+
+    def passage_embed(texts, batch_size=256):
+        seen['batch_size'] = batch_size
+        return [SimpleNamespace(tolist=lambda: [0.0]) for _ in texts]
+
+    fake_model = SimpleNamespace(passage_embed=passage_embed, query_embed=None)
+    monkeypatch.setattr(emb_mod, 'TextEmbedding', lambda model_name: fake_model)
+    ONNXEmbeddings('x').embed_documents(['a'] * 150)
+    assert seen['batch_size'] == emb_mod.EMBED_BATCH_SIZE <= 32
+
+
+def test_reembed_resume_fills_only_missing_sources(ws, tmp_path):
+    a = ws / 'a.md'
+    a.write_text(NOTE)
+    b = ws / 'b.md'
+    b.write_text(NOTE)
+    cfg = _cfg(ws)
+    old_path = str(tmp_path / 'old.db')
+    old = Store(old_path, embed_fn=RecordingEmbed())
+    index_file(str(a), cfg, RecordingEmbed(), old)
+    index_file(str(b), cfg, RecordingEmbed(), old)
+
+    new_path = str(tmp_path / 'new.db')
+    partial = Store(new_path, embed_fn=RecordingEmbed())
+    index_file(str(a), cfg, RecordingEmbed(), partial)  # 'a' already done before the crash
+    partial.ensure_embedding_meta(embedding_meta(cfg))
+
+    emb = RecordingEmbed()
+    counts = reembed_script.reembed(old_path, new_path, cfg, emb, log=lambda *_: None, resume=True)
+
+    assert counts['skipped'] == 1 and counts['rechunked'] == 1
+    assert set(Store(new_path).list_sources()) == {str(a), str(b)}
+    b_chunks = Store(new_path)._conn.execute('SELECT COUNT(*) FROM chunks WHERE source = ?', (str(b),)).fetchone()[0]
+    assert len(emb.docs) == b_chunks  # only b was embedded; a was skipped
+
+
+def test_reembed_resume_rejects_meta_mismatch(ws, tmp_path):
+    cfg = _cfg(ws)
+    old_path = str(tmp_path / 'old.db')
+    Store(old_path)
+    new_path = str(tmp_path / 'new.db')
+    Store(new_path).ensure_embedding_meta(embedding_meta(cfg))
+    with pytest.raises(EmbeddingConfigMismatch):
+        reembed_script.reembed(old_path, new_path, _cfg(ws, embed_prefix=True), RecordingEmbed(), resume=True)

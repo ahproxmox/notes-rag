@@ -12,6 +12,11 @@ from fastembed import TextEmbedding
 # Recorded in the store's meta table so stale vectors are detectable.
 EMBED_PREFIX_VERSION = '1'
 
+# Texts per ONNX pass. Memory grows with batch x seq_len^2: 150 x 512-token chunks
+# in one pass (fastembed's default batch of 256) took +2.2 GB and OOM-killed the
+# 2026-10-08 re-embed; batches of 16 need ~0.5 GB.
+EMBED_BATCH_SIZE = 16
+
 
 def build_embed_text(content: str, filename: str, headers: str, project: str | None) -> str:
     """Contextual text embedded (and reranked) in place of the bare chunk content.
@@ -38,7 +43,7 @@ class ONNXEmbeddings:
         self._query_prefix = query_prefix
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [vec.tolist() for vec in self._model.passage_embed(texts)]
+        return [vec.tolist() for vec in self._model.passage_embed(texts, batch_size=EMBED_BATCH_SIZE)]
 
     def embed_query(self, text: str) -> list[float]:
         return list(self._model.query_embed([self._query_prefix + text]))[0].tolist()

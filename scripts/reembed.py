@@ -42,20 +42,31 @@ def _root_for(source, roots):
     return None
 
 
-def reembed(old_db, new_db, cfg, embeddings, log=print):
-    """Re-embed `old_db` into a fresh `new_db`. Returns a dict of counts."""
-    if os.path.exists(new_db):
-        raise FileExistsError(f'{new_db} already exists; refusing to overwrite')
+def reembed(old_db, new_db, cfg, embeddings, log=print, resume=False):
+    """Re-embed `old_db` into a fresh `new_db`. Returns a dict of counts.
+
+    resume=True continues an interrupted run: `new_db` must exist and match the
+    current embedding config; sources already in it are skipped. Each source is
+    written in its own transaction, so a source cut off mid-write is redone.
+    """
+    if resume and not os.path.exists(new_db):
+        raise FileNotFoundError(f'{new_db} does not exist; nothing to resume')
+    if not resume and os.path.exists(new_db):
+        raise FileExistsError(f'{new_db} already exists; refusing to overwrite (use --resume to continue it)')
 
     old = sqlite3.connect(f'file:{old_db}?mode=ro', uri=True)
     new = Store(new_db, embed_fn=embeddings)
     new.ensure_embedding_meta(embedding_meta(cfg))
     new.set_meta('chunk_size', str(cfg['chunk_size']))
     roots = watched_roots(cfg)
-    counts = {'rechunked': 0, 'carried': 0, 'dropped': 0, 'failed': 0}
+    counts = {'rechunked': 0, 'carried': 0, 'dropped': 0, 'failed': 0, 'skipped': 0}
+    done = set(new.list_sources()) if resume else set()
 
     sources = [r[0] for r in old.execute('SELECT DISTINCT source FROM chunks ORDER BY source')]
     for i, source in enumerate(sources):
+        if source in done:
+            counts['skipped'] += 1
+            continue
         rows = old.execute(
             f'SELECT {", ".join(COLUMNS)} FROM chunks WHERE source = ? ORDER BY id', (source,)
         ).fetchall()
@@ -102,8 +113,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--old', default=default_old)
     ap.add_argument('--new', required=True)
+    ap.add_argument('--resume', action='store_true', help='continue an interrupted run into an existing --new DB')
     args = ap.parse_args()
-    counts = reembed(args.old, args.new, cfg, get_embeddings(cfg))
+    counts = reembed(args.old, args.new, cfg, get_embeddings(cfg), resume=args.resume)
     sys.exit(1 if counts['failed'] else 0)
 
 
