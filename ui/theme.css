@@ -4,6 +4,7 @@
 
 /* ─── Gruvbox Material Dark tokens ─────────────────────────────────────── */
 :root {
+  --bg-page: #000000;
   --bg-dim:  #1d2021;
   --bg-0:    #232627;
   --bg-1:    #2a2c2d;
@@ -43,7 +44,7 @@
 html, body { height: 100%; }
 
 body {
-  background: var(--bg-dim);
+  background: var(--bg-page);
   color: var(--fg-1);
   font-family: var(--mono);
   font-feature-settings: "calt" 1, "ss01" 1;
@@ -56,14 +57,6 @@ body {
   position: relative;
 }
 
-/* Subtle warm grain */
-body::before {
-  content: '';
-  position: fixed; inset: 0; pointer-events: none; z-index: 0;
-  background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(216,166,87,0.04), transparent 60%),
-    radial-gradient(1000px 500px at -10% 110%, rgba(137,180,130,0.03), transparent 60%);
-}
 body > * { position: relative; z-index: 1; }
 
 /* ─── Top navigation bar ───────────────────────────────────────────────── */
@@ -72,7 +65,7 @@ body > * { position: relative; z-index: 1; }
   align-items: center;
   height: calc(44px + env(safe-area-inset-top, 0px));
   padding: env(safe-area-inset-top, 0px) 24px 0;
-  background: var(--bg-dim);
+  background: var(--bg-page);
   border-bottom: 1px solid var(--bg-2);
   flex: 0 0 auto;
   gap: 0;
@@ -159,7 +152,7 @@ body > * { position: relative; z-index: 1; }
   gap: 14px;
   height: 24px;
   padding: 0 18px;
-  background: var(--bg-dim);
+  background: var(--bg-page);
   border-top: 1px solid var(--bg-2);
   flex: 0 0 auto;
   font-size: 10px;
