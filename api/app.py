@@ -25,7 +25,6 @@ _ui_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ui')
 app.mount('/ui', StaticFiles(directory=_ui_dir), name='ui')
 
 _log_path = Path('/mnt/Claude/log.md')
-_wiki_dir = Path('/mnt/Claude/wiki')
 _todos_dir = Path('/mnt/Claude/todos')
 _reminders_db = Path(os.path.dirname(os.path.dirname(__file__))) / 'reminders.db'
 _projects_dir = Path('/mnt/Claude/projects')
@@ -104,13 +103,6 @@ class EntityUpsertRequest(BaseModel):
     summary: str | None = None
     attrs: dict = {}
     aliases: list[str] = []
-
-
-class WikiSaveRequest(BaseModel):
-    topic: str          # slug, e.g. "openclaw-memory"
-    title: str          # display title, e.g. "OpenClaw Memory System"
-    answer: str         # synthesised content to save as page body
-    sources: list[str] = []  # source filenames that contributed
 
 
 class TodoCreateRequest(BaseModel):
@@ -652,57 +644,6 @@ def workspace_file(path: str):
         raise HTTPException(status_code=404, detail='File not found')
     return {'path': path, 'content': target.read_text(encoding='utf-8', errors='replace')}
 
-
-
-# ── API: wiki ────────────────────────────────────────────────────────────────
-
-@api.get('/wiki')
-def wiki_list():
-    if not _wiki_dir.exists():
-        return {'pages': []}
-    pages = []
-    for p in sorted(_wiki_dir.glob('*.md')):
-        text = p.read_text(encoding='utf-8', errors='replace')
-        generated = ''
-        title = p.stem
-        if text.startswith('---'):
-            end = text.find('---', 3)
-            if end != -1:
-                for line in text[3:end].splitlines():
-                    if line.startswith('title:'):
-                        title = line.partition(':')[2].strip().strip('"')
-                    elif line.startswith('generated:'):
-                        generated = line.partition(':')[2].strip()
-        pages.append({'slug': p.stem, 'title': title, 'generated': generated, 'path': str(p)})
-    return {'pages': pages}
-
-@api.post('/wiki/save')
-def wiki_save(req: WikiSaveRequest):
-    _wiki_dir.mkdir(parents=True, exist_ok=True)
-    slug = re.sub(r'[^a-z0-9-]', '-', req.topic.lower().strip())
-    slug = re.sub(r'-+', '-', slug).strip('-')
-    if not slug:
-        return {'error': 'Invalid topic slug'}, 400
-    path = _wiki_dir / f'{slug}.md'
-    today = date.today().isoformat()
-    sources_yaml = '\n'.join(f'  - {s}' for s in req.sources) if req.sources else '  []'
-    body = re.sub(r'^#\s+.+\n+', '', req.answer.strip()).strip()
-    content = f"""---
-title: "{req.title}"
-type: wiki
-topic: {slug}
-generated: {today}
-sources:
-{sources_yaml}
----
-
-# {req.title}
-
-{body}
-"""
-    path.write_text(content, encoding='utf-8')
-    action = 'updated' if path.exists() else 'created'
-    return {'saved': str(path), 'slug': slug, 'action': action}
 
 
 # ── API: search ───────────────────────────────────────────────────────────────
@@ -2210,8 +2151,6 @@ app.add_api_route('/search/stream',     search_stream_endpoint, methods=['POST']
 app.add_api_route('/similar',           similar_endpoint,       methods=['POST'])
 app.add_api_route('/retrieve',          retrieve_endpoint,      methods=['POST'])
 app.add_api_route('/research',          research_endpoint,      methods=['POST'])
-app.add_api_route('/wiki',              wiki_list,              methods=['GET'])
-app.add_api_route('/wiki/save',         wiki_save,              methods=['POST'])
 app.add_api_route('/log/recent',        log_recent,             methods=['GET'])
 app.add_api_route('/entities',          entities_list,          methods=['GET'])
 app.add_api_route('/entities',          entities_upsert,        methods=['POST'])

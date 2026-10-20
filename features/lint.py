@@ -7,11 +7,8 @@ Checks:
   1. Review notes with empty related: [] field
   2. Stale context notes (no update in >90 days)
   3. Duplicate todo IDs
-  4. Orphan wiki pages (wiki/ only — standalone dirs like memory/, inbox/ are exempt by design)
-  5. Stale wiki pages (source file modified after page was generated)
 """
 
-import re
 import sys
 from collections import defaultdict
 from datetime import date, timedelta
@@ -22,7 +19,6 @@ OBSIDIAN  = Path('/mnt/Obsidian')
 REVIEWS   = OBSIDIAN / 'Inbox' / 'Reviews'
 CONTEXT   = WORKSPACE / 'context'
 TODOS     = WORKSPACE / 'todos'
-WIKI      = WORKSPACE / 'wiki'
 REPORT    = WORKSPACE / 'inbox' / 'lint-report.md'
 
 STALE_DAYS = 90
@@ -52,37 +48,6 @@ def parse_frontmatter(path: Path) -> dict:
     return fields
 
 
-def parse_frontmatter_list(path: Path, field: str) -> list[str]:
-    """Extract a YAML list field from frontmatter, e.g. sources: [f1, f2] or block style."""
-    try:
-        text = path.read_text(encoding='utf-8', errors='replace')
-    except Exception:
-        return []
-    if not text.startswith('---'):
-        return []
-    end = text.find('---', 3)
-    if end == -1:
-        return []
-    fm_text = text[3:end]
-
-    # Inline style: sources: [a, b, c]
-    inline = re.search(rf'^{re.escape(field)}:\s*\[(.+?)\]', fm_text, re.MULTILINE)
-    if inline:
-        return [s.strip().strip('"\'') for s in inline.group(1).split(',') if s.strip()]
-
-    # Block style: sources:\n  - a\n  - b
-    block = re.search(rf'^{re.escape(field)}:\s*\n((?:[ \t]+-[^\n]*\n?)+)', fm_text, re.MULTILINE)
-    if block:
-        items = []
-        for line in block.group(1).splitlines():
-            m = re.match(r'^\s+-\s+(.+)', line)
-            if m:
-                items.append(m.group(1).strip())
-        return items
-
-    return []
-
-
 def parse_date(value: str) -> date | None:
     """Try to parse YYYY-MM-DD."""
     try:
@@ -99,18 +64,6 @@ def all_md_files(root: Path, exclude: set[str] | None = None) -> list[Path]:
             continue
         results.append(p)
     return results
-
-
-def _find_source_file(filename: str) -> Path | None:
-    """Locate a source file by name across workspace and Obsidian.
-
-    Excludes wiki/ to avoid finding the wiki page itself as its own source.
-    """
-    for root in (WORKSPACE, OBSIDIAN):
-        matches = [p for p in root.rglob(filename) if p.parent != WIKI]
-        if matches:
-            return matches[0]
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -173,97 +126,6 @@ def check_duplicate_todo_ids() -> list[tuple[str, list[str]]]:
 
 
 # ---------------------------------------------------------------------------
-# Check 4: Orphan wiki pages
-# ---------------------------------------------------------------------------
-
-def check_orphan_wiki_pages() -> list[str] | None:
-    """
-    Find wiki/ pages not referenced by any other note in the workspace.
-
-    Scope is intentionally limited to wiki/ — directories like memory/, inbox/,
-    context/, sessions/, and todos/ contain standalone notes by design and are
-    not expected to be cross-linked.
-
-    Returns None if wiki/ doesn't exist yet (not an error — just not built yet).
-    """
-    if not WIKI.exists():
-        return None
-
-    wiki_files = sorted(WIKI.glob('*.md'))
-    if not wiki_files:
-        return []
-
-    exclude = {'trash', 'tmp', 'temp', 'docs-archive', '__pycache__', '.git', 'completed'}
-    all_files = all_md_files(WORKSPACE, exclude=exclude)
-
-    corpus = ''
-    for p in all_files:
-        if p.parent == WIKI:
-            continue
-        try:
-            corpus += p.read_text(encoding='utf-8', errors='replace') + '\n'
-        except Exception:
-            pass
-
-    orphans = []
-    for p in wiki_files:
-        stem = p.stem
-        name = p.name
-        patterns = [
-            re.escape(stem),
-            re.escape(name),
-            re.escape(str(p.relative_to(WORKSPACE))),
-        ]
-        referenced = any(re.search(pat, corpus, re.IGNORECASE) for pat in patterns)
-        if not referenced:
-            orphans.append(str(p.relative_to(WORKSPACE)))
-
-    return orphans
-
-
-# ---------------------------------------------------------------------------
-# Check 5: Stale wiki pages
-# ---------------------------------------------------------------------------
-
-def check_stale_wiki_pages() -> list[tuple[str, str, list[str]]] | None:
-    """Flag wiki pages where any source file has been modified after generated date.
-
-    Returns list of (wiki_page, generated_date, [stale_sources]).
-    Returns None if wiki/ doesn't exist yet.
-    """
-    if not WIKI.exists():
-        return None
-
-    wiki_files = sorted(WIKI.glob('*.md'))
-    if not wiki_files:
-        return []
-
-    stale = []
-    for p in wiki_files:
-        fm = parse_frontmatter(p)
-        generated_str = fm.get('generated', '').strip()
-        generated = parse_date(generated_str)
-        if not generated:
-            continue  # no generated date — skip
-
-        # Compare by date only — a source modified on any day after generated is stale.
-        # Using date comparison avoids timestamp precision issues (generated: has no time).
-        sources = parse_frontmatter_list(p, 'sources')
-        stale_sources = []
-        for fname in sources:
-            src_path = _find_source_file(fname)
-            if src_path:
-                src_date = date.fromtimestamp(src_path.stat().st_mtime)
-                if src_date > generated:
-                    stale_sources.append(fname)
-
-        if stale_sources:
-            stale.append((p.name, generated_str, stale_sources))
-
-    return stale
-
-
-# ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
 
@@ -271,8 +133,6 @@ def build_report(
     empty_related: list[str],
     stale_context: list[tuple[str, str]],
     dup_ids: list[tuple[str, list[str]]],
-    orphans: list[str] | None,
-    stale_wiki: list[tuple[str, str, list[str]]] | None,
 ) -> str:
     lines = [
         '---',
@@ -313,36 +173,10 @@ def build_report(
         lambda x: f'- ID `{x[0]}`: {", ".join(f"`{f}`" for f in x[1])}',
     )
 
-    # Orphan wiki pages
-    lines.append('## Orphan Wiki Pages')
-    lines.append('')
-    if orphans is None:
-        lines.append('_`wiki/` not yet created._')
-    elif not orphans:
-        lines.append('_None — all clear._')
-    else:
-        for item in orphans:
-            lines.append(f'- `{item}`')
-    lines.append('')
-
-    # Stale wiki pages
-    lines.append('## Stale Wiki Pages (source updated after generation)')
-    lines.append('')
-    if stale_wiki is None:
-        lines.append('_`wiki/` not yet created._')
-    elif not stale_wiki:
-        lines.append('_None — all clear._')
-    else:
-        for wiki_name, gen_date, stale_sources in stale_wiki:
-            lines.append(f'- `wiki/{wiki_name}` (generated {gen_date}) — stale sources: {", ".join(f"`{s}`" for s in stale_sources)}')
-    lines.append('')
-
     tracked = (
         len(empty_related)
         + len(stale_context)
         + len(dup_ids)
-        + (len(orphans) if orphans else 0)
-        + (len(stale_wiki) if stale_wiki else 0)
     )
     lines.append('---')
     lines.append(f'**{tracked} issue(s) found.** Generated by `lint.py`.')
@@ -365,13 +199,7 @@ def main():
     print('[lint] Checking duplicate todo IDs...', flush=True)
     dup_ids = check_duplicate_todo_ids()
 
-    print('[lint] Checking orphan wiki pages...', flush=True)
-    orphans = check_orphan_wiki_pages()
-
-    print('[lint] Checking stale wiki pages...', flush=True)
-    stale_wiki = check_stale_wiki_pages()
-
-    report = build_report(empty_related, stale_context, dup_ids, orphans, stale_wiki)
+    report = build_report(empty_related, stale_context, dup_ids)
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text(report, encoding='utf-8')
@@ -380,8 +208,6 @@ def main():
         len(empty_related)
         + len(stale_context)
         + len(dup_ids)
-        + (len(orphans) if orphans else 0)
-        + (len(stale_wiki) if stale_wiki else 0)
     )
     print(f'[lint] Done. {tracked} issue(s) found. Report: {REPORT}', flush=True)
 

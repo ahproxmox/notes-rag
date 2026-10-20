@@ -94,7 +94,7 @@ wings:
       openclaw:
         keywords: [openclaw, "exec-approvals", agentdir, "boot.md", "agents.md"]
       rag:
-        keywords: ["notes-rag", "rag.db", "sqlite-vec", fastembed, embedding, "wiki layer", "ct 111"]
+        keywords: ["notes-rag", "rag.db", "sqlite-vec", fastembed, embedding, "ct 111"]
       mcp:
         keywords: [mcp, permissions, run_command, search_memory, "mcp-server"]
       hermes:

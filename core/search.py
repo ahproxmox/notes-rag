@@ -257,15 +257,6 @@ def _retrieve(query: str, k: int = 30, bm25_weight: float = 0.4, vector_weight: 
         # Prefer vector-arm metadata (has `similarity`) when both arms returned the chunk.
         doc_map[key] = doc
 
-    # Boost wiki/ pages — they are synthesised cross-note summaries and should
-    # rank higher than raw note chunks for broad queries.
-    wiki_boost = float(os.environ.get('WIKI_BOOST', '1.5'))
-    for key in scores:
-        doc = doc_map[key]
-        source = doc.metadata.get('source', '')
-        if '/wiki/' in source or source.startswith('wiki/'):
-            scores[key] *= wiki_boost
-
     # Lifecycle multiplier (confidence × decay) demotes old/low-quality chunks.
     # Decay is computed now from last_updated so it ages without re-indexing;
     # the stored decay_factor is only a fallback. Applied before the top-k cut
