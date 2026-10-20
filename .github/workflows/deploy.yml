@@ -8,7 +8,9 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
+      # The runner's key is pinned on CT 111 to /usr/local/sbin/notes-rag-receive
+      # (command=..., from=CT 121, restrict), so it can only send a revision.
       - name: Deploy to CT 111
         run: |
-          ssh -o StrictHostKeyChecking=no root@192.168.88.71 \
-            "cd /opt/rag && git fetch && git reset --hard origin/main && bash scripts/deploy.sh"
+          ssh -i /home/runner/.ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            root@192.168.88.71 "${GITHUB_SHA}"
