@@ -1,0 +1,10 @@
+[Unit]
+Description=Regenerate notes-rag wiki pages (features/wiki.py)
+Wants=network-online.target
+After=network-online.target rag.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/rag
+ExecStart=/opt/rag/venv/bin/python -m features.wiki
+TimeoutStartSec=30min

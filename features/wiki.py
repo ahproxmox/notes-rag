@@ -8,7 +8,9 @@ For each topic in wiki.yaml:
   3. Write to /mnt/Claude/wiki/<slug>.md
 
 The watcher picks up new/updated wiki pages automatically and indexes them.
-Run daily via cron (5am), or manually: python wiki.py [--topic <slug>]
+Runs monthly via deploy/wiki-refresh.timer (installed by scripts/deploy.sh), after the
+Hermes infra audit. Manually, from /opt/rag: venv/bin/python -m features.wiki [--topic <slug>]
+Exits non-zero (and pings Discord if DISCORD_WEBHOOK_URL is set) when any topic fails.
 """
 
 import os
@@ -73,6 +75,11 @@ def _retrieve_for_topic(topic: dict, k_per_query: int = 15) -> tuple[list, list[
     for query in topic['queries']:
         docs = _retrieve(query, k=k_per_query)
         for doc in docs:
+            # Skip existing wiki pages: they're boosted in retrieval, so including them
+            # would feed each page's stale content back into its own rebuild.
+            source = doc.metadata.get('source', '')
+            if '/wiki/' in source or source.startswith('wiki/'):
+                continue
             key = f"{doc.metadata.get('source', '')}:{doc.page_content[:80]}"
             if key not in seen_keys:
                 seen_keys.add(key)
@@ -178,6 +185,25 @@ def main():
             print(f"[wiki] ERROR on {topic['slug']}: {e}", flush=True)
 
     print(f"[wiki] Done. {built}/{len(topics)} pages built.", flush=True)
+    if built < len(topics):
+        _notify_failure(f":warning: Wiki refresh incomplete: {built}/{len(topics)} pages built on CT 111. "
+                        "Check `journalctl -u wiki-refresh`.")
+        sys.exit(1)
+
+
+def _notify_failure(message: str):
+    url = os.environ.get('DISCORD_WEBHOOK_URL', '')
+    if not url:
+        print("[wiki] DISCORD_WEBHOOK_URL not set; failure not pinged", flush=True)
+        return
+    import json
+    import urllib.request
+    req = urllib.request.Request(url, data=json.dumps({'content': message}).encode(),
+                                 headers={'Content-Type': 'application/json', 'User-Agent': 'notes-rag-wiki'})
+    try:
+        urllib.request.urlopen(req, timeout=15).read()
+    except Exception as e:
+        print(f"[wiki] Discord ping failed: {e!r}", flush=True)
 
 
 if __name__ == '__main__':
