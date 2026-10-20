@@ -24,4 +24,7 @@ if [ -d inbox-viewer ]; then
   systemctl restart inbox-viewer
 fi
 
+# Keep the forced-command receive script (deploy/receive.sh) in sync with the repo
+install -m 0755 deploy/receive.sh /usr/local/sbin/notes-rag-receive
+
 echo "Deployed commit ${COMMIT}"
