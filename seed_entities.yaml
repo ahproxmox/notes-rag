@@ -301,7 +301,7 @@ entities:
     type: service
     name: notes-rag HTTP API
     wing: agents
-    summary: FastAPI service on CT 111 exposing hybrid search (BM25 + sqlite-vec), wiki layer, and /research. Used by Claude Code, OpenClaw, and Hermes.
+    summary: FastAPI service on CT 111 exposing hybrid search (BM25 + sqlite-vec) and /research. Used by Claude Code, OpenClaw, and Hermes.
     attrs:
       runs_on: ct-111
       port: 8080
@@ -380,7 +380,7 @@ entities:
     type: concept
     name: Shared agent workspace (/mnt/Claude)
     wing: meta
-    summary: Bind-mounted directory shared between CT 104 (OpenClaw) and CT 109 (MCP). Canonical source of todos, sessions, memory, context, wiki.
+    summary: Bind-mounted directory shared between CT 104 (OpenClaw) and CT 109 (MCP). Canonical source of todos, sessions, memory, context.
     attrs:
       path: /mnt/Claude
       mounted_on: [ct-104, ct-109]

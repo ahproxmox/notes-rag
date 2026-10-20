@@ -1,9 +1,0 @@
-[Unit]
-Description=Monthly wiki refresh, an hour after the Hermes infra audit (1st 22:00 UTC)
-
-[Timer]
-OnCalendar=*-*-01 23:00:00 UTC
-Persistent=true
-
-[Install]
-WantedBy=timers.target

@@ -19,7 +19,6 @@ from core.store import Store
 CONFIDENCE_BY_FOLDER: dict[str, float] = {
     'context':   1.00,  # deliberate decisions and preferences
     'memory':    0.95,  # curated memory files
-    'wiki':      0.95,  # synthesised topic pages
     'sessions':  0.90,  # recorded work sessions
     'plans':     0.90,  # deliberate plans
     'reference': 0.90,  # reference material
