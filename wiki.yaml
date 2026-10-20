@@ -1,22 +1,12 @@
 # Wiki topic configuration
 # Each topic generates one synthesised page in /mnt/Claude/wiki/
 # Pages are rebuilt on each run; sources tracked in frontmatter.
+#
+# Retired 2026-10-20: proxmox-containers (container facts now come from the Hermes infra
+# atlas, /mnt/Obsidian/Inbox/reports/infra-atlas-current.md) and openclaw (retired, CT 104
+# stopped). Their last pages are in /mnt/Claude/docs-archive/wiki-retired/ (not indexed).
 
 topics:
-  - slug: proxmox-containers
-    title: Proxmox Containers
-    queries:
-      - "proxmox LXC container IP addresses setup configuration"
-      - "container networking bind mounts storage"
-      - "pct exec container commands proxmox"
-
-  - slug: openclaw
-    title: OpenClaw
-    queries:
-      - "openclaw agent config skills memory"
-      - "openclaw AGENTS.md SOUL.md boot startup"
-      - "openclaw exec approvals safeBins skills deployment"
-
   - slug: rag-architecture
     title: RAG Architecture
     queries:

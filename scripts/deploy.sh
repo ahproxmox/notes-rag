@@ -24,4 +24,9 @@ if [ -d inbox-viewer ]; then
   systemctl restart inbox-viewer
 fi
 
+# Monthly wiki refresh (features/wiki.py), after the Hermes infra audit
+install -m 0644 deploy/wiki-refresh.service deploy/wiki-refresh.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now wiki-refresh.timer
+
 echo "Deployed commit ${COMMIT}"
