@@ -22,7 +22,7 @@ Alerts go to the default notification policy (Discord), like `trading-hermes`.
 | Rule | Fires when |
 |---|---|
 | `notes-rag-recall-drop` | recall@k on `queries-2026-10` < 0.80 |
-| `notes-rag-answer-llm-slow` | answer LLM p90 > 20 s for 30 m |
+| `notes-rag-answer-llm-slow` | answer LLM p90 > 30 s (the `_get_llm` timeout) for 30 m |
 | `notes-rag-retrieve-slow` | `/retrieve` p50 > 2 s for 15 m |
 | `notes-rag-bench-stale` | no retrieve push for 36 h, or no answer push for 8 d |
 | `notes-rag-down` | `up{job="notes-rag"}` is 0 for 5 m |

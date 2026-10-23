@@ -46,7 +46,7 @@ groups:
           severity: warning
         isPaused: false
       - uid: notes-rag-answer-llm-slow
-        title: notes-rag answer LLM p90 above 20s
+        title: notes-rag answer LLM p90 at the 30s timeout
         condition: B
         data:
           - refId: A
@@ -67,7 +67,7 @@ groups:
               type: threshold
               expression: A
               conditions:
-                - evaluator: {type: gt, params: [20]}
+                - evaluator: {type: gt, params: [30]}
                   operator: {type: and}
                   query: {params: [B]}
                   reducer: {type: last}
@@ -78,8 +78,8 @@ groups:
         execErrState: Alerting
         for: 30m
         annotations:
-          summary: "Answer LLM p90 is {{ $values.A.Value }}s over the last 30m (alert > 20s)"
-          description: "Model is set in /mnt/Claude/config/models.json (notes-rag). qwen3.8-27b A/B p90 was 13.9s; _get_llm times out at 30s."
+          summary: "Answer LLM p90 is {{ $values.A.Value }}s over the last 30m (alert > 30s, the _get_llm timeout)"
+          description: "Model is set in /mnt/Claude/config/models.json (notes-rag). p90 at 30s means 10%+ of answers are hitting the _get_llm timeout. qwen3.8-27b p90 is normally 14-24s (2026-10-23)."
         labels:
           service: notes-rag
           severity: warning
