@@ -383,6 +383,9 @@ class Store:
     def count(self) -> int:
         return self._conn.execute('SELECT COUNT(*) FROM chunks').fetchone()[0]
 
+    def source_count(self) -> int:
+        return self._conn.execute('SELECT COUNT(DISTINCT source) FROM chunks').fetchone()[0]
+
     def rebuild_fts(self):
         """Rebuild FTS5 content index from chunks table."""
         self._conn.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')")

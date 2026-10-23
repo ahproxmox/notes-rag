@@ -1,0 +1,203 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: notes-rag
+    folder: Notes RAG
+    interval: 5m
+    rules:
+      - uid: notes-rag-recall-drop
+        title: notes-rag recall@k below 0.80 (2026-10 set)
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: {from: 86400, to: 0}
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: PBFA97CFB590B2093}
+              expr: "notes_rag_bench_recall_at_k{set=\"queries-2026-10\",scope=\"notes\"}"
+              instant: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [0.8]}
+                  operator: {type: and}
+                  query: {params: [B]}
+                  reducer: {type: last}
+                  type: query
+              intervalMs: 1000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "Nightly retrieval bench: recall@k on the 2026-10 query set is {{ $values.A.Value }} (alert < 0.80)"
+          description: "Baseline 0.875 (2026-10-23, bge-small + prefix). Check recent index/config changes; re-run: bench/scheduled.sh retrieve on CT 111."
+        labels:
+          service: notes-rag
+          severity: warning
+        isPaused: false
+      - uid: notes-rag-answer-llm-slow
+        title: notes-rag answer LLM p90 above 20s
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1800, to: 0}
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: PBFA97CFB590B2093}
+              expr: "histogram_quantile(0.9, sum by (le) (rate(notes_rag_llm_duration_seconds_bucket{job=\"notes-rag\"}[30m])))"
+              instant: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [20]}
+                  operator: {type: and}
+                  query: {params: [B]}
+                  reducer: {type: last}
+                  type: query
+              intervalMs: 1000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 30m
+        annotations:
+          summary: "Answer LLM p90 is {{ $values.A.Value }}s over the last 30m (alert > 20s)"
+          description: "Model is set in /mnt/Claude/config/models.json (notes-rag). qwen3.8-27b A/B p90 was 13.9s; _get_llm times out at 30s."
+        labels:
+          service: notes-rag
+          severity: warning
+        isPaused: false
+      - uid: notes-rag-retrieve-slow
+        title: notes-rag /retrieve p50 above 2s
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1800, to: 0}
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: PBFA97CFB590B2093}
+              expr: "histogram_quantile(0.5, sum by (le) (rate(notes_rag_http_request_duration_seconds_bucket{job=\"notes-rag\",path=\"/retrieve\"}[30m])))"
+              instant: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [2]}
+                  operator: {type: and}
+                  query: {params: [B]}
+                  reducer: {type: last}
+                  type: query
+              intervalMs: 1000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 15m
+        annotations:
+          summary: "/retrieve p50 is {{ $values.A.Value }}s (alert > 2s; normal ~1s)"
+          description: "search_memory calls /retrieve. Usual suspects: reranker, a re-embed or bench running, CT 111 CPU."
+        labels:
+          service: notes-rag
+          severity: warning
+        isPaused: false
+      - uid: notes-rag-bench-stale
+        title: notes-rag scheduled bench has not run
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: PBFA97CFB590B2093}
+              expr: "(time() - notes_rag_bench_last_run_timestamp_seconds{kind=\"retrieve\"} > 129600) or (time() - notes_rag_bench_last_run_timestamp_seconds{kind=\"answer\"} > 691200) or (absent(notes_rag_bench_last_run_timestamp_seconds{kind=\"retrieve\"}) * 1e9) or (absent(notes_rag_bench_last_run_timestamp_seconds{kind=\"answer\"}) * 1e9)"
+              instant: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+                  operator: {type: and}
+                  query: {params: [B]}
+                  reducer: {type: last}
+                  type: query
+              intervalMs: 1000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "A notes-rag bench is overdue (retrieve > 36h or answer > 8d since last push)"
+          description: "Check on CT 111: systemctl list-timers 'rag-bench-*'; journalctl -u rag-bench-retrieve -u rag-bench-answer."
+        labels:
+          service: notes-rag
+          severity: warning
+        isPaused: false
+      - uid: notes-rag-down
+        title: notes-rag metrics endpoint down
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: PBFA97CFB590B2093}
+              expr: "up{job=\"notes-rag\"}"
+              instant: true
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+                  operator: {type: and}
+                  query: {params: [B]}
+                  reducer: {type: last}
+                  type: query
+              intervalMs: 1000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "Prometheus cannot scrape notes-rag (192.168.88.71:8080/metrics) for 5m"
+          description: "Check on CT 111: systemctl status rag; journalctl -u rag -n 50."
+        labels:
+          service: notes-rag
+          severity: warning
+        isPaused: false
