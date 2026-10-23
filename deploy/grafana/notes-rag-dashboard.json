@@ -508,7 +508,7 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "Every call through core.search._get_llm. Alert: p90 > 20s for 30m.",
+      "description": "Every call through core.search._get_llm. Alert: p90 > 30s (the timeout) for 30m.",
       "gridPos": {
         "h": 8,
         "w": 8,
