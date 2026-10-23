@@ -1,0 +1,12 @@
+[Unit]
+Description=Weekly notes-rag answer bench through /search, pushed to the Pushgateway (bench/scheduled.sh)
+Wants=network-online.target
+After=network-online.target rag.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/rag
+ExecStart=/opt/rag/bench/scheduled.sh answer
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=45min

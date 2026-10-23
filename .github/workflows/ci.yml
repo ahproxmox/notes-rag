@@ -14,7 +14,7 @@ jobs:
         run: python3 -m py_compile api/app.py core/search.py infra/watcher.py core/indexer.py main.py features/research.py
 
       - name: Bench suite syntax check
-        run: python3 -m py_compile bench/run_bench.py bench/score.py
+        run: python3 -m py_compile bench/run_bench.py bench/score.py bench/publish.py
 
   tests:
     runs-on: self-hosted

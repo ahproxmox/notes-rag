@@ -1,0 +1,13 @@
+# Grafana file provider for the notes-rag dashboard (CT 118).
+# Install: /etc/grafana/provisioning/dashboards/notes-rag.yaml; dashboard JSON goes in
+# /var/lib/grafana/dashboards/notes-rag/. See deploy/grafana/README.md.
+apiVersion: 1
+providers:
+  - name: notes-rag
+    folder: Notes RAG
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 60
+    options:
+      path: /var/lib/grafana/dashboards/notes-rag

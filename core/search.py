@@ -12,6 +12,7 @@ from langchain_core.messages import HumanMessage
 from .store import Store
 from .reranker import Reranker
 from .health import health
+from .metrics import LLMMetricsCallback
 from features.lifecycle import compute_decay_factor
 
 CONFIG_PATH = os.environ.get('RAG_CONFIG_PATH', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'indexer.yaml'))
@@ -101,11 +102,13 @@ def _get_model_name() -> str:
 
 
 def _get_llm():
+    model = _get_model_name()
     return ChatOpenAI(
         base_url=os.environ.get('LLM_BASE_URL', 'https://openrouter.ai/api/v1'),
         api_key=os.environ['OPENROUTER_API_KEY'],
-        model=_get_model_name(),
+        model=model,
         timeout=30,
+        callbacks=[LLMMetricsCallback(model)],
     )
 
 

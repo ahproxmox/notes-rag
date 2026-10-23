@@ -24,6 +24,12 @@ if [ -d inbox-viewer ]; then
   systemctl restart inbox-viewer
 fi
 
+# Scheduled benches for the Grafana RAG dashboard: retrieval nightly, answers weekly
+install -m 0644 deploy/rag-bench-retrieve.service deploy/rag-bench-retrieve.timer \
+  deploy/rag-bench-answer.service deploy/rag-bench-answer.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now rag-bench-retrieve.timer rag-bench-answer.timer
+
 # Keep the forced-command receive script (deploy/receive.sh) in sync with the repo
 install -m 0755 deploy/receive.sh /usr/local/sbin/notes-rag-receive
 

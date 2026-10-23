@@ -1,0 +1,5 @@
+# Scrape job for /etc/prometheus/prometheus.yml on CT 118 (append under scrape_configs).
+  - job_name: 'notes-rag'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['192.168.88.71:8080']

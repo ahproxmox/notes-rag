@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Literal
 from core.health import health as health_state
+from core.metrics import metrics
 from core.search import search, search_filtered, search_with_weights, search_stream, similar, get_stats, retrieve_hybrid, retrieve
 from features.research import research
 from features.entities import EntityStore
@@ -20,6 +21,19 @@ from infra import caldav_bridge
 
 app = FastAPI()
 api = APIRouter(prefix='/api')
+
+
+@app.middleware('http')
+async def record_request_metrics(request: Request, call_next):
+    start = time.monotonic()
+    try:
+        response = await call_next(request)
+    except Exception:
+        metrics.observe_request(request.url.path, request.method, 500, time.monotonic() - start)
+        raise
+    metrics.observe_request(request.url.path, request.method, response.status_code,
+                            time.monotonic() - start)
+    return response
 
 _ui_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ui')
 app.mount('/ui', StaticFiles(directory=_ui_dir), name='ui')
@@ -366,6 +380,18 @@ def health():
 @api.get('/stats')
 def stats():
     return get_stats()
+
+@app.get('/metrics')
+def prometheus_metrics():
+    """Prometheus scrape target (CT 118). Index gauges are read per scrape."""
+    from core.search import get_store, _get_model_name
+    store = get_store()
+    gauges = {
+        'notes_rag_index_chunks': ('Chunks in rag.db', store.count()),
+        'notes_rag_index_sources': ('Distinct sources in rag.db', store.source_count()),
+        f'notes_rag_answer_model_info{{model="{_get_model_name()}"}}': ('Configured answer LLM', 1),
+    }
+    return Response(metrics.render(gauges), media_type='text/plain; version=0.0.4')
 
 
 # ── API: entities ────────────────────────────────────────────────────────────

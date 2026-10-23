@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly retrieval bench (17:30 UTC = 04:30 Melbourne summer time)
+
+[Timer]
+OnCalendar=*-*-* 17:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
