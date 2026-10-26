@@ -6,6 +6,9 @@
 #   - query: the search string
 #   - expected: what the answer must contain (terms for 'contains', ignored for 'refuse')
 #   - expected_sources: filenames that SHOULD appear in retrieved results (for IR metrics)
+#     Container facts (IPs, ports, purpose) live in the auto-generated infra atlas since
+#     2026-10-20 (todo 557): infra-atlas-current.md plus its dated atlas.md snapshots.
+#     container-registry.md now only holds deploy paths, gotchas and history.
 #   - max_score: points available (usually 2)
 #   - scoring: how to judge (contains, refuse)
 #
@@ -20,7 +23,7 @@ queries:
     category: factual
     query: "CT 117 IP address?"
     expected: ["192.168.88.72"]
-    expected_sources: ["container-registry.md"]
+    expected_sources: ["infra-atlas-current.md", "atlas.md"]
     max_score: 2
     scoring: contains
 
@@ -28,7 +31,7 @@ queries:
     category: factual
     query: "What container runs LangChain RAG?"
     expected: ["CT 111", "192.168.88.71"]
-    expected_sources: ["container-registry.md", "rag-architecture.md"]
+    expected_sources: ["infra-atlas-current.md", "atlas.md", "rag-architecture.md"]
     max_score: 2
     scoring: contains
 
@@ -36,7 +39,7 @@ queries:
     category: factual
     query: "What port does Uptime Kuma run on?"
     expected: ["3001"]
-    expected_sources: ["container-registry.md", "monitoring.md"]
+    expected_sources: ["infra-atlas-current.md", "atlas.md", "monitoring.md"]
     max_score: 2
     scoring: contains
 
@@ -52,7 +55,7 @@ queries:
     category: factual
     query: "What container is Vault running on?"
     expected: ["CT 113"]
-    expected_sources: ["container-registry.md"]
+    expected_sources: ["infra-atlas-current.md", "atlas.md"]
     max_score: 2
     scoring: contains
 
@@ -60,7 +63,7 @@ queries:
     category: factual
     query: "What port does Technitium DNS web UI use?"
     expected: ["5380"]
-    expected_sources: ["container-registry.md"]
+    expected_sources: ["infra-atlas-current.md", "atlas.md", "106-network-wide-dns-via-technitium.md"]
     max_score: 2
     scoring: contains
 
@@ -68,7 +71,7 @@ queries:
     category: factual
     query: "What is the kanban board URL?"
     expected: ["192.168.88.78", "3000"]
-    expected_sources: ["container-registry.md"]
+    expected_sources: ["infra-atlas-current.md", "atlas.md"]
     max_score: 2
     scoring: contains
 
@@ -76,7 +79,7 @@ queries:
     category: factual
     query: "Where does the GitHub Actions runner live?"
     expected: ["CT 121"]
-    expected_sources: ["container-registry.md"]
+    expected_sources: ["infra-atlas-current.md", "atlas.md", "096-github-actions-runner-ct.md"]
     max_score: 2
     scoring: contains
 
@@ -92,7 +95,7 @@ queries:
     category: factual
     query: "Where are agent definition files stored?"
     expected: ["/mnt/Claude/agents"]
-    expected_sources: ["TOOLS.md"]
+    expected_sources: ["openclaw-config-summary.md", "034-formalize-standard-agent-docs-at-workspace-root.md"]
     max_score: 2
     scoring: contains
 
@@ -100,7 +103,7 @@ queries:
     category: factual
     query: "What container runs the MCP server?"
     expected: ["CT 109", "192.168.88.64"]
-    expected_sources: ["container-registry.md", "mcp-server.md"]
+    expected_sources: ["infra-atlas-current.md", "atlas.md"]
     max_score: 2
     scoring: contains
 
@@ -108,7 +111,7 @@ queries:
     category: factual
     query: "What port does the OpenClaw gateway use?"
     expected: ["18789"]
-    expected_sources: ["container-registry.md"]
+    expected_sources: ["openclaw-config-summary.md", "reference_openclaw_setup.md"]
     max_score: 2
     scoring: contains
 
@@ -150,7 +153,7 @@ queries:
     category: reasoning
     query: "How does the BM25 stale cache fix work?"
     expected: ["dirty", "invalidate", "watcher"]
-    expected_sources: ["rag-architecture.md"]
+    expected_sources: ["completed-projects.md"]
     max_score: 2
     scoring: contains
 
@@ -174,7 +177,7 @@ queries:
     category: reasoning
     query: "How does the todo ID lookup shortcut work?"
     expected: ["regex", "bypass"]
-    expected_sources: ["rag-architecture.md"]
+    expected_sources: ["project_rag_todo_lookup.md"]
     max_score: 2
     scoring: contains
 
@@ -242,7 +245,7 @@ queries:
     category: multi-hop
     query: "Which containers have Vault AppRoles configured?"
     expected: ["CT 104", "CT 109"]
-    expected_sources: ["017-hashicorp-vault-self-hosted-secrets-management.md"]
+    expected_sources: ["017-hashicorp-vault-self-hosted-secrets-management.md", "037-migrate-openclaw-mcp-to-vault-approle.md"]
     max_score: 2
     scoring: contains
 
@@ -319,7 +322,7 @@ queries:
     category: edge-case
     query: "What does CT 104 do?"
     expected: ["OpenClaw"]
-    expected_sources: ["container-registry.md"]
+    expected_sources: ["container-registry.md", "infra-atlas-current.md", "atlas.md"]
     max_score: 2
     scoring: contains
     note: "Ambiguous short query — should still identify OpenClaw"
@@ -328,7 +331,7 @@ queries:
     category: edge-case
     query: "DNS"
     expected: ["Technitium"]
-    expected_sources: ["container-registry.md"]
+    expected_sources: ["infra-atlas-current.md", "atlas.md", "106-network-wide-dns-via-technitium.md"]
     max_score: 2
     scoring: contains
     note: "Single-word query — should still retrieve relevant info"
@@ -355,7 +358,7 @@ queries:
     category: temporal
     query: "What was the BM25 stale cache bug?"
     expected: ["cached", "init"]
-    expected_sources: ["rag-architecture.md"]
+    expected_sources: ["completed-projects.md", "100-rag-portfolio-project.md"]
     max_score: 2
     scoring: contains
 
