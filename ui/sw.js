@@ -26,6 +26,8 @@ function reloadClients() {
 
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
+  // The login flow (oauth2-proxy → Keycloak) must run as plain browser navigations.
+  if (url.pathname.startsWith("/oauth2/")) return;
   // Network-first for all API calls - always want fresh data
   if (url.pathname.startsWith("/api/")) {
     e.respondWith(
@@ -40,6 +42,11 @@ self.addEventListener("fetch", e => {
   // the cache is only the offline fallback. Redirects and errors are never cached.
   e.respondWith(
     fetch(e.request).then(res => {
+      // Signed out: a fetch from the worker doesn't count as a navigation for Caddy, so it
+      // answers 401; send the page to the sign-in flow ourselves.
+      if (res.status === 401 && e.request.mode === "navigate") {
+        return Response.redirect("/oauth2/sign_in?rd=" + encodeURIComponent(e.request.url), 302);
+      }
       if (res.ok && res.type === "basic") {
         const clone = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, clone));
