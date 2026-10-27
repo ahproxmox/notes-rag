@@ -30,6 +30,9 @@ PyYAML==6.0.3
 # Vault integration (optional)
 hvac==2.4.0
 
+# Keycloak access-token validation (identity-lab todo 526)
+PyJWT[crypto]==2.10.1
+
 # Tokenizer
 tiktoken==0.12.0
 

@@ -18,9 +18,19 @@ from pathlib import Path
 import threading
 import time
 from infra import caldav_bridge
+from api.auth import Authenticator
 
 app = FastAPI()
 api = APIRouter(prefix='/api')
+
+# Keycloak bearer tokens on the index + raw-note routes (identity-lab todo 526, api/auth.py).
+_auth = Authenticator()
+print(f'[rag-auth] RAG_AUTH_MODE={_auth.mode} audience={_auth.audience}', flush=True)
+
+
+@app.middleware('http')
+async def check_bearer_token(request: Request, call_next):
+    return await _auth.middleware(request, call_next)
 
 
 @app.middleware('http')
