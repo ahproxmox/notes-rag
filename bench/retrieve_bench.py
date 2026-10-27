@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 
 import requests
+
+from bench_auth import auth_headers  # identity-lab todo 526
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -35,7 +37,8 @@ def load_queries(paths):
 
 def retrieve(endpoint, query, scope, k):
     t0 = time.perf_counter()
-    resp = requests.post(f'{endpoint}/retrieve', json={'query': query, 'k': k, 'scope': scope}, timeout=30)
+    resp = requests.post(f'{endpoint}/retrieve', json={'query': query, 'k': k, 'scope': scope},
+                         headers=auth_headers(), timeout=30)
     resp.raise_for_status()
     elapsed = time.perf_counter() - t0
     # Unique filenames in rank order (several chunks can come from one file).

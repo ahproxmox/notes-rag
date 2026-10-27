@@ -14,6 +14,8 @@ import json
 import os
 import time
 import requests
+
+from bench_auth import auth_headers  # identity-lab todo 526
 import yaml
 
 QUERIES_PATH = os.path.join(os.path.dirname(__file__), 'queries.yaml')
@@ -34,7 +36,7 @@ def run_query(endpoint, query_text, bm25_weight=None, vector_weight=None):
         body['vector_weight'] = vector_weight
     start = time.time()
     try:
-        resp = requests.post(url, json=body, timeout=30)
+        resp = requests.post(url, json=body, headers=auth_headers(), timeout=30)
         latency_ms = (time.time() - start) * 1000
         resp.raise_for_status()
         data = resp.json()
