@@ -167,8 +167,9 @@ class Authenticator:
         peer = request.client.host if request.client else None
         event = {
             'path': request.url.path, 'method': request.method, 'kind': kind, 'mode': self.mode,
-            'decision': 'allow' if reason is None else ('deny' if self.mode == 'enforce' and kind == 'protected'
-                                                         else 'would_deny'),
+            # Audited routes are never blocked, so they only ever record whether a token came with them.
+            'decision': 'allow' if reason is None else (
+                'unauthenticated' if kind == 'audited' else 'deny' if self.mode == 'enforce' else 'would_deny'),
             'reason': reason, 'peer': peer, 'forwarded_for': request.headers.get('x-forwarded-for'),
             'user_agent': request.headers.get('user-agent'), **(identity or {'verified': None}),
         }

@@ -154,7 +154,9 @@ def test_audited_routes_logged_once_per_window(client_for, caplog):
             c.get('/api/todos/next-id')
     audited = [m for m in caplog.messages if '"kind": "audited"' in m]
     assert len(audited) == 1
-    assert json.loads(audited[0].split('[rag-auth] ', 1)[1])['path_group'] == '/api/todos'
+    e = json.loads(audited[0].split('[rag-auth] ', 1)[1])
+    assert e['path_group'] == '/api/todos'
+    assert e['decision'] == 'unauthenticated'  # never 'would_deny': audited routes aren't blocked
 
 
 def test_off_mode_checks_nothing(client_for):
