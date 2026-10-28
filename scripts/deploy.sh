@@ -6,7 +6,7 @@ systemctl restart rag
 
 echo "Waiting for rag service to become healthy..."
 for i in $(seq 1 15); do
-  if curl -sf http://localhost:8080/api/stats > /dev/null 2>&1; then
+  if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
     echo "Service healthy"
     break
   fi
