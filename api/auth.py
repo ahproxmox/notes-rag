@@ -72,7 +72,8 @@ def classify(method: str, path: str) -> str:
         return 'audited'
     if path in PROTECTED_PATHS or path.startswith(PROTECTED_PREFIXES):
         return 'protected'
-    if path.startswith('/api/') or path in {'/stats', '/research', '/log/recent', '/entities'} \
+    if path.startswith('/api/') or path in {'/stats', '/research', '/log/recent', '/entities',
+                                           '/docs', '/redoc', '/openapi.json'} \
             or path.startswith('/review/'):
         return 'audited'
     return 'open'  # UI pages and static files

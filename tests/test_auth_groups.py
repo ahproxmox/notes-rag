@@ -50,7 +50,8 @@ def test_route_group(path, group):
 
 
 def test_every_audited_route_has_a_scope():
-    for p in ['/api/anything/new', '/stats', '/research', '/log/recent', '/entities', '/review/x']:
+    for p in ['/api/anything/new', '/stats', '/research', '/log/recent', '/entities', '/review/x',
+              '/docs', '/redoc', '/openapi.json']:
         assert auth_mod.classify('GET', p) == 'audited'
         assert auth_mod.GROUP_SCOPES[auth_mod.route_group(p)]
 
