@@ -1,20 +1,32 @@
-"""Keycloak bearer-token check for the notes index (identity-lab todo 526).
+"""Keycloak bearer-token check for the notes index (identity-lab todos 526, 579).
 
-CT 111 is a resource server for audience `rag-index`: every route that reads
-the index or the raw notes needs an access token from realm `homelab` with
-scope `rag-index:read`. Validation follows rag-gateway (identity-lab
-`rag-gateway/app/auth.py` + `jwks.py`): RS256 only, cached JWKS with a
-rate-limited refetch on an unknown kid, iss/aud/exp checked.
+CT 111 is a resource server for audience `rag-index`. Two tiers:
+
+* Protected routes (read the index or the raw notes) always need scope `rag-index:read`.
+* Everything else is default-deny: only the static page shells and PWA files in OPEN_PAGES / OPEN_PATHS
+  (and the /ui/ asset mount) answer without a token. Every other route belongs to a group with
+  its own scope (todo 579):
+    reminders  rag-api:reminders   /api/reminders/*
+    ingest     rag-api:ingest      /api/ingest*
+    todos      rag-api:todos       /api/todos/*, /api/kanban/*
+    admin      rag-api:admin       everything else (notes create, queue, review, links, projects,
+                                   models, kanban agent turn, stats, ...)
+  A group is only enforced when it is listed in RAG_AUTH_ENFORCE_GROUPS and the mode is
+  `enforce`; until then its callers are logged (deduplicated) with what the check would say.
+
+Validation follows rag-gateway (identity-lab `rag-gateway/app/auth.py` + `jwks.py`): RS256 only,
+cached JWKS with a rate-limited refetch on an unknown kid, iss/aud/exp checked.
 
 RAG_AUTH_MODE:
   off       no checks (default)
   log-only  check and log what would be rejected, allow everything
-  enforce   reject protected routes without a valid token (401/403)
-Other /api routes are never blocked; their callers are logged (deduplicated)
-so the next lockdown knows who needs a token.
+  enforce   reject protected routes, and routes of the groups in RAG_AUTH_ENFORCE_GROUPS,
+            without a valid token (401/403)
+RAG_AUTH_ENFORCE_GROUPS: comma-separated group names, empty by default. An unknown name stops
+the service at start-up rather than silently leaving a group open.
 
-Rollback from enforce: RAG_AUTH_MODE=log-only in the systemd drop-in
-/etc/systemd/system/rag.service.d/auth.conf, then `systemctl restart rag`.
+Rollback: remove a group from RAG_AUTH_ENFORCE_GROUPS (or set RAG_AUTH_MODE=log-only) in the
+systemd drop-in /etc/systemd/system/rag.service.d/auth.conf, then `systemctl restart rag`.
 """
 import json
 import logging
@@ -37,27 +49,63 @@ PROTECTED_PATHS = {
     '/api/search', '/api/search/stream', '/api/retrieve', '/api/similar',
 }
 # ... and prefixes. /api/notes/* covers /api/notes/search, /recent and
-# GET/PATCH /api/notes/{filename}; /api/notes/create stays audited only.
+# GET/PATCH /api/notes/{filename}; /api/notes/create belongs to the admin group.
 PROTECTED_PREFIXES = ('/api/workspace/', '/api/notes/')
 UNPROTECTED_EXCEPTIONS = {('POST', '/api/notes/create')}
 # Never checked or logged: liveness and Prometheus.
 OPEN_PATHS = {'/health', '/api/health', '/metrics'}
+# Static page shells and PWA files (no note data in them; the data comes from /api, which is
+# checked). Everything not listed here is NOT open: a route nobody classified falls into the
+# admin group (default deny), so adding a handler can never silently expose data.
+OPEN_PAGES = {'/', '/notes', '/chat', '/new', '/review', '/reports', '/projects', '/kanban',
+              '/manifest.json', '/sw.js'}
+OPEN_PREFIXES = ('/ui/',)  # static asset mount; '/ui' itself is a redirect
+
+# Route groups for everything else under /api (todo 579): group -> required scope.
+GROUP_SCOPES = {
+    'reminders': 'rag-api:reminders',
+    'ingest': 'rag-api:ingest',
+    'todos': 'rag-api:todos',
+    'admin': 'rag-api:admin',
+}
 
 AUDIT_DEDUP_SECONDS = 600
 
 
 def classify(method: str, path: str) -> str:
-    """'protected' | 'audited' | 'open' for a request."""
-    if path in OPEN_PATHS:
+    """'protected' | 'audited' | 'open' for a request. Default deny: only the listed paths are open."""
+    if path in OPEN_PATHS or path in OPEN_PAGES or path == '/ui' or path.startswith(OPEN_PREFIXES):
         return 'open'
     if (method, path) in UNPROTECTED_EXCEPTIONS:
         return 'audited'
     if path in PROTECTED_PATHS or path.startswith(PROTECTED_PREFIXES):
         return 'protected'
-    if path.startswith('/api/') or path in {'/stats', '/research', '/log/recent', '/entities'} \
-            or path.startswith('/review/'):
-        return 'audited'
-    return 'open'  # UI pages and static files
+    return 'audited'  # admin group unless route_group() puts it elsewhere
+
+
+def route_group(path: str) -> str:
+    """Group of an audited route: reminders | ingest | todos | admin."""
+    if path.startswith('/api/reminders'):
+        return 'reminders'
+    if path.startswith('/api/ingest'):
+        return 'ingest'
+    if path.startswith('/api/kanban/agent/'):  # an agent turn is an action, not a todo read/write
+        return 'admin'
+    if path.startswith(('/api/todos', '/api/kanban')):
+        return 'todos'
+    return 'admin'
+
+
+def _parse_groups(value: str | list[str] | None) -> frozenset[str]:
+    if value is None:
+        value = os.environ.get('RAG_AUTH_ENFORCE_GROUPS', '')
+    names = [g.strip() for g in value.split(',')] if isinstance(value, str) else list(value)
+    groups = frozenset(g for g in names if g)
+    unknown = groups - GROUP_SCOPES.keys()
+    if unknown:
+        raise ValueError(f'RAG_AUTH_ENFORCE_GROUPS has unknown group(s) {sorted(unknown)}; '
+                         f'known: {sorted(GROUP_SCOPES)}')
+    return groups
 
 
 class JWKSCache:
@@ -98,7 +146,8 @@ def _identity(claims: dict | None, verified: bool) -> dict | None:
 
 class Authenticator:
     def __init__(self, mode: str | None = None, issuer: str | None = None, audience: str | None = None,
-                 scope: str | None = None, jwks: JWKSCache | None = None):
+                 scope: str | None = None, jwks: JWKSCache | None = None,
+                 enforce_groups: str | list[str] | None = None):
         self.mode = mode if mode is not None else os.environ.get('RAG_AUTH_MODE', 'off')
         if self.mode not in MODES:
             raise ValueError(f'RAG_AUTH_MODE must be one of {MODES}, got {self.mode!r}')
@@ -107,10 +156,12 @@ class Authenticator:
         self.audience = audience or os.environ.get('RAG_AUTH_AUDIENCE', 'rag-index')
         self.scope = scope or os.environ.get('RAG_AUTH_SCOPE', 'rag-index:read')
         self.jwks = jwks or JWKSCache(f'{self.issuer}/protocol/openid-connect/certs')
+        self.enforce_groups = _parse_groups(enforce_groups)
         self._audit_seen: dict[tuple, float] = {}
 
-    def verify(self, authorization: str | None) -> tuple[dict | None, str | None]:
-        """(identity, reason). reason is None when the token is valid for this API."""
+    def verify(self, authorization: str | None, scope: str | None = None) -> tuple[dict | None, str | None]:
+        """(identity, reason). reason is None when the token is valid for this API and `scope`."""
+        scope = scope or self.scope
         scheme, _, token = (authorization or '').partition(' ')
         if not authorization:
             return None, 'no_token'
@@ -135,17 +186,18 @@ class Authenticator:
             log.error('token validation unavailable: %s', e)
             return _identity(unverified, False), 'auth_unavailable'
         identity = _identity(claims, True)
-        if self.scope not in set((claims.get('scope') or '').split()):
+        if scope not in set((claims.get('scope') or '').split()):
             return identity, 'insufficient_scope'
         return identity, None
 
-    def reject(self, reason: str) -> JSONResponse:
+    def reject(self, reason: str, scope: str | None = None) -> JSONResponse:
+        scope = scope or self.scope
         realm = f'Bearer realm="{self.audience}"'
         if reason == 'no_token':  # RFC 6750 §3.1: no credentials, no error code
             return JSONResponse({'detail': 'missing bearer token'}, 401, headers={'WWW-Authenticate': realm})
         if reason == 'insufficient_scope':
-            return JSONResponse({'detail': f'missing scope {self.scope}'}, 403, headers={
-                'WWW-Authenticate': f'{realm}, error="insufficient_scope", scope="{self.scope}"'})
+            return JSONResponse({'detail': f'missing scope {scope}'}, 403, headers={
+                'WWW-Authenticate': f'{realm}, error="insufficient_scope", scope="{scope}"'})
         if reason == 'auth_unavailable':
             return JSONResponse({'detail': 'token validation unavailable'}, 503, headers={'Retry-After': '30'})
         description = {'wrong_audience': 'wrong audience'}.get(reason, 'invalid or expired token')
@@ -160,26 +212,36 @@ class Authenticator:
         return True
 
     async def middleware(self, request: Request, call_next):
-        kind = classify(request.method, request.url.path)
+        path = request.url.path
+        kind = classify(request.method, path)
         if self.mode == 'off' or kind == 'open':
             return await call_next(request)
-        identity, reason = self.verify(request.headers.get('authorization'))
+        group = route_group(path) if kind == 'audited' else None
+        scope = GROUP_SCOPES[group] if group else self.scope
+        identity, reason = self.verify(request.headers.get('authorization'), scope)
         peer = request.client.host if request.client else None
+        # A route is blocked when it is protected, or when its group is listed for enforcement.
+        blocking = kind == 'protected' or group in self.enforce_groups
+        if reason is None:
+            decision = 'allow'
+        elif blocking:
+            decision = 'deny' if self.mode == 'enforce' else 'would_deny'
+        else:  # audited and not enforced: only say what the check would have said
+            decision = 'unauthenticated' if reason == 'no_token' else 'would_deny'
         event = {
-            'path': request.url.path, 'method': request.method, 'kind': kind, 'mode': self.mode,
-            # Audited routes are never blocked, so they only ever record whether a token came with them.
-            'decision': 'allow' if reason is None else (
-                'unauthenticated' if kind == 'audited' else 'deny' if self.mode == 'enforce' else 'would_deny'),
-            'reason': reason, 'peer': peer, 'forwarded_for': request.headers.get('x-forwarded-for'),
+            'path': path, 'method': request.method, 'kind': kind, 'mode': self.mode,
+            'decision': decision, 'reason': reason, 'peer': peer,
+            'forwarded_for': request.headers.get('x-forwarded-for'),
             'user_agent': request.headers.get('user-agent'), **(identity or {'verified': None}),
         }
-        if kind == 'audited':
-            # Who calls the rest of the API: once per caller and route group per 10 min.
-            group = '/'.join(request.url.path.split('/')[:3])
-            if self._should_log_audited((request.method, group, peer, event.get('azp'))):
-                log.warning('[rag-auth] %s', json.dumps({**event, 'path_group': group}))
-            return await call_next(request)
-        log.warning('[rag-auth] %s', json.dumps(event))
-        if reason is not None and self.mode == 'enforce':
-            return self.reject(reason)
+        if group:
+            event |= {'group': group, 'required_scope': scope, 'path_group': '/'.join(path.split('/')[:3])}
+        deny = reason is not None and blocking and self.mode == 'enforce'
+        if kind == 'protected' or deny:
+            log.warning('[rag-auth] %s', json.dumps(event))
+        elif self._should_log_audited((request.method, event['path_group'], peer, event.get('azp'), reason)):
+            # Who calls the rest of the API: once per caller, route group and outcome per 10 min.
+            log.warning('[rag-auth] %s', json.dumps(event))
+        if deny:
+            return self.reject(reason, scope)
         return await call_next(request)
