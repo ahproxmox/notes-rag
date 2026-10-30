@@ -130,3 +130,32 @@ def test_index_routes_still_need_index_scope(client_for):
     c = client_for('enforce', 'todos')
     r = c.post('/retrieve', json={'query': 'q', 'k': 3}, headers=bearer(token(scope='rag-api:todos')))
     assert r.status_code == 403
+
+
+def test_default_deny_for_unlisted_paths():
+    c = auth_mod.classify
+    for p in ['/reports/anything', '/reports/a/b/c', '/projects/identity', '/brand-new-route', '/static.js']:
+        assert c('GET', p) == 'audited', p
+    for p in ['/', '/chat', '/kanban', '/reports', '/projects', '/sw.js', '/manifest.json', '/ui/app.css', '/ui']:
+        assert c('GET', p) == 'open', p
+
+
+def test_no_route_in_the_app_is_open_by_accident():
+    """Every route the app really serves is either behind a token or on the explicit open list."""
+    from api import app  # noqa: F401
+    routes = sys.modules['api.app'].app.routes
+    allowed = auth_mod.OPEN_PATHS | auth_mod.OPEN_PAGES
+    for r in routes:
+        path = getattr(r, 'path', None)
+        if not path:
+            continue
+        probe = path.replace('{slug:path}', 'x/y').replace('{slug}', 'x')
+        if auth_mod.classify('GET', probe) == 'open':
+            assert path in allowed or path.startswith('/ui'), f'open route not on the allowlist: {path}'
+
+
+def test_note_rendering_page_needs_a_token(client_for):
+    c = client_for('enforce', 'admin')
+    assert c.get('/reports/some-note').status_code == 401
+    assert c.get('/reports/a/b/some-note.md').status_code == 401
+    assert c.get('/reports').status_code == 200  # the static shell is open; data comes from /api

@@ -3,7 +3,9 @@
 CT 111 is a resource server for audience `rag-index`. Two tiers:
 
 * Protected routes (read the index or the raw notes) always need scope `rag-index:read`.
-* Every other `/api/` route belongs to a group with its own scope (todo 579):
+* Everything else is default-deny: only the static page shells and PWA files in OPEN_PAGES / OPEN_PATHS
+  (and the /ui/ asset mount) answer without a token. Every other route belongs to a group with
+  its own scope (todo 579):
     reminders  rag-api:reminders   /api/reminders/*
     ingest     rag-api:ingest      /api/ingest*
     todos      rag-api:todos       /api/todos/*, /api/kanban/*
@@ -52,6 +54,12 @@ PROTECTED_PREFIXES = ('/api/workspace/', '/api/notes/')
 UNPROTECTED_EXCEPTIONS = {('POST', '/api/notes/create')}
 # Never checked or logged: liveness and Prometheus.
 OPEN_PATHS = {'/health', '/api/health', '/metrics'}
+# Static page shells and PWA files (no note data in them; the data comes from /api, which is
+# checked). Everything not listed here is NOT open: a route nobody classified falls into the
+# admin group (default deny), so adding a handler can never silently expose data.
+OPEN_PAGES = {'/', '/notes', '/chat', '/new', '/review', '/reports', '/projects', '/kanban',
+              '/manifest.json', '/sw.js'}
+OPEN_PREFIXES = ('/ui/',)  # static asset mount; '/ui' itself is a redirect
 
 # Route groups for everything else under /api (todo 579): group -> required scope.
 GROUP_SCOPES = {
@@ -65,18 +73,14 @@ AUDIT_DEDUP_SECONDS = 600
 
 
 def classify(method: str, path: str) -> str:
-    """'protected' | 'audited' | 'open' for a request."""
-    if path in OPEN_PATHS:
+    """'protected' | 'audited' | 'open' for a request. Default deny: only the listed paths are open."""
+    if path in OPEN_PATHS or path in OPEN_PAGES or path == '/ui' or path.startswith(OPEN_PREFIXES):
         return 'open'
     if (method, path) in UNPROTECTED_EXCEPTIONS:
         return 'audited'
     if path in PROTECTED_PATHS or path.startswith(PROTECTED_PREFIXES):
         return 'protected'
-    if path.startswith('/api/') or path in {'/stats', '/research', '/log/recent', '/entities',
-                                           '/docs', '/redoc', '/openapi.json'} \
-            or path.startswith('/review/'):
-        return 'audited'
-    return 'open'  # UI pages and static files
+    return 'audited'  # admin group unless route_group() puts it elsewhere
 
 
 def route_group(path: str) -> str:
